@@ -1,0 +1,3 @@
+{"benchmark_id":"gsm_like_001","completion":"The store has 12 - 5 + 9 = 16 pencils. #### 16","model":"smoke"}
+{"benchmark_id":"gsm_like_001_distractor","completion":"The notebook color does not matter. 12 - 5 + 9 = 16. #### 16","model":"smoke"}
+{"benchmark_id":"logic_001","completion":"Yes. If dax implies wug and wug implies zorb, dax implies zorb.","model":"smoke"}

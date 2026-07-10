@@ -1,0 +1,32 @@
+project_name: instella-reasoning-atlas
+seed: 6198
+
+paths:
+  benchmark: data/processed/benchmark.jsonl
+  corpus: data/processed/instella_corpus_manifest.jsonl
+  generations: outputs/generations.jsonl
+  contamination: outputs/contamination.jsonl
+  scores: outputs/scores.jsonl
+  attribution: outputs/attribution.jsonl
+  report: outputs/reliability_report.md
+
+contamination:
+  top_k: 20
+  exact_threshold: 0.98
+  near_duplicate_threshold: 0.72
+  paraphrase_candidate_threshold: 0.45
+  production_index:
+    backend: faiss
+    embedding_model: sentence-transformers/all-MiniLM-L6-v2
+    shard_size: 1000000
+
+generation:
+  model_name_or_path: amd/Instella-3B-Instruct
+  trust_remote_code: true
+  max_new_tokens: 512
+  temperature: 0.0
+  batch_size: 1
+
+reporting:
+  include_lowest_reliability_groups: 20
+  include_top_contamination_hits: 50

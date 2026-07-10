@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Research artifacts
+data/raw/*
+data/processed/*
+data/indices/*
+outputs/*
+checkpoints/
+external/
+wandb/
+mlruns/
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.parquet
+*.arrow
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/indices/.gitkeep
+!outputs/.gitkeep
+
+# Local environment
+.env
+.env.*
+!.env.example

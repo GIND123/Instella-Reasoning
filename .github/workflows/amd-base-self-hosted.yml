@@ -1,0 +1,39 @@
+name: AMD Base Self-Hosted Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      training_config:
+        description: "Training config path"
+        required: true
+        default: "configs/training/amd_base_upstream.yaml"
+      run_training:
+        description: "Set to true to execute, false to print command only"
+        required: true
+        default: "false"
+
+jobs:
+  train:
+    runs-on: [self-hosted, linux, x64, rocm]
+    timeout-minutes: 10080
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install scaffold
+        run: pip install -e ".[hf,train]"
+      - name: Clone upstream Instella
+        run: |
+          mkdir -p external
+          if [ ! -d external/Instella/.git ]; then
+            git clone https://github.com/AMD-AGI/Instella external/Instella
+          fi
+      - name: Print command
+        run: instella-reasoning train-command --config "${{ inputs.training_config }}"
+      - name: Run training
+        if: ${{ inputs.run_training == 'true' }}
+        run: bash scripts/launch_upstream_training.sh "${{ inputs.training_config }}"
