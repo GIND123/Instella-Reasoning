@@ -1,0 +1,13 @@
+upstream_dir: external/Instella
+script: scripts/train.py
+train_config: configs/instella-3b-pretrain-stage1.yaml
+num_nodes: 1
+gpus_per_node: 8
+node_rank:
+job_id: amd-base
+master_addr: 127.0.0.1
+master_port: 29500
+load_path:
+overrides:
+  - --save_folder=outputs/pretrain/amd-base
+  - --wandb.name=amd-base

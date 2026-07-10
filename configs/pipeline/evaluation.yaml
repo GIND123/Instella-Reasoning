@@ -1,0 +1,8 @@
+benchmark: data/processed/benchmark.jsonl
+generations: outputs/generations.jsonl
+scores: outputs/scores.jsonl
+model:
+  name_or_path: amd/Instella-3B-Instruct
+  trust_remote_code: true
+  max_new_tokens: 512
+  temperature: 0.0
