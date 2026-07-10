@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "instella-reasoning"
+version = "0.1.0"
+description = "Research scaffold for diagnosing reasoning, contamination, and attribution in AMD Instella models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Govind Arun Kumar" }
+]
+dependencies = [
+  "pyyaml>=6.0.1",
+  "tqdm>=4.66.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6.0"
+]
+hf = [
+  "accelerate>=0.30.0",
+  "datasets>=2.19.0",
+  "safetensors>=0.4.3",
+  "transformers>=4.42.0"
+]
+retrieval = [
+  "faiss-cpu>=1.8.0",
+  "sentence-transformers>=3.0.0",
+  "scikit-learn>=1.5.0"
+]
+train = [
+  "torch>=2.3.0",
+  "peft>=0.11.0",
+  "trl>=0.9.0",
+  "wandb>=0.17.0"
+]
+all = [
+  "instella-reasoning[dev,hf,retrieval,train]"
+]
+
+[project.scripts]
+instella-reasoning = "instella_reasoning.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/instella_reasoning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

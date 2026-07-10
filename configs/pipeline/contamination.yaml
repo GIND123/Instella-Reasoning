@@ -1,0 +1,8 @@
+benchmark: data/processed/benchmark.jsonl
+corpus: data/processed/instella_corpus_manifest.jsonl
+output: outputs/contamination.jsonl
+top_k: 20
+thresholds:
+  exact: 0.98
+  near_duplicate: 0.72
+  paraphrase_candidate: 0.45
