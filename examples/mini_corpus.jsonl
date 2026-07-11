@@ -1,3 +1,4 @@
-{"id":"doc_001","source":"synthetic_smoke","text":"A store has 12 pencils. It sells 5 pencils and then receives 9 more. How many pencils are in the store now? The answer is 16.","metadata":{"license":"test-only"}}
-{"id":"doc_002","source":"synthetic_smoke","text":"Every dax is a wug. Every wug is a zorb. Therefore every dax is a zorb.","metadata":{"license":"test-only"}}
-{"id":"doc_003","source":"synthetic_smoke","text":"This unrelated document discusses tokenizer vocabulary sizes and GPU memory planning.","metadata":{"license":"test-only"}}
+{"id":"doc_001","source":"instella-gsm8k-synthetic","text":"A store has 12 pencils. It sells 5 pencils and then receives 9 more. How many pencils are in the store now? The answer is 16.","metadata":{"license":"test-only"}}
+{"id":"doc_002","source":"dolmino-mix-1124","text":"Every dax is a wug. Every wug is a zorb. Therefore every dax is a zorb.","metadata":{"license":"test-only"}}
+{"id":"doc_003","source":"olmoe-mix-0924","text":"This unrelated document discusses tokenizer vocabulary sizes and GPU memory planning.","metadata":{"license":"test-only"}}
+{"id":"doc_004","source":"fineweb-edu","text":"Word problems often ask you to track a running total by adding items that are produced and subtracting items that are sold or given away.","metadata":{"license":"test-only"}}
