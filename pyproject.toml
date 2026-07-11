@@ -31,7 +31,8 @@ hf = [
 retrieval = [
   "faiss-cpu>=1.8.0",
   "sentence-transformers>=3.0.0",
-  "scikit-learn>=1.5.0"
+  "scikit-learn>=1.5.0",
+  "numpy>=1.24.0"
 ]
 train = [
   "torch>=2.3.0",
