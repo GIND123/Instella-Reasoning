@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start-3-tiers">Quick start</a> ·
+  <a href="#run-instructions">Run instructions</a> ·
   <a href="notebooks/instella_reasoning_atlas.ipynb">Colab notebook</a> ·
   <a href="#command-reference">Commands</a> ·
   <a href="docs/COMPUTE.md">Compute</a> ·
@@ -55,35 +55,106 @@ tests pass, anywhere.
 4. **Prescribe** — assemble the **Reasoning Reliability Atlas**: a per-sub-skill map of
    which reasoning is genuine, fragile, or absent, and what training data drives each.
 
-## Quick start (3 tiers)
+## Run instructions
 
-### Tier 1 — CPU smoke, no GPU, no downloads (~1 minute)
+Pick **one** of the three blocks below and copy-paste it whole. Each is self-contained
+and starts from a fresh clone. If you just want to see it work, use **A**.
 
-Runs **the entire pipeline** on bundled example data with a dependency-free embedder.
+### A. Run it now — CPU only, no GPU, no downloads (~1 min)
+
+Runs the **entire pipeline** on bundled example data. Works on Linux/Mac/Colab.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .\.venv\Scripts\Activate.ps1
+git clone https://github.com/GIND123/Instella-Reasoning
+cd Instella-Reasoning
 pip install -e ".[dev]"
 
-instella-reasoning run-all --config configs/pipeline/full.yaml   # contamination→score→gap→attribution→atlas→report
-pytest                                                            # the full test suite
+instella-reasoning run-all --config configs/pipeline/full.yaml
 ```
 
-Artifacts land in `outputs/atlas_run/` (`report.md`, `atlas.json`, `contamination.jsonl`, …).
-
-### Tier 2 — Colab T4 (real embeddings + Instella)
-
-Open [`notebooks/instella_reasoning_atlas.ipynb`](notebooks/instella_reasoning_atlas.ipynb)
-in Colab (**Runtime → T4 GPU**) and run all cells. It clones, installs, runs the CPU
-smoke path, then downloads real data and generates with Instella-3B in 4-bit.
-
-### Tier 3 — full study
+That's it. Open the results:
 
 ```bash
-pip install -e ".[all]"                 # hf + retrieval + viz + stats + train
-bash scripts/download_data.sh 200 5000  # benchmarks + Instella corpus shards (see docs/DATA_DOWNLOAD.md)
-# edit configs/pipeline/full.yaml: set generation.model, expand_variants: true, data paths
+cat outputs/atlas_run/report.md          # the reliability report
+ls  outputs/atlas_run/                    # atlas.json, contamination.jsonl, scores.jsonl, ...
+```
+
+> Want the Atlas **figures** (PNG) too? Add the viz extra: `pip install -e ".[dev,viz]"`
+> and re-run — figures land in `outputs/atlas_run/figures/`.
+
+<details>
+<summary>Windows PowerShell version of block A</summary>
+
+```powershell
+git clone https://github.com/GIND123/Instella-Reasoning
+cd Instella-Reasoning
+pip install -e ".[dev]"
+
 instella-reasoning run-all --config configs/pipeline/full.yaml
+type outputs\atlas_run\report.md
+```
+</details>
+
+### B. Run it on Google Colab (T4 GPU, real Instella model)
+
+Paste this into **one Colab cell** (set **Runtime → Change runtime type → T4 GPU** first),
+then run it. It clones, installs the GPU extras, does the CPU smoke run, downloads a
+small slice of real data, and generates with Instella-3B in 4-bit.
+
+```python
+!git clone https://github.com/GIND123/Instella-Reasoning
+%cd Instella-Reasoning
+!pip install -e ".[hf,retrieval,viz,stats]"
+
+# 1) Smoke test on bundled data (proves the install works)
+!instella-reasoning run-all --config configs/pipeline/full.yaml
+
+# 2) Download a small real slice: 200 benchmark items + 5000 corpus docs
+!bash scripts/download_data.sh 200 5000
+
+# 3) Generate with Instella-3B (4-bit) and score it
+!instella-reasoning generate \
+    --benchmark data/processed/gsm8k.jsonl \
+    --model amd/Instella-3B-Instruct \
+    --output outputs/gsm8k_generations.jsonl \
+    --load-in-4bit --batch-size 8
+!instella-reasoning score-generations \
+    --benchmark data/processed/gsm8k.jsonl \
+    --generations outputs/gsm8k_generations.jsonl \
+    --output outputs/gsm8k_scores.jsonl
+```
+
+> Prefer the notebook UI? Open
+> [`notebooks/instella_reasoning_atlas.ipynb`](notebooks/instella_reasoning_atlas.ipynb)
+> in Colab and Run all — it does the same steps in separate cells.
+
+### C. Full study — all extras, all data
+
+```bash
+git clone https://github.com/GIND123/Instella-Reasoning
+cd Instella-Reasoning
+pip install -e ".[all]"                    # hf + retrieval + viz + stats + train
+
+bash scripts/download_data.sh 0 0          # 0 0 = no limit → full benchmarks + corpus shards
+# edit configs/pipeline/full.yaml → set generation.model, expand_variants: true, data paths
+instella-reasoning run-all --config configs/pipeline/full.yaml
+```
+
+See [`docs/DATA_DOWNLOAD.md`](docs/DATA_DOWNLOAD.md) for the complete AMD data procedure
+and licensing before a full download.
+
+### Run a single stage
+
+`run-all` chains everything, but every stage is also a standalone command you can copy
+and run on its own — see the [command reference](#command-reference). Example: just the
+contamination scan on the bundled example data:
+
+```bash
+instella-reasoning scan-contamination-embedding \
+  --benchmark examples/mini_benchmark.jsonl \
+  --corpus    examples/mini_corpus.jsonl \
+  --output    outputs/contamination.jsonl \
+  --embedder-backend hashing --index-backend bruteforce
 ```
 
 ## Install profiles
