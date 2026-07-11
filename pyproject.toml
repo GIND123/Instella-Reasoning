@@ -34,6 +34,12 @@ retrieval = [
   "scikit-learn>=1.5.0",
   "numpy>=1.24.0"
 ]
+viz = [
+  "matplotlib>=3.7.0"
+]
+stats = [
+  "scipy>=1.11.0"
+]
 train = [
   "torch>=2.3.0",
   "peft>=0.11.0",
@@ -41,7 +47,7 @@ train = [
   "wandb>=0.17.0"
 ]
 all = [
-  "instella-reasoning[dev,hf,retrieval,train]"
+  "instella-reasoning[dev,hf,retrieval,viz,stats,train]"
 ]
 
 [project.scripts]
@@ -53,6 +59,7 @@ packages = ["src/instella_reasoning"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

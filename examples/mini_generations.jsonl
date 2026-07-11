@@ -1,3 +1,6 @@
 {"benchmark_id":"gsm_like_001","completion":"The store has 12 - 5 + 9 = 16 pencils. #### 16","model":"smoke"}
-{"benchmark_id":"gsm_like_001_distractor","completion":"The notebook color does not matter. 12 - 5 + 9 = 16. #### 16","model":"smoke"}
+{"benchmark_id":"gsm_like_001_distractor","completion":"There is a blue notebook, so the store keeps 12 - 5 = 7 pencils. #### 7","model":"smoke"}
+{"benchmark_id":"gsm_like_050","completion":"The baker has 8 - 3 + 6 = 11 loaves. #### 11","model":"smoke"}
+{"benchmark_id":"gsm_like_050_rename","completion":"The chef has 8 - 3 + 6 = 11 loaves. #### 11","model":"smoke"}
 {"benchmark_id":"logic_001","completion":"Yes. If dax implies wug and wug implies zorb, dax implies zorb.","model":"smoke"}
+{"benchmark_id":"logic_001_rename","completion":"Yes. If blip implies fizz and fizz implies gronk, then blip implies gronk.","model":"smoke"}
