@@ -1,0 +1,46 @@
+# Full end-to-end Reasoning Reliability Atlas pipeline.
+#
+# Run with:   instella-reasoning run-all --config configs/pipeline/full.yaml
+#
+# This default config runs entirely on CPU with the bundled example data and the
+# dependency-free embedder — no GPU, no downloads, no model. Point `data` at your
+# processed GSM8K / Instella-corpus JSONL and set `generation.model` to run the real
+# study on a Colab T4.
+
+project_name: instella-reasoning-atlas
+seed: 6198
+
+data:
+  benchmark: examples/mini_benchmark.jsonl
+  corpus: examples/mini_corpus.jsonl
+  # Precomputed generations let the whole analysis run with no model/GPU.
+  # Set to null and configure generation.model to generate with Instella instead.
+  generations: examples/mini_generations.jsonl
+  # Expand each item into a consistency cluster before scanning/scoring.
+  # Leave false when your generations already correspond to the input benchmark.
+  expand_variants: false
+  perturbations: [entity_substitution, premise_reordering, irrelevant_context, rephrasing]
+
+contamination:
+  method: embedding            # "embedding" (cosine + 13-gram, C/PC/N) or "lexical"
+  top_k: 20
+  embedder_backend: auto       # auto -> MiniLM if the retrieval extra is installed, else hashing
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  index_type: flat             # flat | ivfpq | hnsw (FAISS); ignored by the brute-force fallback
+  index_backend: auto          # auto | faiss | bruteforce
+
+generation:
+  model: null                  # e.g. amd/Instella-3B ; null -> use the generations file above
+  max_new_tokens: 512
+  temperature: 0.0
+  load_in_4bit: false          # true on a T4 for the 3B models (needs bitsandbytes)
+  batch_size: 1
+
+attribution:
+  top_k: 20
+  near_duplicate_cosine: 0.85
+
+plots: true                    # render the figure set if the viz extra (matplotlib) is installed
+
+outputs:
+  dir: outputs/atlas_run

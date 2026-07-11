@@ -62,6 +62,32 @@ def char_ngrams(value: str, n: int = 5) -> set[str]:
     return {normalized[i : i + n] for i in range(len(normalized) - n + 1)}
 
 
+def word_ngrams(value: str, n: int = 13) -> set[str]:
+    """Return the set of word-level n-grams (Brown et al., 2020 contamination check)."""
+    tokens = normalize_text(value).split()
+    if len(tokens) < n:
+        # Shorter than a full n-gram: treat the whole token sequence as one gram so
+        # short prompts can still match a containing document.
+        return {" ".join(tokens)} if tokens else set()
+    return {" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)}
+
+
+def word_ngram_overlap(query: str, document: str, n: int = 13) -> float:
+    """Fraction of the query's word n-grams that also appear in the document.
+
+    This is directional (query-normalized) so a short benchmark prompt embedded
+    verbatim inside a long training document scores 1.0, matching the intent of
+    contamination detection: "was this problem seen during training?".
+    """
+    query_grams = word_ngrams(query, n)
+    if not query_grams:
+        return 0.0
+    doc_grams = word_ngrams(document, n)
+    if not doc_grams:
+        return 0.0
+    return len(query_grams & doc_grams) / len(query_grams)
+
+
 def weighted_token_overlap(query: str, document: str) -> float:
     query_counts = Counter(normalize_text(query).split())
     doc_counts = Counter(normalize_text(document).split())

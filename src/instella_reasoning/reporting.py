@@ -6,6 +6,14 @@ from pathlib import Path
 from instella_reasoning.metrics import aggregate_accuracy, summarize_reliability
 from instella_reasoning.records import ContaminationHit, EvaluationRecord
 
+_CONTAMINATION_CANON = {
+    "contaminated": "contaminated",
+    "exact": "contaminated",
+    "near_duplicate": "contaminated",
+    "partial": "partial",
+    "paraphrase_candidate": "partial",
+}
+
 
 def write_markdown_report(
     scores: list[EvaluationRecord],
@@ -56,3 +64,169 @@ def write_markdown_report(
     content = "\n".join(lines) + "\n"
     output.write_text(content, encoding="utf-8")
     return content
+
+
+def write_full_report(
+    scores: list[EvaluationRecord],
+    contamination: list[ContaminationHit],
+    output_path: str | Path,
+    atlas_report=None,
+    gap_results=None,
+    skill_attributions=None,
+    emergence_report=None,
+    figure_paths: dict[str, str] | None = None,
+) -> str:
+    """Assemble the full reliability report: summary, atlas, accuracy gap, attribution.
+
+    Every analysis section is optional so the report degrades gracefully when a stage
+    was skipped (e.g. no model was run, so there are no scores/gap). Renders Markdown
+    that embeds any generated figures by relative path.
+    """
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "# Instella Reasoning Reliability Report",
+        "",
+        "> When Instella answers a reasoning problem correctly, is it **reasoning** or "
+        "**remembering**? This report combines contamination search, the Reliability "
+        "metric (accuracy x consistency), and training-data attribution to tell them apart.",
+        "",
+        "## 1. Summary",
+        "",
+        f"- Scored generations: **{len(scores)}**",
+        f"- Overall accuracy: **{aggregate_accuracy(scores):.3f}**",
+        f"- Contamination hits: **{len(contamination)}**",
+    ]
+    label_counts = Counter(_CONTAMINATION_CANON.get(hit.label, "clean") for hit in contamination)
+    if label_counts:
+        breakdown = ", ".join(f"{label}={count}" for label, count in sorted(label_counts.items()))
+        lines.append(f"- Contamination breakdown: {breakdown}")
+    lines.append("")
+
+    if atlas_report is not None and atlas_report.cells:
+        lines.append(atlas_report.to_markdown())
+        lines.append(_atlas_takeaway(atlas_report))
+
+    if gap_results:
+        lines.extend(_gap_section(gap_results))
+
+    if skill_attributions:
+        lines.extend(_attribution_section(skill_attributions))
+
+    if emergence_report is not None and (emergence_report.transitions or emergence_report.rl_effects):
+        lines.extend(_emergence_section(emergence_report))
+
+    if figure_paths:
+        lines.extend(["", "## Figures", ""])
+        for name, path in figure_paths.items():
+            lines.append(f"### {name.replace('_', ' ').title()}")
+            lines.append("")
+            lines.append(f"![{name}]({path})")
+            lines.append("")
+
+    lines.extend(
+        [
+            "## Interpretation Notes",
+            "",
+            "- Contamination labels are diagnostic candidates from retrieval + n-gram overlap; "
+            "confirm with manual inspection or gradient attribution before publication.",
+            "- A **fragile** cell (high accuracy, low reliability) is the memorisation signature: "
+            "the model recognises the original but fails semantically equivalent variants.",
+            "- A **concentrated** attribution signature (near-duplicate share >= 0.30) supports "
+            "memorisation; a **diverse** signature supports generalised learning.",
+            "",
+        ]
+    )
+    content = "\n".join(lines) + "\n"
+    output.write_text(content, encoding="utf-8")
+    return content
+
+
+def _atlas_takeaway(atlas_report) -> str:
+    all_cells = [c for c in atlas_report.cells if c.contamination_level == "all"]
+    fragile = [c.skill for c in all_cells if c.classification == "fragile"]
+    genuine = [c.skill for c in all_cells if c.classification == "genuine"]
+    parts = []
+    if genuine:
+        parts.append(f"Genuine reasoning: {', '.join(genuine)}.")
+    if fragile:
+        parts.append(f"Fragile / memorisation-like: {', '.join(fragile)}.")
+    return ("**Atlas takeaway** — " + " ".join(parts) + "\n") if parts else ""
+
+
+def _gap_section(gap_results) -> list[str]:
+    lines = [
+        "## 2. Contaminated vs Clean Accuracy Gap",
+        "",
+        "| Scope | Contaminated | Clean | Gap | z | p |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for result in gap_results:
+        contaminated = result.by_label["contaminated"]
+        clean = result.by_label["clean"]
+        sig = " *" if result.p_value < 0.05 else ""
+        lines.append(
+            f"| {result.scope} | {contaminated.accuracy:.3f} (n={contaminated.total}) | "
+            f"{clean.accuracy:.3f} (n={clean.total}) | {result.gap:+.3f} | "
+            f"{result.z:.2f} | {result.p_value:.4f}{sig} |"
+        )
+    lines.extend(["", "`*` p < 0.05 (two-proportion z-test).", ""])
+    return lines
+
+
+def _attribution_section(skill_attributions) -> list[str]:
+    lines = [
+        "## 3. Training-Data Attribution (Tier 1: embedding)",
+        "",
+        "| Sub-skill | Items | Near-dup share | Gini | Concentrated | Top sources |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for agg in skill_attributions:
+        top = ", ".join(
+            f"{source} ({share:.0%})" for source, share in list(agg.source_shares.items())[:3]
+        )
+        lines.append(
+            f"| {agg.skill} | {agg.n_items} | {agg.mean_near_duplicate_share:.3f} | "
+            f"{agg.mean_gini:.3f} | {agg.concentrated_share:.0%} | {top} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _emergence_section(emergence_report) -> list[str]:
+    lines = ["## 4. Scale & Post-training Emergence", ""]
+    if emergence_report.transitions:
+        lines.extend(
+            ["| Sub-skill | Small | Large | Delta | Class |", "|---|---:|---:|---:|---|"]
+        )
+        for t in emergence_report.transitions:
+            lines.append(
+                f"| {t.skill} | {t.small_reliability:.3f} | {t.large_reliability:.3f} | "
+                f"{t.delta:+.3f} | {t.transition_class} |"
+            )
+        lines.append("")
+    if emergence_report.rl_effects:
+        lines.extend(
+            [
+                "**RL post-training effect** (consistency gain = genuine, accuracy-only = pattern matching):",
+                "",
+                "| Sub-skill | dAccuracy | dConsistency | dReliability | Verdict |",
+                "|---|---:|---:|---:|---|",
+            ]
+        )
+        for e in emergence_report.rl_effects:
+            lines.append(
+                f"| {e.skill} | {e.delta_accuracy:+.3f} | {e.delta_consistency:+.3f} | "
+                f"{e.delta_reliability:+.3f} | {e.verdict} |"
+            )
+        lines.append("")
+    if emergence_report.rl_generalization:
+        gen = emergence_report.rl_generalization
+        lines.append(
+            f"RL generalisation: math gain {gen.get('math_reliability_gain', 0):+.3f}, "
+            f"non-math gain {gen.get('non_math_reliability_gain', 0):+.3f} "
+            f"-> {gen.get('verdict', 'n/a')}."
+        )
+        lines.append("")
+    return lines
