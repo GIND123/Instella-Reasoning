@@ -143,13 +143,13 @@ def compute_accuracy_gap(
         z, p_value = two_proportion_z_test(
             contaminated.correct, contaminated.total, clean.correct, clean.total
         )
+        # A gap is only meaningful when both groups are populated; otherwise report 0.
+        gap = (
+            contaminated.accuracy - clean.accuracy
+            if contaminated.total and clean.total
+            else 0.0
+        )
         results.append(
-            AccuracyGapResult(
-                scope=scope,
-                by_label=by_label,
-                z=z,
-                p_value=p_value,
-                gap=contaminated.accuracy - clean.accuracy,
-            )
+            AccuracyGapResult(scope=scope, by_label=by_label, z=z, p_value=p_value, gap=gap)
         )
     return results

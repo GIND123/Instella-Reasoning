@@ -15,6 +15,7 @@ from instella_reasoning.contamination import (
     run_embedding_contamination_scan,
 )
 from instella_reasoning.evaluation import generate_with_transformers, score_generations
+from instella_reasoning.perturbations import DEFAULT_PERTURBATIONS
 from instella_reasoning.records import (
     GenerationRecord,
     read_benchmark,
@@ -118,6 +119,62 @@ def build_parser() -> argparse.ArgumentParser:
 
     train = subparsers.add_parser("train-command", help="Print an upstream Instella torchrun command.")
     train.add_argument("--config", required=True)
+
+    variants = subparsers.add_parser(
+        "make-variants", help="Expand a benchmark into semantics-preserving consistency clusters."
+    )
+    variants.add_argument("--benchmark", required=True)
+    variants.add_argument("--output", required=True)
+    variants.add_argument(
+        "--types",
+        nargs="+",
+        default=list(DEFAULT_PERTURBATIONS),
+        help="Perturbation types to apply (default: entity/reorder/irrelevant/rephrase).",
+    )
+    variants.add_argument("--seed", type=int, default=6198)
+    variants.add_argument("--no-original", action="store_true", help="Exclude the original items.")
+    variants.add_argument("--max-variants", type=int, default=None)
+
+    attr_emb = subparsers.add_parser(
+        "attribute-embedding", help="Tier-1 embedding attribution: characterize each item's neighbors."
+    )
+    attr_emb.add_argument("--benchmark", required=True)
+    attr_emb.add_argument("--corpus", required=True)
+    attr_emb.add_argument("--output", required=True)
+    attr_emb.add_argument("--by-skill", default=None, help="Optional path for the per-skill aggregate JSON.")
+    attr_emb.add_argument("--top-k", type=int, default=20)
+    attr_emb.add_argument("--embedder-backend", default="auto", choices=["auto", "sentence-transformers", "hashing"])
+    attr_emb.add_argument("--embedding-model", default="sentence-transformers/all-MiniLM-L6-v2")
+    attr_emb.add_argument("--index-type", default="flat", choices=["flat", "ivfpq", "hnsw"])
+    attr_emb.add_argument("--index-backend", default="auto", choices=["auto", "faiss", "bruteforce"])
+    attr_emb.add_argument("--near-duplicate-cosine", type=float, default=0.85)
+
+    atlas = subparsers.add_parser("atlas", help="Build the Reasoning Reliability Atlas from scores + contamination.")
+    atlas.add_argument("--scores", required=True)
+    atlas.add_argument("--contamination", required=True)
+    atlas.add_argument("--output", required=True, help="Atlas JSON output path.")
+    atlas.add_argument("--markdown", default=None, help="Optional Markdown table output path.")
+    atlas.add_argument("--skill-key", default="skill")
+
+    emergence = subparsers.add_parser(
+        "emergence", help="Scale/post-training emergence analysis across model score files."
+    )
+    emergence.add_argument("--small-scores", required=True)
+    emergence.add_argument("--large-scores", required=True)
+    emergence.add_argument("--contamination", required=True)
+    emergence.add_argument("--output", required=True)
+    emergence.add_argument("--small-name", default="small")
+    emergence.add_argument("--large-name", default="large")
+    emergence.add_argument("--pre-rl-scores", default=None, help="Pre-RL scores (e.g. Instella-3B-Instruct).")
+    emergence.add_argument("--post-rl-scores", default=None, help="Post-RL scores (e.g. Instella-3B-Math).")
+
+    plots = subparsers.add_parser("plots", help="Render the Atlas figure set (needs the viz extra).")
+    plots.add_argument("--scores", required=True)
+    plots.add_argument("--contamination", required=True)
+    plots.add_argument("--output-dir", required=True)
+
+    runall = subparsers.add_parser("run-all", help="Run the full end-to-end pipeline from a YAML config.")
+    runall.add_argument("--config", required=True)
 
     return parser
 
@@ -251,6 +308,131 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "train-command":
         config = TorchrunLaunchConfig.from_yaml(args.config)
         print(shell_join(build_torchrun_command(config)))
+        return 0
+
+    if args.command == "make-variants":
+        from instella_reasoning.perturbations import PerturbationConfig, expand_benchmark_file
+
+        config = PerturbationConfig(
+            types=tuple(args.types),
+            seed=args.seed,
+            include_original=not args.no_original,
+            max_variants=args.max_variants,
+        )
+        count = expand_benchmark_file(args.benchmark, args.output, config)
+        print(f"Wrote {count} benchmark items (originals + variants) to {args.output}")
+        return 0
+
+    if args.command == "attribute-embedding":
+        import json
+
+        from instella_reasoning.attribution_embedding import (
+            aggregate_by_skill,
+            run_embedding_attribution,
+        )
+
+        profiles = run_embedding_attribution(
+            benchmark=read_benchmark(args.benchmark),
+            corpus=read_corpus(args.corpus),
+            output_path=args.output,
+            top_k=args.top_k,
+            embedder_backend=args.embedder_backend,
+            embedding_model=args.embedding_model,
+            index_type=args.index_type,
+            index_backend=args.index_backend,
+            near_duplicate_cosine=args.near_duplicate_cosine,
+        )
+        print(f"Wrote {len(profiles)} attribution profiles to {args.output}")
+        if args.by_skill:
+            aggregates = aggregate_by_skill(profiles)
+            Path(args.by_skill).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.by_skill).write_text(
+                json.dumps([a.to_dict() for a in aggregates], indent=2), encoding="utf-8"
+            )
+            print(f"Wrote {len(aggregates)} per-skill aggregates to {args.by_skill}")
+        return 0
+
+    if args.command == "atlas":
+        import json
+
+        from instella_reasoning.analysis.atlas import build_atlas
+
+        report = build_atlas(
+            scores=load_evaluations(args.scores),
+            contamination=load_contamination_hits(args.contamination),
+            skill_key=args.skill_key,
+        )
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"Wrote atlas with {len(report.cells)} cells to {args.output}")
+        if args.markdown:
+            Path(args.markdown).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.markdown).write_text(report.to_markdown(), encoding="utf-8")
+            print(f"Wrote atlas Markdown to {args.markdown}")
+        return 0
+
+    if args.command == "emergence":
+        import json
+
+        from instella_reasoning.analysis.atlas import build_atlas
+        from instella_reasoning.emergence import (
+            EmergenceReport,
+            analyze_rl_effect,
+            capability_transitions,
+            rl_generalization_summary,
+        )
+
+        contamination = load_contamination_hits(args.contamination)
+        small_atlas = build_atlas(load_evaluations(args.small_scores), contamination)
+        large_atlas = build_atlas(load_evaluations(args.large_scores), contamination)
+        transitions = capability_transitions(
+            small_atlas, large_atlas, args.small_name, args.large_name
+        )
+        report = EmergenceReport(transitions=transitions)
+        if args.pre_rl_scores and args.post_rl_scores:
+            pre_atlas = build_atlas(load_evaluations(args.pre_rl_scores), contamination)
+            post_atlas = build_atlas(load_evaluations(args.post_rl_scores), contamination)
+            report.rl_effects = analyze_rl_effect(pre_atlas, post_atlas)
+            report.rl_generalization = rl_generalization_summary(report.rl_effects)
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"Wrote emergence analysis ({len(transitions)} transitions) to {args.output}")
+        return 0
+
+    if args.command == "plots":
+        from instella_reasoning.analysis.atlas import build_atlas
+        from instella_reasoning.analysis.plots import (
+            plot_accuracy_consistency_quadrant,
+            plot_contamination_breakdown,
+            plot_reliability_atlas,
+        )
+
+        contamination = load_contamination_hits(args.contamination)
+        report = build_atlas(load_evaluations(args.scores), contamination)
+        output_dir = Path(args.output_dir)
+        produced = []
+        if report.cells:
+            produced.append(plot_reliability_atlas(report, output_dir / "reliability_atlas.png"))
+        if report.clusters:
+            produced.append(
+                plot_accuracy_consistency_quadrant(
+                    report.clusters, output_dir / "accuracy_consistency_quadrant.png"
+                )
+            )
+        if contamination:
+            produced.append(
+                plot_contamination_breakdown(contamination, output_dir / "contamination_breakdown.png")
+            )
+        print(f"Wrote {len(produced)} figures to {output_dir}")
+        return 0
+
+    if args.command == "run-all":
+        from instella_reasoning.pipeline import PipelineConfig, run_pipeline
+
+        artifacts = run_pipeline(PipelineConfig.from_yaml(args.config))
+        print("\nArtifacts:")
+        for stage, path in artifacts.items():
+            print(f"  {stage}: {path}")
         return 0
 
     parser.error(f"Unhandled command: {args.command}")

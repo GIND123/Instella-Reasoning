@@ -65,15 +65,18 @@ FAISS (CPU, GPU optional) · `transformers` + `bitsandbytes` (4-bit).
 | Phase | Module(s) | Status |
 |---|---|---|
 | 0 | `datasets/loaders.py`, `prompting.py`, upgrade `evaluation.py` (4-bit, batching, CoT) | **done** |
-| 1 | `embedding.py`, `faiss_index.py`, upgrade `contamination.py` (embedding+13-gram, C/PC/N) | **done** (`validation.py` pending) |
+| 1 | `embedding.py`, `faiss_index.py`, upgrade `contamination.py` (embedding+13-gram, C/PC/N) | **done** |
 | 2 | `analysis/accuracy_gap.py` — baseline eval disaggregated by contamination label + z-test | **done** |
-| 3 | `perturbations.py` (numeric/entity/reorder/irrelevant/rephrase), extend `metrics.py`, Atlas builder | to build |
-| 4 | `attribution_embedding.py`, `attribution_tracin.py` (TracIn-CP), `attribution_concept.py` (Concept Influence) | to build |
-| 5 | `emergence.py` (transition classes, CoT divergence, RL effect) | to build |
-| 6 | `analysis/stats.py`, `analysis/plots.py`, extend `reporting.py` | to build |
+| 3 | `perturbations.py` (numeric/entity/reorder/irrelevant/rephrase), `analysis/atlas.py` Atlas builder | **done** |
+| 4 | `attribution_embedding.py` (Tier 1), `attribution_gradient.py` (TracIn-CP + Concept Influence) | **done** |
+| 5 | `emergence.py` (transition classes, Schaeffer test, CoT divergence, RL effect) | **done** |
+| 6 | `analysis/stats.py`, `analysis/plots.py`, extended `reporting.py` (atlas/gap/attribution) | **done** |
+| — | `pipeline.py` orchestrator (`run-all`), Colab notebook, `full.yaml`, download/run scripts | **done** |
 
-Existing scaffold already provides: lexical contamination, exact-match scoring,
-Reliability metric, retrieval-attribution proxy, reporting, torchrun builder, CLI.
+The base scaffold provides: lexical contamination, exact-match scoring, Reliability
+metric, retrieval-attribution proxy, reporting, torchrun builder, CLI. The full build
+adds every phase above plus a single-command end-to-end orchestrator and a Colab
+runner, all portable to CPU-only machines through dependency-free fallbacks.
 
 ---
 

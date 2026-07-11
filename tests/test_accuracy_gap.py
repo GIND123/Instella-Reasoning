@@ -54,6 +54,15 @@ def test_z_test_detects_large_gap() -> None:
     assert p < 0.001
 
 
+def test_gap_is_zero_when_a_group_is_empty() -> None:
+    # No contaminated items -> gap must be 0, not -clean_accuracy.
+    scores = [_eval("q1", True), _eval("q2", True)]  # both clean, both correct
+    results = compute_accuracy_gap(scores, [])
+    assert len(results) == 1
+    assert results[0].gap == 0.0
+    assert results[0].by_label["contaminated"].total == 0
+
+
 def test_compute_accuracy_gap_splits_by_label() -> None:
     hits = [_hit("q1", "contaminated"), _hit("q2", "contaminated")]
     scores = [
