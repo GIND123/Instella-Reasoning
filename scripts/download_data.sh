@@ -26,8 +26,10 @@ corpus_arg=""; [[ "$CORPUS_LIMIT" != "0" ]] && corpus_arg="--limit $CORPUS_LIMIT
 echo "== Reasoning benchmarks =="
 instella-reasoning load-benchmark --benchmark gsm8k          --output "$PROC/gsm8k.jsonl"          $bench_arg
 instella-reasoning load-benchmark --benchmark arc_challenge  --output "$PROC/arc_challenge.jsonl"  $bench_arg
+# MATH now loads all seven subjects (interleaved) by default; pass --hf-name <subject>
+# to restrict to one. $bench_arg caps the interleaved total for a quick pass.
 instella-reasoning load-benchmark --benchmark math           --output "$PROC/math.jsonl"           $bench_arg || \
-  echo "  (MATH config may need --hf-name; skipping is non-fatal)"
+  echo "  (MATH download failed; set HF_TOKEN and retry. Skipping is non-fatal.)"
 
 echo "== Instella training corpus (contamination ground truth) =="
 # Smoking gun for GSM8K: index the AMD synthetic set fully where possible.
