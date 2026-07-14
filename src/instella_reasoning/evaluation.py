@@ -161,6 +161,31 @@ def _load_model(
     return tokenizer, model
 
 
+def _format_prompts(tokenizer, prompts: list[str], use_chat_template: bool):
+    """Render user prompts for the model, applying its chat template when it has one.
+
+    Instruction-tuned checkpoints (``Instella-3B-Instruct``/``-Math``) are trained with
+    a chat format; feeding them a raw string produces degenerate, repetitive output.
+    When the tokenizer exposes a ``chat_template`` we wrap each prompt as a single user
+    turn with ``add_generation_prompt=True``; the template already injects the special
+    tokens, so the caller must tokenize with ``add_special_tokens=False`` to avoid a
+    duplicate BOS. Base checkpoints (no template) fall back to the raw prompt and normal
+    special-token handling. Returns ``(texts, add_special_tokens, used_chat_template)``.
+    """
+    chat_template = getattr(tokenizer, "chat_template", None)
+    if use_chat_template and chat_template:
+        texts = [
+            tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            for prompt in prompts
+        ]
+        return texts, False, True
+    return prompts, True, False
+
+
 def generate_with_transformers(
     benchmark: list[BenchmarkItem],
     model_name_or_path: str,
@@ -171,12 +196,15 @@ def generate_with_transformers(
     load_in_4bit: bool = False,
     batch_size: int = 1,
     use_cot_prompt: bool = True,
+    use_chat_template: bool = True,
 ) -> list[GenerationRecord]:
     """Generate model completions with chain-of-thought prompting.
 
     Portable across a Colab T4 (CUDA, optionally 4-bit for the 3B models) and a
     CPU-only machine (bf16/fp32). ``use_cot_prompt`` wraps each item with the
-    benchmark-appropriate CoT instruction so answers are parseable by the extractors.
+    benchmark-appropriate CoT instruction so answers are parseable by the extractors;
+    ``use_chat_template`` then formats it for instruction-tuned models (see
+    :func:`_format_prompts`). Disable the latter only for a base (non-Instruct) model.
     """
     try:
         import torch
@@ -186,15 +214,28 @@ def generate_with_transformers(
         ) from exc
 
     tokenizer, model = _load_model(model_name_or_path, load_in_4bit, trust_remote_code)
+    quantized = load_in_4bit and torch.cuda.is_available()
+    # Precision provenance so downstream analysis can separate the accurate bf16 headline
+    # run from a fast, lower-fidelity 4-bit pass (NF4 measurably shifts accuracy).
+    precision = "nf4-4bit" if quantized else "bf16"
     do_sample = temperature > 0
     prompts = [build_prompt(item) if use_cot_prompt else item.prompt for item in benchmark]
 
     rows: list[GenerationRecord] = []
+    templated_any = False
     for start in range(0, len(benchmark), batch_size):
         batch_items = benchmark[start : start + batch_size]
         batch_prompts = prompts[start : start + batch_size]
+        texts, add_special, used_template = _format_prompts(
+            tokenizer, batch_prompts, use_chat_template
+        )
+        templated_any = templated_any or used_template
         inputs = tokenizer(
-            batch_prompts, return_tensors="pt", padding=True, truncation=True
+            texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            add_special_tokens=add_special,
         ).to(model.device)
         with torch.no_grad():
             tokens = model.generate(
@@ -215,11 +256,19 @@ def generate_with_transformers(
                     metadata={
                         "max_new_tokens": max_new_tokens,
                         "temperature": temperature,
-                        "load_in_4bit": load_in_4bit,
+                        "load_in_4bit": quantized,  # effective, not just requested
+                        "precision": precision,  # "bf16" (headline) or "nf4-4bit" (fast pass)
                         "cot_prompt": use_cot_prompt,
+                        "chat_template": used_template,
                     },
                 )
             )
+
+    if use_chat_template and not templated_any:
+        print(
+            f"[generate] NOTE: '{model_name_or_path}' has no chat template; used raw prompts. "
+            "If this is an -Instruct/-Math checkpoint, output may be degenerate — verify the model id."
+        )
 
     write_jsonl(output_path, rows)
     return rows

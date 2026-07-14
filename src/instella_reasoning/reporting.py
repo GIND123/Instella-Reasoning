@@ -66,6 +66,63 @@ def write_markdown_report(
     return content
 
 
+def precision_provenance(scores: list[EvaluationRecord]) -> list[str]:
+    """Report which precision each model's numbers came from, warning on 4-bit.
+
+    bf16 is the accurate headline precision; 4-bit NF4 is a fast, lower-fidelity pass.
+    Mixing them silently would let quantization noise masquerade as a reasoning result,
+    so the report states the provenance and flags any 4-bit numbers explicitly.
+    """
+    if not scores:
+        return []
+    by_model: dict[str, set[str]] = {}
+    for record in scores:
+        precision = str(record.metadata.get("precision", "unknown"))
+        by_model.setdefault(record.model, set()).add(precision)
+
+    lines = ["### Generation provenance", ""]
+    any_4bit = False
+    for model, precisions in sorted(by_model.items()):
+        rendered = ", ".join(sorted(precisions))
+        lines.append(f"- `{model}` — precision: {rendered}")
+        any_4bit = any_4bit or any("4bit" in p for p in precisions)
+    if any_4bit:
+        lines.append("")
+        lines.append(
+            "> **Caution:** some numbers above come from a 4-bit (NF4) run. Treat these as a "
+            "fast, lower-fidelity pass — report **bf16** results as the headline, since NF4 "
+            "quantization measurably shifts accuracy."
+        )
+    lines.append("")
+    return lines
+
+
+def quality_gate_section(quality_report) -> list[str]:
+    """Render the degeneracy quality gate (see :mod:`instella_reasoning.quality`)."""
+    if quality_report is None or quality_report.n == 0:
+        return []
+    lines = [
+        "### Quality gate (degenerate completions)",
+        "",
+        f"- Completions checked: **{quality_report.n}**",
+        f"- Flagged degenerate: **{quality_report.n_degenerate}** "
+        f"({quality_report.degenerate_fraction:.1%})",
+    ]
+    if quality_report.n_degenerate:
+        lines.append(
+            "> **Warning:** degenerate (looping/empty) completions detected — usually a "
+            "prompt/format problem (e.g. an Instruct model without its chat template). Their "
+            "scores are unreliable; fix generation before trusting the Atlas. Examples:"
+        )
+        for row in quality_report.flagged[:5]:
+            lines.append(
+                f">   - `{row.benchmark_id}`: {', '.join(row.reasons)} "
+                f"(distinct-ratio={row.distinct_token_ratio:.2f}, tokens={row.n_tokens})"
+            )
+    lines.append("")
+    return lines
+
+
 def write_full_report(
     scores: list[EvaluationRecord],
     contamination: list[ContaminationHit],
@@ -75,6 +132,7 @@ def write_full_report(
     skill_attributions=None,
     emergence_report=None,
     figure_paths: dict[str, str] | None = None,
+    quality_report=None,
 ) -> str:
     """Assemble the full reliability report: summary, atlas, accuracy gap, attribution.
 
@@ -103,6 +161,9 @@ def write_full_report(
         breakdown = ", ".join(f"{label}={count}" for label, count in sorted(label_counts.items()))
         lines.append(f"- Contamination breakdown: {breakdown}")
     lines.append("")
+
+    lines.extend(precision_provenance(scores))
+    lines.extend(quality_gate_section(quality_report))
 
     if atlas_report is not None and atlas_report.cells:
         lines.append(atlas_report.to_markdown())

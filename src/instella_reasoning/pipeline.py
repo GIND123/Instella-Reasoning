@@ -39,6 +39,7 @@ from instella_reasoning.contamination import (
 )
 from instella_reasoning.evaluation import score_generations
 from instella_reasoning.perturbations import PerturbationConfig, expand_benchmark_file
+from instella_reasoning.quality import write_quality_report
 from instella_reasoning.records import (
     GenerationRecord,
     read_benchmark,
@@ -195,11 +196,26 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         _log("generate", "no model and no generations file; skipping generation/scoring")
 
     # -- Stage 4-9: analysis on scores ---------------------------------------
-    atlas_report = gap_results = skill_attributions = None
+    atlas_report = gap_results = skill_attributions = quality_report = None
     scores: list = []
     if generations_path and Path(generations_path).exists():
         scores_path = out / "scores.jsonl"
         generations = [GenerationRecord.from_dict(row) for row in read_jsonl(generations_path)]
+
+        # Quality gate: flag degenerate completions before they reach the Atlas.
+        quality_path = out / "quality.jsonl"
+        quality_report = write_quality_report(generations, quality_path)
+        artifacts["quality"] = str(quality_path)
+        if quality_report.n_degenerate:
+            _log(
+                "quality",
+                f"WARNING: {quality_report.n_degenerate}/{quality_report.n} completions look "
+                f"degenerate ({quality_report.degenerate_fraction:.0%}) -> {quality_path}. "
+                "Likely a prompt/format issue (e.g. missing chat template); scores are unreliable.",
+            )
+        else:
+            _log("quality", f"{quality_report.n} completions OK -> {quality_path}")
+
         scores = score_generations(benchmark, generations, scores_path)
         artifacts["scores"] = str(scores_path)
         _log("score", f"{len(scores)} scored -> {scores_path}")
@@ -256,6 +272,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         gap_results=gap_results,
         skill_attributions=skill_attributions,
         figure_paths={name: _relative(path, out) for name, path in figure_paths.items()},
+        quality_report=quality_report,
     )
     artifacts["report"] = str(report_path)
     _log("report", f"written -> {report_path}")
