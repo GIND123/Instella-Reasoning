@@ -92,6 +92,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--batch-size", type=int, default=1)
     generate.add_argument("--no-cot-prompt", action="store_true", help="Disable CoT prompt wrapping.")
     generate.add_argument(
+        "--no-chat-template", action="store_true",
+        help="Do not apply the tokenizer chat template (use only for base, non-Instruct models).",
+    )
+    generate.add_argument(
         "--limit", type=int, default=None,
         help="Only generate for the first N benchmark items (use for CPU/smoke checks).",
     )
@@ -100,6 +104,19 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--benchmark", required=True)
     score.add_argument("--generations", required=True)
     score.add_argument("--output", required=True)
+
+    check = subparsers.add_parser(
+        "check-generations",
+        help="Flag degenerate (looping/empty) completions before scoring/atlas.",
+    )
+    check.add_argument("--generations", required=True)
+    check.add_argument("--output", default=None, help="Optional JSONL of the flagged completions.")
+    check.add_argument(
+        "--fail-threshold",
+        type=float,
+        default=None,
+        help="Exit non-zero if the degenerate fraction exceeds this (e.g. 0.1 for CI gating).",
+    )
 
     attribute = subparsers.add_parser("attribute", help="Build retrieval-correctness attribution proxy rows.")
     attribute.add_argument("--contamination", required=True)
@@ -266,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
             load_in_4bit=args.load_in_4bit,
             batch_size=args.batch_size,
             use_cot_prompt=not args.no_cot_prompt,
+            use_chat_template=not args.no_chat_template,
         )
         print(f"Wrote {len(rows)} generations to {args.output}")
         return 0
@@ -274,6 +292,27 @@ def main(argv: list[str] | None = None) -> int:
         generations = [GenerationRecord.from_dict(row) for row in read_jsonl(args.generations)]
         rows = score_generations(read_benchmark(args.benchmark), generations, args.output)
         print(f"Wrote {len(rows)} scored generations to {args.output}")
+        return 0
+
+    if args.command == "check-generations":
+        from instella_reasoning.quality import write_quality_report
+
+        generations = [GenerationRecord.from_dict(row) for row in read_jsonl(args.generations)]
+        report = write_quality_report(generations, args.output)
+        print(
+            f"Checked {report.n} completions: {report.n_degenerate} degenerate "
+            f"({report.degenerate_fraction:.1%})."
+        )
+        for row in report.flagged[:10]:
+            print(f"  - {row.benchmark_id}: {', '.join(row.reasons)} (tokens={row.n_tokens})")
+        if args.output:
+            print(f"Flagged completions -> {args.output}")
+        if args.fail_threshold is not None and report.degenerate_fraction > args.fail_threshold:
+            print(
+                f"FAIL: degenerate fraction {report.degenerate_fraction:.1%} exceeds "
+                f"threshold {args.fail_threshold:.1%}."
+            )
+            return 1
         return 0
 
     if args.command == "attribute":

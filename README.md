@@ -97,32 +97,64 @@ type outputs\atlas_run\report.md
 
 ### B. Run it on Google Colab (T4 GPU, real Instella model)
 
-Paste this into **one Colab cell** (set **Runtime → Change runtime type → T4 GPU** first),
-then run it. It clones, installs the GPU extras, does the CPU smoke run, downloads a
-small slice of real data, and generates with Instella-3B in 4-bit.
+First set **Runtime → Change runtime type → T4 GPU**, then paste this into **one Colab
+cell**. It preflights the GPU, installs the GPU extras, authenticates to HuggingFace,
+downloads a small real slice, verifies output on a tiny sample, then runs the batch.
 
 ```python
 !git clone https://github.com/GIND123/Instella-Reasoning
 %cd Instella-Reasoning
-!pip install -e ".[hf,retrieval,viz,stats]"
+!pip install -q -e ".[hf,retrieval,viz,stats]" && pip install -q bitsandbytes
 
-# 1) Smoke test on bundled data (proves the install works)
+# 0) Preflight: is a real GPU attached? (a CPU-only runtime makes generation unusable)
+!python scripts/preflight.py
+
+# 1) HuggingFace auth + Xet workaround (add an HF token in Colab Secrets as HF_TOKEN)
+import os
+from google.colab import userdata
+os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
+# 2) Smoke-test the install on bundled data, then download a small real slice
 !instella-reasoning run-all --config configs/pipeline/full.yaml
-
-# 2) Download a small real slice: 200 benchmark items + 5000 corpus docs
 !bash scripts/download_data.sh 200 5000
 
-# 3) Generate with Instella-3B (4-bit) and score it
+# 3) VERIFY on 4 items first — the completion must be coherent GSM8K reasoning.
+#    (Chat templating for -Instruct models is automatic; see the note below.)
+!instella-reasoning generate \
+    --benchmark data/processed/gsm8k.jsonl \
+    --model amd/Instella-3B-Instruct \
+    --output outputs/gsm8k_smoke.jsonl \
+    --limit 4 --max-new-tokens 256 --batch-size 2
+!head -c 800 outputs/gsm8k_smoke.jsonl
+
+# 4) Full run. Drop --load-in-4bit for the accurate bf16 number (see note); keep it
+#    only for a fast, lower-fidelity pass.
 !instella-reasoning generate \
     --benchmark data/processed/gsm8k.jsonl \
     --model amd/Instella-3B-Instruct \
     --output outputs/gsm8k_generations.jsonl \
-    --load-in-4bit --batch-size 8
+    --batch-size 8
+
+# 5) Quality gate — refuse to proceed if >10% of completions are degenerate
+#    (a formatting bug should never silently flow into the Atlas).
+!instella-reasoning check-generations \
+    --generations outputs/gsm8k_generations.jsonl \
+    --output outputs/gsm8k_flagged.jsonl --fail-threshold 0.1
+
 !instella-reasoning score-generations \
     --benchmark data/processed/gsm8k.jsonl \
     --generations outputs/gsm8k_generations.jsonl \
     --output outputs/gsm8k_scores.jsonl
 ```
+
+> **Two things that decide whether you get real answers vs. gibberish:**
+> 1. **A GPU must actually be attached.** If `preflight.py` reports `cpu_only_build` /
+>    `cuda_available=False`, the 3B model falls back to CPU and generation is unusably
+>    slow — fix the runtime type before going further.
+> 2. **Instruct models need their chat template**, which the pipeline now applies
+>    automatically. For **accuracy numbers**, prefer **bf16** (omit `--load-in-4bit`);
+>    4-bit NF4 is a fast, lower-fidelity mode for smoke checks, not headline metrics.
 
 > Prefer the notebook UI? Open
 > [`notebooks/instella_reasoning_atlas.ipynb`](notebooks/instella_reasoning_atlas.ipynb)
@@ -142,6 +174,37 @@ instella-reasoning run-all --config configs/pipeline/full.yaml
 
 See [`docs/DATA_DOWNLOAD.md`](docs/DATA_DOWNLOAD.md) for the complete AMD data procedure
 and licensing before a full download.
+
+### Research-grade run (headline numbers)
+
+For results you intend to report, three rules keep quantization noise and formatting bugs
+out of the Atlas. All three work from the commands above — no code changes needed.
+
+1. **bf16 is the headline, 4-bit is a fast pass.** Omit `--load-in-4bit` for the number
+   you report; NF4 measurably shifts accuracy. Every generation records its `precision`,
+   and `report.md` prints a **Generation provenance** block that warns when any number came
+   from 4-bit. Run both to quantify the quantization gap:
+   ```bash
+   instella-reasoning generate --benchmark data/processed/gsm8k.jsonl \
+       --model amd/Instella-3B-Instruct --output outputs/gsm8k_bf16.jsonl --batch-size 8
+   instella-reasoning generate --benchmark data/processed/gsm8k.jsonl \
+       --model amd/Instella-3B-Instruct --output outputs/gsm8k_4bit.jsonl \
+       --load-in-4bit --batch-size 8
+   ```
+2. **Gate on degenerate output.** `check-generations` flags looping/empty completions
+   (the missing-chat-template failure mode) via distinct-token ratio, repeated-trigram, and
+   longest-run signals. `run-all` runs this gate automatically and surfaces it in the report;
+   run it standalone in CI with `--fail-threshold`:
+   ```bash
+   instella-reasoning check-generations --generations outputs/gsm8k_bf16.jsonl \
+       --output outputs/flagged.jsonl --fail-threshold 0.05   # exits non-zero if > 5% degenerate
+   ```
+3. **Use the full MATH benchmark.** `load-benchmark --benchmark math` (no `--hf-name`) now
+   loads and interleaves **all seven MATH subjects** for a balanced set; add `--hf-name geometry`
+   only to restrict to one subject.
+   ```bash
+   instella-reasoning load-benchmark --benchmark math --output data/processed/math.jsonl   # all 7 subjects
+   ```
 
 ### Run a single stage
 
@@ -182,8 +245,9 @@ Every command reads and writes JSONL/JSON so long jobs can be sharded, resumed, 
 | `make-variants` | 2 | Expand a benchmark into semantics-preserving consistency clusters. |
 | `scan-contamination` | 1 | Lightweight lexical contamination scan. |
 | `scan-contamination-embedding` | 1 | Embedding + 13-gram scan → C / PC / N labels. |
-| `generate` | 2 | Generate completions with Transformers (4-bit, batching, CoT prompts). |
+| `generate` | 2 | Generate completions with Transformers (chat template, 4-bit/bf16, batching, CoT prompts, `--limit`). |
 | `score-generations` | 2 | Benchmark-aware answer extraction + exact-match scoring. |
+| `check-generations` | 2 | Quality gate: flag degenerate (looping/empty) completions; `--fail-threshold` for CI. |
 | `accuracy-gap` | 2 | Contaminated-vs-clean accuracy with a two-proportion z-test. |
 | `attribute` | 3 | Retrieval-correctness attribution proxy (triage queue). |
 | `attribute-embedding` | 3 | Tier-1 attribution: neighbour concentration (Gini), source shares, concentrated/diverse verdict. |
@@ -201,7 +265,8 @@ src/instella_reasoning/
 ├── text.py                  # normalization, n-grams, overlap metrics
 ├── datasets/loaders.py      # HF benchmark/corpus → JSONL (skill-tagged)
 ├── prompting.py             # CoT templates + benchmark-aware answer extractors
-├── evaluation.py            # model generation (4-bit/batch/CoT) + exact-match scoring
+├── evaluation.py            # model generation (chat template/4-bit/bf16/CoT) + scoring
+├── quality.py               # degeneracy gate: flag looping/empty completions   [Phase 2]
 ├── embedding.py             # MiniLM/GTE embedder + dependency-free hashing fallback
 ├── faiss_index.py           # FAISS (flat/ivfpq/hnsw) + brute-force fallback, save/load
 ├── contamination.py         # lexical + embedding/13-gram scanners → C/PC/N   [Phase 1]
