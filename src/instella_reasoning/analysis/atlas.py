@@ -23,6 +23,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from instella_reasoning.analysis.accuracy_gap import contamination_labels_by_benchmark_id
+from instella_reasoning.metrics import cluster_consistency
 from instella_reasoning.records import ContaminationHit, EvaluationRecord
 
 CONTAMINATION_LEVELS = ("all", "contaminated", "partial", "clean")
@@ -106,8 +107,8 @@ def _cluster_reliabilities(
     clusters: list[ClusterReliability] = []
     for parent_id, group in grouped.items():
         accuracy = sum(record.correct for record in group) / len(group)
-        answer_counts = Counter(record.normalized_predicted for record in group)
-        consistency = max(answer_counts.values()) / len(group)
+        # Consistency ignores answer-*changing* numeric variants (see metrics.py / M5).
+        consistency = cluster_consistency(group)
         reliability = accuracy * consistency
         skill = _modal_metadata(group, skill_key, default="unknown")
         model = group[0].model

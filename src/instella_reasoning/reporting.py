@@ -133,6 +133,7 @@ def write_full_report(
     emergence_report=None,
     figure_paths: dict[str, str] | None = None,
     quality_report=None,
+    stratified_gap_results=None,
 ) -> str:
     """Assemble the full reliability report: summary, atlas, accuracy gap, attribution.
 
@@ -171,6 +172,8 @@ def write_full_report(
 
     if gap_results:
         lines.extend(_gap_section(gap_results))
+    if stratified_gap_results:
+        lines.extend(_stratified_gap_section(stratified_gap_results))
 
     if skill_attributions:
         lines.extend(_attribution_section(skill_attributions))
@@ -192,6 +195,10 @@ def write_full_report(
             "",
             "- Contamination labels are diagnostic candidates from retrieval + n-gram overlap; "
             "confirm with manual inspection or gradient attribution before publication.",
+            "- **\"Clean\" = not detected in the indexed sample**, a lower bound on contamination; "
+            "do not treat it as a verified-uncontaminated control.",
+            "- Prefer the **difficulty-adjusted** gap over the naive one — an unadjusted gap can be a "
+            "difficulty confound (contaminated items may simply be easier).",
             "- A **fragile** cell (high accuracy, low reliability) is the memorisation signature: "
             "the model recognises the original but fails semantically equivalent variants.",
             "- A **concentrated** attribution signature (near-duplicate share >= 0.30) supports "
@@ -218,21 +225,47 @@ def _atlas_takeaway(atlas_report) -> str:
 
 def _gap_section(gap_results) -> list[str]:
     lines = [
-        "## 2. Contaminated vs Clean Accuracy Gap",
+        "## 2. Contaminated vs Not-Detected Accuracy Gap",
         "",
-        "| Scope | Contaminated | Clean | Gap | z | p |",
-        "|---|---:|---:|---:|---:|---:|",
+        "> **\"Clean\" means \"not detected\", not \"provably absent\"** — contamination is a "
+        "one-sided lower bound because only a sample of the web corpora is indexed. Read the "
+        "gap as *at least this large*, and prefer the difficulty-adjusted estimate below.",
+        "",
+        "| Scope | Contaminated | Not-detected | Gap | z | p | q (FDR) |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for result in gap_results:
         contaminated = result.by_label["contaminated"]
         clean = result.by_label["clean"]
-        sig = " *" if result.p_value < 0.05 else ""
+        sig = " *" if result.q_value < 0.05 else ""
         lines.append(
             f"| {result.scope} | {contaminated.accuracy:.3f} (n={contaminated.total}) | "
             f"{clean.accuracy:.3f} (n={clean.total}) | {result.gap:+.3f} | "
-            f"{result.z:.2f} | {result.p_value:.4f}{sig} |"
+            f"{result.z:.2f} | {result.p_value:.4f} | {result.q_value:.4f}{sig} |"
         )
-    lines.extend(["", "`*` p < 0.05 (two-proportion z-test).", ""])
+    lines.extend(["", "`*` q < 0.05 (two-proportion z-test, Benjamini-Hochberg FDR across scopes).", ""])
+    return lines
+
+
+def _stratified_gap_section(stratified_results) -> list[str]:
+    lines = [
+        "### 2b. Difficulty-adjusted gap (confounder control)",
+        "",
+        "> Mantel-Haenszel pooling of the gap *within* equal-frequency difficulty strata, "
+        "with a cluster-robust bootstrap CI (resampling parent clusters). If the adjusted gap "
+        "collapses toward 0, the naive gap was largely a difficulty confound, not contamination.",
+        "",
+        "| Scope | Unadjusted gap | Difficulty-adjusted gap | 95% CI (cluster bootstrap) | Clusters |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for r in stratified_results:
+        crosses_zero = r.ci_low <= 0.0 <= r.ci_high
+        flag = "" if not crosses_zero else " (CI incl. 0)"
+        lines.append(
+            f"| {r.scope} | {r.unadjusted_gap:+.3f} | {r.pooled_gap:+.3f} | "
+            f"[{r.ci_low:+.3f}, {r.ci_high:+.3f}]{flag} | {r.n_clusters} |"
+        )
+    lines.append("")
     return lines
 
 

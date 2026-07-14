@@ -27,7 +27,7 @@ import operator
 import random
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from instella_reasoning.records import BenchmarkItem, read_benchmark, write_jsonl
@@ -81,12 +81,19 @@ DEFAULT_PERTURBATIONS = (
 
 @dataclass(slots=True)
 class PerturbationConfig:
-    """Which perturbations to apply and how many variants to keep per item."""
+    """Which perturbations to apply and how many variants to keep per item.
+
+    ``numeric_variants`` adds that many GSM-Symbolic-style *answer-changing* variants per
+    templatable GSM8K item (see :mod:`instella_reasoning.gsm_symbolic`). Per GSM-Symbolic
+    (arXiv:2410.05229) these numeric perturbations are the decisive robustness probe, so a
+    rigorous run should set ``numeric_variants > 0`` rather than rely on surface changes.
+    """
 
     types: tuple[str, ...] = DEFAULT_PERTURBATIONS
     seed: int = 6198
     include_original: bool = True
     max_variants: int | None = None
+    numeric_variants: int = 0
 
 
 # -- sentence utilities --------------------------------------------------------
@@ -267,7 +274,97 @@ def make_variant_suite(
         if config.include_original:
             suite.append(original)
         suite.extend(make_variants(original, config))
+        if config.numeric_variants > 0:
+            from instella_reasoning.gsm_symbolic import make_numeric_variants
+
+            rng = random.Random(f"{config.seed}:{original.id}:gsm_symbolic")
+            suite.extend(make_numeric_variants(original, k=config.numeric_variants, rng=rng).items)
     return suite
+
+
+# -- variant validation (reviewer concern M2) ----------------------------------
+
+
+@dataclass(slots=True)
+class ValidationReport:
+    """Answer-preservation / well-formedness audit for a perturbation suite."""
+
+    n_variants: int
+    n_answer_preserving: int
+    n_preserved_ok: int
+    n_answer_changing: int
+    n_degenerate_text: int
+    violations: list[str] = field(default_factory=list)  # variant ids that changed the answer
+
+    @property
+    def answer_preservation_rate(self) -> float:
+        return self.n_preserved_ok / self.n_answer_preserving if self.n_answer_preserving else 1.0
+
+    def to_dict(self) -> dict:
+        return {
+            "n_variants": self.n_variants,
+            "n_answer_preserving": self.n_answer_preserving,
+            "n_preserved_ok": self.n_preserved_ok,
+            "answer_preservation_rate": round(self.answer_preservation_rate, 6),
+            "n_answer_changing": self.n_answer_changing,
+            "n_degenerate_text": self.n_degenerate_text,
+            "violations": self.violations[:50],
+        }
+
+
+def validate_variants(items: list[BenchmarkItem]) -> ValidationReport:
+    """Audit a perturbation suite for answer preservation and text well-formedness.
+
+    Answer-*preserving* variants (entity/reorder/distractor/rephrase) must carry the same
+    gold answer as their original; a mismatch is a bug in the generator or an unintended
+    difficulty change. Answer-*changing* variants (``gsm_symbolic``) are recomputed and
+    self-validated, so they are counted separately, not checked against the original.
+    """
+    from instella_reasoning.gsm_symbolic import _int_or_none  # local: keep import graph light
+
+    originals = {
+        item.parent_id or item.id: item
+        for item in items
+        if item.variant_type == "original"
+    }
+    n_variants = n_preserving = n_preserved_ok = n_changing = n_degenerate = 0
+    violations: list[str] = []
+    changing_types = {"gsm_symbolic", "numeric_perturbation"}
+
+    for item in items:
+        if item.variant_type == "original":
+            continue
+        n_variants += 1
+        # crude well-formedness: non-empty, changed from the original, no doubled blanks
+        parent = originals.get(item.parent_id or "")
+        if not item.prompt.strip() or "  " in item.prompt.strip():
+            n_degenerate += 1
+        if item.variant_type in changing_types or item.metadata.get("answer_changing"):
+            n_changing += 1
+            continue
+        n_preserving += 1
+        if parent is None:
+            continue
+        # Compare answers numerically when possible, else as normalized strings.
+        want, got = str(parent.answer), str(item.answer)
+        equal = (
+            _int_or_none(want) == _int_or_none(got)
+            if _int_or_none(want) is not None and _int_or_none(got) is not None
+            else want.strip() == got.strip()
+        )
+        if equal:
+            n_preserved_ok += 1
+        else:
+            violations.append(item.id)
+
+    return ValidationReport(
+        n_variants=n_variants,
+        n_answer_preserving=n_preserving,
+        n_preserved_ok=n_preserved_ok,
+        n_answer_changing=n_changing,
+        n_degenerate_text=n_degenerate,
+        violations=violations,
+    )
 
 
 def expand_benchmark_file(

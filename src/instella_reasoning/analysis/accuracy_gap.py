@@ -14,9 +14,11 @@ a numerical normal-CDF approximation otherwise.
 from __future__ import annotations
 
 import math
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from instella_reasoning.analysis.stats import benjamini_hochberg_qvalues
 from instella_reasoning.records import ContaminationHit, EvaluationRecord
 
 # Order of severity; a benchmark item takes its strongest contamination label.
@@ -91,6 +93,7 @@ class AccuracyGapResult:
     by_label: dict[str, GroupStats] = field(default_factory=dict)
     z: float = 0.0
     p_value: float = 1.0
+    q_value: float = 1.0  # BH-FDR adjusted p-value across all scopes
     gap: float = 0.0  # contaminated accuracy - clean accuracy
 
     def to_dict(self) -> dict:
@@ -99,6 +102,7 @@ class AccuracyGapResult:
             "gap": round(self.gap, 6),
             "z": round(self.z, 6),
             "p_value": round(self.p_value, 6),
+            "q_value": round(self.q_value, 6),
             "groups": {
                 label: {
                     "total": stats.total,
@@ -152,4 +156,194 @@ def compute_accuracy_gap(
         results.append(
             AccuracyGapResult(scope=scope, by_label=by_label, z=z, p_value=p_value, gap=gap)
         )
+
+    # Benjamini-Hochberg FDR across every scope tested (reviewer concern M3: many
+    # (benchmark x model) comparisons inflate false positives without correction).
+    q_values = benjamini_hochberg_qvalues([r.p_value for r in results])
+    for result, q in zip(results, q_values, strict=False):
+        result.q_value = q
     return results
+
+
+# -- difficulty-stratified, cluster-robust gap (reviewer concern M3) -------------
+
+
+@dataclass(slots=True)
+class StratumStats:
+    difficulty_bin: int
+    contaminated: GroupStats
+    clean: GroupStats
+
+    @property
+    def gap(self) -> float:
+        if not self.contaminated.total or not self.clean.total:
+            return 0.0
+        return self.contaminated.accuracy - self.clean.accuracy
+
+    @property
+    def mh_weight(self) -> float:
+        """Mantel-Haenszel weight n1*n2/(n1+n2); zero when a cell is empty."""
+        n1, n2 = self.contaminated.total, self.clean.total
+        return (n1 * n2) / (n1 + n2) if (n1 + n2) else 0.0
+
+
+@dataclass(slots=True)
+class StratifiedGapResult:
+    scope: str
+    unadjusted_gap: float  # naive contaminated - clean, ignoring difficulty
+    pooled_gap: float  # Mantel-Haenszel difficulty-adjusted gap
+    ci_low: float
+    ci_high: float
+    n_clusters: int
+    strata: list[StratumStats] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "scope": self.scope,
+            "unadjusted_gap": round(self.unadjusted_gap, 6),
+            "pooled_gap_difficulty_adjusted": round(self.pooled_gap, 6),
+            "cluster_bootstrap_ci": [round(self.ci_low, 6), round(self.ci_high, 6)],
+            "n_clusters": self.n_clusters,
+            "strata": [
+                {
+                    "difficulty_bin": s.difficulty_bin,
+                    "contaminated": {"n": s.contaminated.total, "acc": round(s.contaminated.accuracy, 6)},
+                    "clean": {"n": s.clean.total, "acc": round(s.clean.accuracy, 6)},
+                    "gap": round(s.gap, 6),
+                    "weight": round(s.mh_weight, 6),
+                }
+                for s in self.strata
+            ],
+        }
+
+
+def _mantel_haenszel_gap(rows: list[tuple[int, str, bool]]) -> float:
+    """Difficulty-adjusted contaminated-vs-clean gap.
+
+    ``rows`` are (difficulty_bin, label, correct). Within each bin we compute the
+    contaminated-minus-clean accuracy difference, then pool across bins with MH weights
+    n1*n2/(n1+n2). This removes a difficulty confound: if contaminated items are simply
+    easier, the naive gap shrinks toward the within-difficulty gap.
+    """
+    by_bin: dict[int, list[tuple[str, bool]]] = defaultdict(list)
+    for bin_id, label, correct in rows:
+        by_bin[bin_id].append((label, correct))
+    num = den = 0.0
+    for entries in by_bin.values():
+        c = [ok for lab, ok in entries if lab == "contaminated"]
+        n = [ok for lab, ok in entries if lab == "clean"]
+        if not c or not n:
+            continue
+        weight = (len(c) * len(n)) / (len(c) + len(n))
+        gap = sum(c) / len(c) - sum(n) / len(n)
+        num += weight * gap
+        den += weight
+    return num / den if den else 0.0
+
+
+def compute_stratified_accuracy_gap(
+    scores: list[EvaluationRecord],
+    contamination: list[ContaminationHit],
+    difficulty_bins: dict[str, int],
+    per_benchmark: bool = True,
+    per_model: bool = True,
+    n_bootstrap: int = 2000,
+    level: float = 0.95,
+    seed: int = 6198,
+) -> list[StratifiedGapResult]:
+    """Difficulty-adjusted gap with a cluster-robust bootstrap CI.
+
+    ``difficulty_bins`` maps benchmark_id -> equal-frequency difficulty bin (see
+    :func:`instella_reasoning.difficulty.assign_difficulty_bins`). The bootstrap resamples
+    **parent clusters** (not individual variants) so consistency-variant correlation does
+    not shrink the interval artificially.
+    """
+    labels = contamination_labels_by_benchmark_id(contamination)
+
+    # Group records by scope, carrying (parent_id, difficulty_bin, label, correct).
+    grouped: dict[str, list[tuple[str, int, str, bool]]] = defaultdict(list)
+    for record in scores:
+        label = labels.get(record.benchmark_id, "clean")
+        if label == "partial":
+            continue  # gap contrasts contaminated vs clean; partial is excluded
+        benchmark = str(record.metadata.get("benchmark", "unknown")) if per_benchmark else "all"
+        model = record.model if per_model else "all"
+        scope = f"{benchmark}::{model}"
+        bin_id = difficulty_bins.get(record.benchmark_id, 0)
+        parent = record.parent_id or record.benchmark_id
+        grouped[scope].append((parent, bin_id, label, record.correct))
+
+    results: list[StratifiedGapResult] = []
+    for scope, entries in sorted(grouped.items()):
+        rows = [(bin_id, label, correct) for _, bin_id, label, correct in entries]
+        pooled = _mantel_haenszel_gap(rows)
+
+        # naive gap
+        cont = [ok for _, _, lab, ok in entries if lab == "contaminated"]
+        clean = [ok for _, _, lab, ok in entries if lab == "clean"]
+        unadjusted = (sum(cont) / len(cont) - sum(clean) / len(clean)) if cont and clean else 0.0
+
+        # per-stratum breakdown
+        strata: list[StratumStats] = []
+        bins = sorted({bin_id for bin_id, _, _ in rows})
+        for bin_id in bins:
+            c = [ok for b, lab, ok in rows if b == bin_id and lab == "contaminated"]
+            n = [ok for b, lab, ok in rows if b == bin_id and lab == "clean"]
+            strata.append(
+                StratumStats(
+                    difficulty_bin=bin_id,
+                    contaminated=GroupStats("contaminated", len(c), sum(c)),
+                    clean=GroupStats("clean", len(n), sum(n)),
+                )
+            )
+
+        # cluster bootstrap: resample parent clusters with replacement
+        clusters: dict[str, list[tuple[int, str, bool]]] = defaultdict(list)
+        for parent, bin_id, label, correct in entries:
+            clusters[parent].append((bin_id, label, correct))
+        cluster_ids = list(clusters)
+        rng = random.Random(f"{seed}:{scope}")
+        estimates: list[float] = []
+        for _ in range(n_bootstrap):
+            sampled_rows: list[tuple[int, str, bool]] = []
+            for _ in range(len(cluster_ids)):
+                pick = cluster_ids[rng.randrange(len(cluster_ids))]
+                sampled_rows.extend(clusters[pick])
+            estimates.append(_mantel_haenszel_gap(sampled_rows))
+        estimates.sort()
+        ci_low, ci_high = _percentile_pair(estimates, level)
+
+        results.append(
+            StratifiedGapResult(
+                scope=scope,
+                unadjusted_gap=unadjusted,
+                pooled_gap=pooled,
+                ci_low=ci_low,
+                ci_high=ci_high,
+                n_clusters=len(cluster_ids),
+                strata=strata,
+            )
+        )
+    return results
+
+
+def _percentile_pair(sorted_values: list[float], level: float) -> tuple[float, float]:
+    if not sorted_values:
+        return 0.0, 0.0
+    alpha = 1.0 - level
+    return (
+        _percentile(sorted_values, 100 * alpha / 2),
+        _percentile(sorted_values, 100 * (1 - alpha / 2)),
+    )
+
+
+def _percentile(sorted_values: list[float], pct: float) -> float:
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (pct / 100) * (len(sorted_values) - 1)
+    low = int(math.floor(rank))
+    high = int(math.ceil(rank))
+    if low == high:
+        return sorted_values[low]
+    weight = rank - low
+    return sorted_values[low] * (1 - weight) + sorted_values[high] * weight
