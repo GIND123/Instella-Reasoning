@@ -73,6 +73,27 @@ def score_generations(
     return rows
 
 
+def describe_device() -> dict:
+    """Report the compute device the loader will actually use.
+
+    Surfaces the two things that silently sank the first Colab run: a CPU-only
+    torch build (``+cpu``, so ``--load-in-4bit`` is a no-op) and the absence of any
+    visible CUDA GPU. Import-safe so a preflight can call it before any download.
+    """
+    import torch
+
+    cuda = torch.cuda.is_available()
+    info: dict = {
+        "torch_version": torch.__version__,
+        "cpu_only_build": "+cpu" in torch.__version__,
+        "cuda_available": cuda,
+        "device": "cuda" if cuda else "cpu",
+        "gpu_count": torch.cuda.device_count() if cuda else 0,
+        "gpu_name": torch.cuda.get_device_name(0) if cuda else None,
+    }
+    return info
+
+
 def _load_model(
     model_name_or_path: str,
     load_in_4bit: bool,
@@ -81,15 +102,33 @@ def _load_model(
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=trust_remote_code)
+    info = describe_device()
+    cuda = info["cuda_available"]
+    print(
+        f"[load] torch={info['torch_version']} device={info['device']}"
+        + (f" gpu={info['gpu_name']} (x{info['gpu_count']})" if cuda else "")
+    )
+
+    # Instella's tokenizer needs left padding for correct batched decoder-only generation.
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name_or_path, trust_remote_code=trust_remote_code, padding_side="left"
+    )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     kwargs: dict = {
-        "device_map": "auto",
         "trust_remote_code": trust_remote_code,
+        "low_cpu_mem_usage": True,
     }
-    if load_in_4bit and torch.cuda.is_available():
+
+    if load_in_4bit and not cuda:
+        print(
+            "[load] WARNING: --load-in-4bit requested but no CUDA GPU is visible "
+            "(torch is a CPU-only build if the version ends in '+cpu'). Falling back "
+            "to full precision on CPU. Switch the Colab runtime to a GPU for 4-bit."
+        )
+
+    if load_in_4bit and cuda:
         try:
             from transformers import BitsAndBytesConfig
 
@@ -99,15 +138,25 @@ def _load_model(
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
+            kwargs["device_map"] = "auto"
         except ImportError as exc:  # pragma: no cover - needs train extra
             raise RuntimeError(
                 "4-bit quantization needs bitsandbytes. Install with `pip install bitsandbytes`, "
                 "or pass load_in_4bit=False to run in bf16/fp32."
             ) from exc
+    elif cuda:
+        kwargs["torch_dtype"] = torch.bfloat16
+        kwargs["device_map"] = "auto"
     else:
-        kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        # CPU: keep the whole model in RAM. Never use device_map="auto" here — with no
+        # GPU it silently spills weights to disk (the "offloaded to the disk" message),
+        # which makes generation effectively hang. bf16 halves the footprint (~6 GB for
+        # a 3B model) so it fits in a stock Colab CPU runtime for a load/smoke check.
+        kwargs["torch_dtype"] = torch.bfloat16
 
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
+    if "device_map" not in kwargs:
+        model = model.to("cpu")
     model.eval()
     return tokenizer, model
 

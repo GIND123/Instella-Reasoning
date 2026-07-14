@@ -91,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--load-in-4bit", action="store_true", help="4-bit NF4 (CUDA + bitsandbytes).")
     generate.add_argument("--batch-size", type=int, default=1)
     generate.add_argument("--no-cot-prompt", action="store_true", help="Disable CoT prompt wrapping.")
+    generate.add_argument(
+        "--limit", type=int, default=None,
+        help="Only generate for the first N benchmark items (use for CPU/smoke checks).",
+    )
 
     score = subparsers.add_parser("score-generations", help="Score generation JSONL against benchmark answers.")
     score.add_argument("--benchmark", required=True)
@@ -249,8 +253,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "generate":
+        benchmark = read_benchmark(args.benchmark)
+        if args.limit is not None:
+            benchmark = benchmark[: args.limit]
         rows = generate_with_transformers(
-            benchmark=read_benchmark(args.benchmark),
+            benchmark=benchmark,
             model_name_or_path=args.model,
             output_path=args.output,
             max_new_tokens=args.max_new_tokens,
