@@ -66,6 +66,7 @@ class PipelineConfig:
         "irrelevant_context",
         "rephrasing",
     )
+    numeric_variants: int = 0  # GSM-Symbolic-style answer-changing variants per item
 
     contamination_method: str = "embedding"  # or "lexical"
     contamination_top_k: int = 20
@@ -111,6 +112,7 @@ class PipelineConfig:
                 "perturbations": tuple(
                     data.get("perturbations", flat.get("perturbations", cls.perturbations))
                 ),
+                "numeric_variants": data.get("numeric_variants", flat.get("numeric_variants", 0)),
                 "contamination_method": cont.get("method", flat.get("contamination_method", "embedding")),
                 "contamination_top_k": cont.get("top_k", flat.get("contamination_top_k", 20)),
                 "embedder_backend": cont.get("embedder_backend", flat.get("embedder_backend", "auto")),
@@ -151,7 +153,11 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         count = expand_benchmark_file(
             config.benchmark,
             expanded,
-            PerturbationConfig(types=tuple(config.perturbations), seed=config.seed),
+            PerturbationConfig(
+                types=tuple(config.perturbations),
+                seed=config.seed,
+                numeric_variants=config.numeric_variants,
+            ),
         )
         benchmark_path = str(expanded)
         artifacts["benchmark"] = benchmark_path
@@ -197,6 +203,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
 
     # -- Stage 4-9: analysis on scores ---------------------------------------
     atlas_report = gap_results = skill_attributions = quality_report = None
+    stratified_gap = None
     scores: list = []
     if generations_path and Path(generations_path).exists():
         scores_path = out / "scores.jsonl"
@@ -227,6 +234,19 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         )
         artifacts["accuracy_gap"] = str(gap_path)
         _log("accuracy-gap", f"{len(gap_results)} scopes -> {gap_path}")
+
+        # Difficulty-adjusted, cluster-robust gap (confounder control; reviewer M3).
+        from instella_reasoning.analysis.accuracy_gap import compute_stratified_accuracy_gap
+        from instella_reasoning.difficulty import assign_difficulty_bins
+
+        difficulty_bins = assign_difficulty_bins(benchmark, n_bins=3)
+        stratified_gap = compute_stratified_accuracy_gap(scores, hits, difficulty_bins)
+        strat_path = out / "accuracy_gap_stratified.json"
+        strat_path.write_text(
+            json.dumps([r.to_dict() for r in stratified_gap], indent=2), encoding="utf-8"
+        )
+        artifacts["accuracy_gap_stratified"] = str(strat_path)
+        _log("accuracy-gap", f"difficulty-adjusted: {len(stratified_gap)} scopes -> {strat_path}")
 
         atlas_report = build_atlas(scores, hits)
         atlas_path = out / "atlas.json"
@@ -273,6 +293,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         skill_attributions=skill_attributions,
         figure_paths={name: _relative(path, out) for name, path in figure_paths.items()},
         quality_report=quality_report,
+        stratified_gap_results=stratified_gap,
     )
     artifacts["report"] = str(report_path)
     _log("report", f"written -> {report_path}")

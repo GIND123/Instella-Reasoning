@@ -132,6 +132,15 @@ def build_parser() -> argparse.ArgumentParser:
     gap.add_argument("--output", required=True)
     gap.add_argument("--no-per-benchmark", action="store_true")
     gap.add_argument("--no-per-model", action="store_true")
+    gap.add_argument(
+        "--benchmark", default=None,
+        help="Benchmark JSONL; enables difficulty-stratified analysis (needs --stratified-output).",
+    )
+    gap.add_argument(
+        "--stratified-output", default=None,
+        help="Write a difficulty-adjusted, cluster-robust, MH-pooled gap here (needs --benchmark).",
+    )
+    gap.add_argument("--n-bins", type=int, default=3, help="Difficulty strata (equal-frequency).")
 
     report = subparsers.add_parser("report", help="Write a Markdown reliability report.")
     report.add_argument("--scores", required=True)
@@ -155,6 +164,39 @@ def build_parser() -> argparse.ArgumentParser:
     variants.add_argument("--seed", type=int, default=6198)
     variants.add_argument("--no-original", action="store_true", help="Exclude the original items.")
     variants.add_argument("--max-variants", type=int, default=None)
+    variants.add_argument(
+        "--numeric-k", type=int, default=0,
+        help="Add K GSM-Symbolic-style answer-changing numeric variants per templatable item.",
+    )
+
+    validate = subparsers.add_parser(
+        "validate-variants",
+        help="Audit a variant suite: answer-preservation rate + text well-formedness (M2).",
+    )
+    validate.add_argument("--benchmark", required=True, help="A variant-suite JSONL (with originals).")
+    validate.add_argument("--output", default=None, help="Optional JSON report path.")
+
+    calib = subparsers.add_parser(
+        "calibrate-contamination",
+        help="Sweep the cosine threshold against a labeled set -> precision/recall/F1 (M4).",
+    )
+    calib.add_argument("--contamination", required=True)
+    calib.add_argument(
+        "--ground-truth", required=True,
+        help="JSONL with {benchmark_id, contaminated: bool} rows of hand-labeled truth.",
+    )
+    calib.add_argument("--output", default=None)
+
+    valrel = subparsers.add_parser(
+        "validate-reliability",
+        help="Check Reliability ranks genuine > fragile clusters on a labeled set (M5).",
+    )
+    valrel.add_argument("--scores", required=True)
+    valrel.add_argument(
+        "--labels", required=True,
+        help="JSONL with {parent_id, status: 'genuine'|'fragile'} ground-truth rows.",
+    )
+    valrel.add_argument("--output", default=None)
 
     attr_emb = subparsers.add_parser(
         "attribute-embedding", help="Tier-1 embedding attribution: characterize each item's neighbors."
@@ -329,9 +371,11 @@ def main(argv: list[str] | None = None) -> int:
 
         from instella_reasoning.analysis.accuracy_gap import compute_accuracy_gap
 
+        scores = load_evaluations(args.scores)
+        contamination = load_contamination_hits(args.contamination)
         results = compute_accuracy_gap(
-            scores=load_evaluations(args.scores),
-            contamination=load_contamination_hits(args.contamination),
+            scores=scores,
+            contamination=contamination,
             per_benchmark=not args.no_per_benchmark,
             per_model=not args.no_per_model,
         )
@@ -340,6 +384,92 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps([result.to_dict() for result in results], indent=2), encoding="utf-8"
         )
         print(f"Wrote {len(results)} accuracy-gap results to {args.output}")
+
+        if args.stratified_output:
+            if not args.benchmark:
+                parser.error("--stratified-output requires --benchmark (to estimate difficulty).")
+            from instella_reasoning.analysis.accuracy_gap import compute_stratified_accuracy_gap
+            from instella_reasoning.difficulty import assign_difficulty_bins
+
+            bins = assign_difficulty_bins(read_benchmark(args.benchmark), n_bins=args.n_bins)
+            stratified = compute_stratified_accuracy_gap(
+                scores=scores,
+                contamination=contamination,
+                difficulty_bins=bins,
+                per_benchmark=not args.no_per_benchmark,
+                per_model=not args.no_per_model,
+            )
+            Path(args.stratified_output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.stratified_output).write_text(
+                json.dumps([r.to_dict() for r in stratified], indent=2), encoding="utf-8"
+            )
+            print(f"Wrote {len(stratified)} difficulty-adjusted gap results to {args.stratified_output}")
+        return 0
+
+    if args.command == "validate-variants":
+        import json
+
+        from instella_reasoning.perturbations import validate_variants
+
+        report = validate_variants(read_benchmark(args.benchmark))
+        print(
+            f"Variants: {report.n_variants} | answer-preserving OK: {report.n_preserved_ok}/"
+            f"{report.n_answer_preserving} (rate {report.answer_preservation_rate:.3f}) | "
+            f"answer-changing: {report.n_answer_changing} | degenerate-text: {report.n_degenerate_text}"
+        )
+        for vid in report.violations[:10]:
+            print(f"  answer-preservation violation: {vid}")
+        if args.output:
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+            print(f"Wrote validation report to {args.output}")
+        return 0
+
+    if args.command == "calibrate-contamination":
+        import json
+
+        from instella_reasoning.validation import best_threshold, calibrate_cosine_threshold
+
+        ground_truth = {
+            str(row.get("benchmark_id") or row.get("id")): bool(row.get("contaminated"))
+            for row in read_jsonl(args.ground_truth)
+        }
+        points = calibrate_cosine_threshold(load_contamination_hits(args.contamination), ground_truth)
+        best = best_threshold(points)
+        print("cosine  precision  recall  F1")
+        for p in points:
+            mark = "  <- best F1" if best and p.threshold == best.threshold else ""
+            print(f"{p.threshold:.2f}    {p.precision:.3f}      {p.recall:.3f}   {p.f1:.3f}{mark}")
+        if args.output:
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(
+                json.dumps({"curve": [p.to_dict() for p in points],
+                            "best": best.to_dict() if best else None}, indent=2),
+                encoding="utf-8",
+            )
+            print(f"Wrote calibration curve to {args.output}")
+        return 0
+
+    if args.command == "validate-reliability":
+        import json
+
+        from instella_reasoning.validation import validate_reliability_metric
+
+        labels = {
+            str(row.get("parent_id") or row.get("id")): str(row.get("status"))
+            for row in read_jsonl(args.labels)
+        }
+        result = validate_reliability_metric(load_evaluations(args.scores), labels)
+        print(
+            f"Reliability separation (genuine - fragile): {result.separation:+.3f} "
+            f"(genuine={result.genuine_reliability:.3f} n={result.n_genuine}, "
+            f"fragile={result.fragile_reliability:.3f} n={result.n_fragile}) -> "
+            f"{'separates' if result.separates else 'DOES NOT separate'}"
+        )
+        if args.output:
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+            print(f"Wrote metric-validation report to {args.output}")
         return 0
 
     if args.command == "report":
@@ -364,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             include_original=not args.no_original,
             max_variants=args.max_variants,
+            numeric_variants=args.numeric_k,
         )
         count = expand_benchmark_file(args.benchmark, args.output, config)
         print(f"Wrote {count} benchmark items (originals + variants) to {args.output}")

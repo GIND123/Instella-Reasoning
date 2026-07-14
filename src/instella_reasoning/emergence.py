@@ -1,7 +1,11 @@
 """Scale-controlled emergence analysis (proposal Phase 5).
 
-Because AMD OLMo-1B, Instella-3B, and Instella-3B-Math share a training pipeline,
-comparing them isolates *scale* and *post-training* from *data*. This module provides:
+CAVEAT (reviewer concern M6): AMD-OLMo-1B and Instella-3B share the OLMo *codebase* but
+NOT the training *data* (different mixtures and token counts), so a 1B->3B comparison
+entangles scale with data and does **not** cleanly isolate scale. Use
+:func:`comparison_confound` to label an axis, and prefer Instella's own checkpoints
+(Stage-1 vs Stage-2, SFT vs DPO) — which hold architecture and data lineage fixed — for
+causal claims. This module provides:
 
 - **Capability transitions** — classify each sub-skill's 1B->3B change as
   ``scale_independent`` / ``emergent`` / ``amplified`` / ``scale_resistant``.
@@ -30,6 +34,27 @@ from instella_reasoning.analysis.atlas import AtlasReport
 HIGH_RELIABILITY = 0.50
 LOW_RELIABILITY = 0.30
 NEAR_ZERO = 0.10
+
+
+# Comparison axes and whether they cleanly isolate a single factor. Only checkpoint
+# axes within one lineage are "controlled"; cross-model-size axes confound scale + data.
+_CONTROLLED_AXES = {
+    "stage1_vs_stage2": "data stage within Instella-3B (architecture + lineage fixed)",
+    "sft_vs_dpo": "post-training objective within Instella-3B (architecture fixed)",
+    "instruct_vs_math": "post-training objective (SFT vs SFT+RL), same base",
+}
+_CONFOUNDED_AXES = {
+    "olmo1b_vs_instella3b": "confounds scale AND data mixture AND token count",
+}
+
+
+def comparison_confound(axis: str) -> dict:
+    """Label whether an emergence/scale comparison axis is controlled or confounded."""
+    if axis in _CONTROLLED_AXES:
+        return {"axis": axis, "controlled": True, "note": _CONTROLLED_AXES[axis]}
+    if axis in _CONFOUNDED_AXES:
+        return {"axis": axis, "controlled": False, "note": _CONFOUNDED_AXES[axis]}
+    return {"axis": axis, "controlled": False, "note": "unknown axis; assume confounded until verified"}
 
 
 # -- capability transitions ----------------------------------------------------

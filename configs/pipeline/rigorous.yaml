@@ -1,0 +1,45 @@
+# Rigorous / research-grade Reasoning Reliability Atlas pipeline.
+#
+#   instella-reasoning run-all --config configs/pipeline/rigorous.yaml
+#
+# Differences from full.yaml (the smoke default): this config turns on the methodology
+# controls a submission needs — GSM-Symbolic-style numeric variants (the decisive
+# robustness probe), consistency-cluster expansion, real MiniLM embeddings for
+# contamination, and the difficulty-adjusted gap (emitted automatically when scores
+# exist). Point `data` at your processed GSM8K and Instella-corpus JSONL and set
+# `generation.model` to run the real study on a GPU.
+
+project_name: instella-reasoning-atlas-rigorous
+seed: 6198
+
+data:
+  benchmark: data/processed/gsm8k.jsonl
+  corpus: data/processed/instella_gsm8k_synth.jsonl
+  generations: null              # null + generation.model -> generate with Instella
+  expand_variants: true          # build consistency clusters
+  perturbations: [entity_substitution, premise_reordering, irrelevant_context, rephrasing]
+  numeric_variants: 5            # GSM-Symbolic-style answer-changing variants per GSM8K item
+
+contamination:
+  method: embedding
+  top_k: 20
+  embedder_backend: sentence-transformers   # force real MiniLM (not the hashing fallback)
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  index_type: flat
+  index_backend: auto
+
+generation:
+  model: amd/Instella-3B-Instruct
+  max_new_tokens: 512
+  temperature: 0.0
+  load_in_4bit: false            # bf16 headline; 4-bit is a fast pass only
+  batch_size: 8
+
+attribution:
+  top_k: 20
+  near_duplicate_cosine: 0.85
+
+plots: true
+
+outputs:
+  dir: outputs/atlas_rigorous

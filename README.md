@@ -37,7 +37,7 @@ tests pass, anywhere.
               ┌──────────────┐   ┌───────────────┐   ┌───────────────┐   ┌──────────────┐
    benchmarks │ 1. FILTER    │   │ 2. DIAGNOSE   │   │ 3. ATTRIBUTE  │   │ 4. PRESCRIBE │
    + Instella │ contamination│──▶│ reliability = │──▶│ which training│──▶│ data curation│
-   train data │  C / PC / N  │   │ acc × consist.│   │ docs caused it│   │ guidelines   │
+   train data │  C / PC / N  │   │ acc × consist.│   │ docs behind it│   │ guidelines   │
               └──────────────┘   └───────────────┘   └───────────────┘   └──────────────┘
                     │                    │                    │                   │
               contamination.jsonl   atlas.json          attribution.jsonl     report.md
@@ -168,8 +168,9 @@ cd Instella-Reasoning
 pip install -e ".[all]"                    # hf + retrieval + viz + stats + train
 
 bash scripts/download_data.sh 0 0          # 0 0 = no limit → full benchmarks + corpus shards
-# edit configs/pipeline/full.yaml → set generation.model, expand_variants: true, data paths
-instella-reasoning run-all --config configs/pipeline/full.yaml
+# For a reportable run use the rigorous config (numeric variants, difficulty-adjusted gap,
+# real MiniLM embeddings, bf16); edit its data/model paths first.
+instella-reasoning run-all --config configs/pipeline/rigorous.yaml
 ```
 
 See [`docs/DATA_DOWNLOAD.md`](docs/DATA_DOWNLOAD.md) for the complete AMD data procedure
@@ -177,8 +178,12 @@ and licensing before a full download.
 
 ### Research-grade run (headline numbers)
 
-For results you intend to report, three rules keep quantization noise and formatting bugs
-out of the Atlas. All three work from the commands above — no code changes needed.
+For results you intend to report, the pipeline adds methodology controls that keep
+quantization noise, formatting bugs, and difficulty confounds out of the Atlas. Start with
+the three quick rules below; then use the [one-command rigorous run](#the-one-command-rigorous-run)
+for the full set (GSM-Symbolic numeric variants, difficulty-adjusted gap, threshold
+calibration, metric validation). The methodology audit behind each control is in
+[`docs/REVIEW.md`](docs/REVIEW.md).
 
 1. **bf16 is the headline, 4-bit is a fast pass.** Omit `--load-in-4bit` for the number
    you report; NF4 measurably shifts accuracy. Every generation records its `precision`,
@@ -205,6 +210,37 @@ out of the Atlas. All three work from the commands above — no code changes nee
    ```bash
    instella-reasoning load-benchmark --benchmark math --output data/processed/math.jsonl   # all 7 subjects
    ```
+
+#### The one-command rigorous run
+
+`configs/pipeline/rigorous.yaml` turns all of the above on at once — numeric variants,
+consistency clusters, real MiniLM embeddings, bf16 generation, and the difficulty-adjusted
+gap (written automatically as `accuracy_gap_stratified.json` whenever scores exist):
+
+```bash
+instella-reasoning run-all --config configs/pipeline/rigorous.yaml
+```
+
+Or drive the controls stage-by-stage:
+
+```bash
+# 1. Consistency clusters WITH GSM-Symbolic-style numeric variants, then audit them.
+instella-reasoning make-variants --benchmark data/processed/gsm8k.jsonl \
+    --output data/processed/gsm8k_variants.jsonl --numeric-k 5
+instella-reasoning validate-variants --benchmark data/processed/gsm8k_variants.jsonl
+
+# 2. Difficulty-adjusted, cluster-robust, FDR-corrected contamination gap.
+instella-reasoning accuracy-gap --scores outputs/scores.jsonl \
+    --contamination outputs/contamination.jsonl --output outputs/accuracy_gap.json \
+    --benchmark data/processed/gsm8k.jsonl --stratified-output outputs/accuracy_gap_stratified.json
+
+# 3. Calibrate contamination thresholds against a hand-labeled set (PR/F1).
+instella-reasoning calibrate-contamination --contamination outputs/contamination.jsonl \
+    --ground-truth data/labels/contamination_truth.jsonl --output outputs/calibration.json
+```
+
+Why each exists — the methodology audit and how the code answers it — is in
+[`docs/REVIEW.md`](docs/REVIEW.md).
 
 ### Run a single stage
 
@@ -242,13 +278,16 @@ Every command reads and writes JSONL/JSON so long jobs can be sharded, resumed, 
 | `run-all` | orchestrator | **One config → the whole Atlas** (contamination → score → gap → attribution → atlas → report → figures). |
 | `load-benchmark` | data | Convert a HuggingFace reasoning benchmark (gsm8k, math, arc_challenge, logiqa2, bbh) to the JSONL contract. |
 | `load-corpus` | data | Stream a HuggingFace corpus/dataset into `CorpusDocument` JSONL (streaming when `--limit` set). |
-| `make-variants` | 2 | Expand a benchmark into semantics-preserving consistency clusters. |
+| `make-variants` | 2 | Expand a benchmark into consistency clusters; `--numeric-k` adds GSM-Symbolic-style answer-changing numeric variants. |
+| `validate-variants` | 2 | Audit a variant suite: answer-preservation rate + text well-formedness. |
 | `scan-contamination` | 1 | Lightweight lexical contamination scan. |
 | `scan-contamination-embedding` | 1 | Embedding + 13-gram scan → C / PC / N labels. |
 | `generate` | 2 | Generate completions with Transformers (chat template, 4-bit/bf16, batching, CoT prompts, `--limit`). |
 | `score-generations` | 2 | Benchmark-aware answer extraction + exact-match scoring. |
 | `check-generations` | 2 | Quality gate: flag degenerate (looping/empty) completions; `--fail-threshold` for CI. |
-| `accuracy-gap` | 2 | Contaminated-vs-clean accuracy with a two-proportion z-test. |
+| `accuracy-gap` | 2 | Contaminated-vs-clean accuracy, two-proportion z-test + BH-FDR; `--stratified-output` adds a difficulty-adjusted, cluster-robust gap. |
+| `calibrate-contamination` | 1 | Sweep the cosine threshold against a labeled set → precision/recall/F1. |
+| `validate-reliability` | 3 | Check the Reliability metric ranks genuine > fragile clusters on a labeled set. |
 | `attribute` | 3 | Retrieval-correctness attribution proxy (triage queue). |
 | `attribute-embedding` | 3 | Tier-1 attribution: neighbour concentration (Gini), source shares, concentrated/diverse verdict. |
 | `atlas` | 3 | Build the Reasoning Reliability Atlas (JSON + Markdown). |
@@ -263,15 +302,18 @@ Every command reads and writes JSONL/JSON so long jobs can be sharded, resumed, 
 src/instella_reasoning/
 ├── records.py               # JSONL dataclasses + IO (the exchange contract)
 ├── text.py                  # normalization, n-grams, overlap metrics
-├── datasets/loaders.py      # HF benchmark/corpus → JSONL (skill-tagged)
+├── datasets/loaders.py      # HF benchmark/corpus → JSONL (skill-tagged; MATH all-subjects)
 ├── prompting.py             # CoT templates + benchmark-aware answer extractors
 ├── evaluation.py            # model generation (chat template/4-bit/bf16/CoT) + scoring
 ├── quality.py               # degeneracy gate: flag looping/empty completions   [Phase 2]
+├── difficulty.py            # model-independent difficulty (steps/level/length) [confound control]
+├── gsm_symbolic.py          # GSM-Symbolic-lite: validated numeric variants     [Phase 3]
+├── validation.py            # contamination PR calibration + reliability construct-validity
 ├── embedding.py             # MiniLM/GTE embedder + dependency-free hashing fallback
 ├── faiss_index.py           # FAISS (flat/ivfpq/hnsw) + brute-force fallback, save/load
 ├── contamination.py         # lexical + embedding/13-gram scanners → C/PC/N   [Phase 1]
-├── perturbations.py         # 5 semantics-preserving variant generators        [Phase 3]
-├── metrics.py               # Reliability = accuracy × consistency
+├── perturbations.py         # answer-preserving variant generators + validation  [Phase 3]
+├── metrics.py               # Reliability = accuracy × consistency (type-aware)
 ├── attribution.py           # retrieval-correctness proxy (triage)             [Phase 3]
 ├── attribution_embedding.py # Tier-1 neighbour characterization (Gini/sources) [Phase 4]
 ├── attribution_gradient.py  # TracIn-CP + Concept Influence (torch-gated)      [Phase 4]
@@ -281,7 +323,7 @@ src/instella_reasoning/
 ├── training.py              # upstream Instella torchrun command builder
 ├── cli.py                   # the `instella-reasoning` CLI
 └── analysis/
-    ├── accuracy_gap.py      # contaminated-vs-clean gap + z-test               [Phase 2]
+    ├── accuracy_gap.py      # contaminated-vs-clean gap: z-test + FDR + difficulty-adjusted [Phase 2]
     ├── atlas.py             # the Reasoning Reliability Atlas builder          [Phase 3/6]
     ├── stats.py             # bootstrap CI, Mann-Whitney, effect sizes, BH-FDR [Phase 6]
     └── plots.py             # publication figures (validated palette)          [Phase 6]
@@ -329,13 +371,15 @@ attribution fallback ladder are in **[`docs/COMPUTE.md`](docs/COMPUTE.md)**.
 ## Testing
 
 ```bash
-pytest              # unit + analysis tests (perturbations, atlas, stats, attribution, emergence, plots)
+pytest              # unit + analysis tests (gsm_symbolic, difficulty, stratified gap,
+                    #   quality gate, validation, perturbations, atlas, stats, emergence, plots)
 ruff check .        # lint
 make smoke          # example pipeline end-to-end
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs lint + tests + the
-smoke pipeline on every push.
+smoke pipeline on every push. The model-generation path is covered by hermetic tests
+(chat-template formatting, quality gate) that need no GPU or model download.
 
 ## Upstream Instella training
 
