@@ -15,6 +15,11 @@ CORPUS_LIMIT="${2:-5000}"
 PROC="data/processed"
 mkdir -p "$PROC"
 
+# Work around HF Xet backend 401s (cas-server.xethub.hf.co) on some datasets by
+# falling back to plain HTTPS LFS downloads. Set HF_TOKEN in the environment for
+# higher rate limits / gated datasets: `export HF_TOKEN=hf_xxx`.
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+
 bench_arg=""; [[ "$BENCH_LIMIT" != "0" ]] && bench_arg="--limit $BENCH_LIMIT"
 corpus_arg=""; [[ "$CORPUS_LIMIT" != "0" ]] && corpus_arg="--limit $CORPUS_LIMIT"
 
@@ -29,7 +34,8 @@ echo "== Instella training corpus (contamination ground truth) =="
 instella-reasoning load-corpus \
   --hf-path amd/Instella-GSM8K-synthetic \
   --source instella-gsm8k-synthetic \
-  --output "$PROC/instella_gsm8k_synth.jsonl" $corpus_arg
+  --output "$PROC/instella_gsm8k_synth.jsonl" $corpus_arg || \
+  echo "  (Instella-GSM8K-synthetic download failed; set HF_TOKEN and retry. Non-fatal.)"
 
 # Instella-Math SFT source (paraphrase contamination pathway).
 instella-reasoning load-corpus \
