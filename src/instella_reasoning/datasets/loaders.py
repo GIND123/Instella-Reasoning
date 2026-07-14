@@ -158,6 +158,20 @@ def _load_generic_qa(dataset, skill: str) -> Iterator[BenchmarkItem]:
         )
 
 
+# The MATH benchmark (Hendrycks et al.) ships as seven per-subject configs. Loading a
+# single one (the historical default, "algebra") under-samples the benchmark, so when no
+# --hf-name override is given we iterate all seven and interleave them for a balanced set.
+MATH_SUBJECTS = (
+    "algebra",
+    "counting_and_probability",
+    "geometry",
+    "intermediate_algebra",
+    "number_theory",
+    "prealgebra",
+    "precalculus",
+)
+
+
 BENCHMARK_LOADERS: dict[str, BenchmarkSpec] = {
     "gsm8k": BenchmarkSpec("gsm8k", "arithmetic", "openai/gsm8k", "main", "test", _load_gsm8k),
     "math": BenchmarkSpec(
@@ -200,16 +214,59 @@ def load_benchmark_to_jsonl(
             f"Unknown benchmark {benchmark!r}. Known: {sorted(BENCHMARK_LOADERS)}"
         )
     load_dataset = _require_datasets()
+
+    # MATH with no explicit subject -> load and interleave all seven subjects.
+    if benchmark == "math" and hf_name is None:
+        rows = _load_math_all_subjects(load_dataset, spec, split, limit)
+        write_jsonl(output_path, rows)
+        return len(rows)
+
     config = hf_name if hf_name is not None else spec.hf_name
     dataset = load_dataset(spec.hf_path, config, split=split or spec.split)
 
-    rows: list[BenchmarkItem] = []
+    rows = []
     for item in spec.loader(dataset, spec.skill):
         rows.append(item)
         if limit is not None and len(rows) >= limit:
             break
     write_jsonl(output_path, rows)
     return len(rows)
+
+
+def _load_math_all_subjects(
+    load_dataset, spec: BenchmarkSpec, split: str | None, limit: int | None
+) -> list[BenchmarkItem]:
+    """Load all seven MATH subjects and interleave them into one balanced, uniquely-id'd set.
+
+    Interleaving (round-robin across subjects) keeps a ``--limit`` sample balanced across
+    subjects instead of taking all of ``algebra`` first. Each subject's rows keep their
+    ``metadata.type`` subject tag; ids are reassigned globally so they stay unique.
+    """
+    per_subject: list[list[BenchmarkItem]] = []
+    for subject in MATH_SUBJECTS:
+        try:
+            dataset = load_dataset(spec.hf_path, subject, split=split or spec.split)
+        except Exception as exc:  # noqa: BLE001 - one bad subject shouldn't abort the rest
+            print(f"  (MATH subject {subject!r} failed to load: {exc}; skipping)")
+            continue
+        per_subject.append(list(spec.loader(dataset, spec.skill)))
+
+    merged: list[BenchmarkItem] = []
+    longest = max((len(items) for items in per_subject), default=0)
+    for i in range(longest):
+        for items in per_subject:
+            if i < len(items):
+                merged.append(items[i])
+                if limit is not None and len(merged) >= limit:
+                    break
+        if limit is not None and len(merged) >= limit:
+            break
+
+    for i, item in enumerate(merged):
+        new_id = f"math_{i:05d}"
+        item.id = new_id
+        item.parent_id = new_id
+    return merged
 
 
 def load_corpus_dataset_to_jsonl(
