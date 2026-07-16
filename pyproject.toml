@@ -26,7 +26,16 @@ hf = [
   "accelerate>=0.30.0",
   "datasets>=2.19.0",
   "safetensors>=0.4.3",
-  "transformers>=4.42.0"
+  # Upper bound is load-bearing: AMD Instella ships custom remote modeling code
+  # (modeling_instella.py, trust_remote_code=True) written for the 4.4x attention-mask /
+  # cache_position API. transformers 5.x removed that API, which silently breaks the
+  # forward pass and yields *degenerate* generations. Pin below 5 until the model card
+  # (or a pinned --revision) certifies 5.x compatibility.
+  "transformers>=4.44,<5",
+  # Symbolic answer equivalence for MATH scoring (\\frac, \\sqrt, pi, ...); optional at
+  # runtime — instella_reasoning.answer_equivalence degrades to string/numeric match if
+  # sympy is absent, but MATH accuracy is badly under-counted without it.
+  "sympy>=1.12"
 ]
 retrieval = [
   "faiss-cpu>=1.8.0",

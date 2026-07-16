@@ -89,6 +89,14 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--temperature", type=float, default=0.0)
     generate.add_argument("--no-trust-remote-code", action="store_true")
     generate.add_argument("--load-in-4bit", action="store_true", help="4-bit NF4 (CUDA + bitsandbytes).")
+    generate.add_argument(
+        "--dtype", default="auto", choices=["auto", "bf16", "fp16", "fp32"],
+        help="Weight dtype. auto=bf16. On a T4 (Turing) try fp16 for speed; ignored with --load-in-4bit.",
+    )
+    generate.add_argument(
+        "--revision", default=None,
+        help="Pin the model to a HF commit/tag/branch (reproducibility; silences remote-code re-downloads).",
+    )
     generate.add_argument("--batch-size", type=int, default=1)
     generate.add_argument("--no-cot-prompt", action="store_true", help="Disable CoT prompt wrapping.")
     generate.add_argument(
@@ -98,6 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument(
         "--limit", type=int, default=None,
         help="Only generate for the first N benchmark items (use for CPU/smoke checks).",
+    )
+    generate.add_argument(
+        "--fail-degenerate", type=float, default=None, metavar="FRAC",
+        help="Exit non-zero if more than FRAC of completions are degenerate (looping/empty). "
+        "Use on the 4-item smoke to hard-stop a broken run before the full batch, e.g. 0.0.",
     )
 
     score = subparsers.add_parser("score-generations", help="Score generation JSONL against benchmark answers.")
@@ -326,8 +339,39 @@ def main(argv: list[str] | None = None) -> int:
             batch_size=args.batch_size,
             use_cot_prompt=not args.no_cot_prompt,
             use_chat_template=not args.no_chat_template,
+            dtype=args.dtype,
+            revision=args.revision,
         )
         print(f"Wrote {len(rows)} generations to {args.output}")
+
+        # Auto degeneracy gate: a broken run (wrong chat template, transformers 5.x vs
+        # Instella remote code) yields looping/empty text that scores as pure "wrong" and
+        # silently corrupts the Atlas. Surface it right at generation time.
+        from instella_reasoning.quality import assess_generations
+
+        quality = assess_generations(rows)
+        if quality.n_degenerate:
+            print(
+                "\n" + "!" * 72 + "\n"
+                f"WARNING: {quality.n_degenerate}/{quality.n} completions "
+                f"({quality.degenerate_fraction:.0%}) look DEGENERATE (looping/empty).\n"
+                "This is almost always a formatting/version problem, not a reasoning result:\n"
+                "  - Instruct model missing its chat template (do NOT pass --no-chat-template), or\n"
+                "  - transformers 5.x vs Instella's remote code -> pin `transformers>=4.44,<5`.\n"
+                "Do not score/atlas this run until the smoke output is coherent CoT.\n"
+                + "!" * 72
+            )
+            for row in quality.flagged[:5]:
+                print(f"  - {row.benchmark_id}: {', '.join(row.reasons)} (tokens={row.n_tokens})")
+        else:
+            print(f"[quality] all {quality.n} completions look coherent (no degeneracy flags).")
+
+        if args.fail_degenerate is not None and quality.degenerate_fraction > args.fail_degenerate:
+            print(
+                f"FAIL: degenerate fraction {quality.degenerate_fraction:.0%} exceeds "
+                f"--fail-degenerate {args.fail_degenerate:.0%}."
+            )
+            return 1
         return 0
 
     if args.command == "score-generations":
