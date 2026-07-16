@@ -60,3 +60,26 @@ def test_atlas_markdown_renders_table() -> None:
     md = report.to_markdown()
     assert "Reasoning Reliability Atlas" in md
     assert "arithmetic" in md
+
+
+def test_atlas_cell_carries_reliability_ci() -> None:
+    scores = [
+        _eval("gsm_1", "original", True, "16", "arithmetic"),
+        _eval("gsm_2", "original", True, "16", "arithmetic"),
+        _eval("gsm_3", "original", True, "16", "arithmetic"),
+    ]
+    report = build_atlas(scores, [])
+    cell = report.cell("arithmetic", "all")
+    assert cell is not None
+    assert cell.reliability_ci_low <= cell.reliability <= cell.reliability_ci_high
+    assert "reliability_ci" in cell.to_dict()
+
+
+def test_verdict_withheld_below_min_clusters() -> None:
+    # A single cluster cannot support a categorical verdict -> insufficient_data.
+    one = build_atlas([_eval("gsm_1", "original", True, "16", "arithmetic")], [])
+    assert one.cell("arithmetic", "all").classification == "insufficient_data"
+    # With enough clusters and a lenient gate, a real verdict is emitted.
+    scores = [_eval(f"gsm_{i}", "original", True, "16", "arithmetic") for i in range(3)]
+    many = build_atlas(scores, [], min_clusters_for_verdict=3)
+    assert many.cell("arithmetic", "all").classification == "genuine"
