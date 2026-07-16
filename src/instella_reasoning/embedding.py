@@ -109,7 +109,13 @@ class SentenceTransformerEmbedder:
         self._model = SentenceTransformer(model_name, device=device)
         self.name = model_name
         self.batch_size = batch_size
-        self.dimension = int(self._model.get_sentence_embedding_dimension())
+        # sentence-transformers >=3.1 renamed get_sentence_embedding_dimension ->
+        # get_embedding_dimension (the old name warns). Prefer the new name and fall
+        # back so we support both installed versions without a deprecation warning.
+        get_dim = getattr(
+            self._model, "get_embedding_dimension", None
+        ) or self._model.get_sentence_embedding_dimension
+        self.dimension = int(get_dim())
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:
         vectors = self._model.encode(

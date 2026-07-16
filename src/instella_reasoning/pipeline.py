@@ -142,9 +142,20 @@ def _log(step: str, message: str) -> None:
 
 def run_pipeline(config: PipelineConfig) -> dict[str, str]:
     """Run the configured pipeline and return a map of stage -> artifact path."""
+    from dataclasses import asdict
+
+    from instella_reasoning.provenance import write_manifest
+
     out = Path(config.output_dir)
     out.mkdir(parents=True, exist_ok=True)
     artifacts: dict[str, str] = {}
+
+    # Provenance first: git commit, package versions, and the resolved config, so every
+    # artifact in this directory is traceable to exactly how it was produced.
+    manifest_path = out / "manifest.json"
+    manifest = write_manifest(manifest_path, config=asdict(config))
+    artifacts["manifest"] = str(manifest_path)
+    _log("provenance", f"run manifest -> {manifest_path}")
 
     # -- Stage 1: consistency-cluster expansion ------------------------------
     benchmark_path = config.benchmark
@@ -294,6 +305,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, str]:
         figure_paths={name: _relative(path, out) for name, path in figure_paths.items()},
         quality_report=quality_report,
         stratified_gap_results=stratified_gap,
+        manifest=manifest,
     )
     artifacts["report"] = str(report_path)
     _log("report", f"written -> {report_path}")

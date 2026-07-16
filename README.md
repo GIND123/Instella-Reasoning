@@ -60,6 +60,43 @@ tests pass, anywhere.
 Pick **one** of the three blocks below and copy-paste it whole. Each is self-contained
 and starts from a fresh clone. If you just want to see it work, use **A**.
 
+### Cloning a private repo (Colab / CI)
+
+If this repository is **private**, a plain `git clone https://github.com/...` fails in a
+non-interactive shell (Colab, CI) with `fatal: could not read Username for
+'https://github.com'` — git is trying to prompt for credentials it can't get.
+Authenticate with a token instead.
+
+**Colab** (store a token in *Secrets* as `github`, with repo `Contents: read`):
+
+```python
+from google.colab import userdata
+import subprocess
+token = userdata.get("github")
+# subprocess (not !git) keeps the token out of the printed cell output.
+subprocess.run(
+    ["git", "clone",
+     f"https://x-access-token:{token}@github.com/GIND123/Instella-Reasoning.git"],
+    check=True,
+)
+%cd Instella-Reasoning
+# Scrub the token from the saved remote URL (you can still pull read-only after this):
+subprocess.run(
+    ["git", "remote", "set-url", "origin",
+     "https://github.com/GIND123/Instella-Reasoning.git"],
+    check=True,
+)
+```
+
+**Shell / CI** (token in `$GITHUB_TOKEN`):
+
+```bash
+git clone https://x-access-token:${GITHUB_TOKEN}@github.com/GIND123/Instella-Reasoning.git
+```
+
+The `git clone https://github.com/...` lines shown in blocks A–C below work as-is for a
+**public** repo; swap in the token form above if yours is private.
+
 ### A. Run it now — CPU only, no GPU, no downloads (~1 min)
 
 Runs the **entire pipeline** on bundled example data. Works on Linux/Mac/Colab.
@@ -102,8 +139,13 @@ cell**. It preflights the GPU, installs the GPU extras, authenticates to Hugging
 downloads a small real slice, verifies output on a tiny sample, then runs the batch.
 
 ```python
+# Public repo: this line works as-is. PRIVATE repo: replace it with the token-based
+# clone from "Cloning a private repo" above (a plain clone fails non-interactively).
 !git clone https://github.com/GIND123/Instella-Reasoning
 %cd Instella-Reasoning
+# The hf extra pins transformers<5 on purpose: Instella ships custom remote modeling code
+# for the 4.4x API, and transformers 5.x silently breaks it (degenerate output). Do not
+# upgrade transformers past 5 for this model.
 !pip install -q -e ".[hf,retrieval,viz,stats]" && pip install -q bitsandbytes
 
 # 0) Preflight: is a real GPU attached? (a CPU-only runtime makes generation unusable)
@@ -120,12 +162,14 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 !bash scripts/download_data.sh 200 5000
 
 # 3) VERIFY on 4 items first — the completion must be coherent GSM8K reasoning.
-#    (Chat templating for -Instruct models is automatic; see the note below.)
+#    (Chat templating for -Instruct models is automatic.) --fail-degenerate 0.25 makes the
+#    cell exit non-zero (and print a loud banner) if the output loops/empties out, so a
+#    broken run stops HERE instead of silently poisoning the full batch and the Atlas.
 !instella-reasoning generate \
     --benchmark data/processed/gsm8k.jsonl \
     --model amd/Instella-3B-Instruct \
     --output outputs/gsm8k_smoke.jsonl \
-    --limit 4 --max-new-tokens 256 --batch-size 2
+    --limit 4 --max-new-tokens 256 --batch-size 2 --fail-degenerate 0.25
 !head -c 800 outputs/gsm8k_smoke.jsonl
 
 # 4) Full run. Drop --load-in-4bit for the accurate bf16 number (see note); keep it
@@ -148,11 +192,17 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
     --output outputs/gsm8k_scores.jsonl
 ```
 
-> **Two things that decide whether you get real answers vs. gibberish:**
+> **Three things that decide whether you get real answers vs. gibberish:**
 > 1. **A GPU must actually be attached.** If `preflight.py` reports `cpu_only_build` /
 >    `cuda_available=False`, the 3B model falls back to CPU and generation is unusably
 >    slow — fix the runtime type before going further.
-> 2. **Instruct models need their chat template**, which the pipeline now applies
+> 2. **`transformers` must be < 5.** Instella ships custom remote modeling code for the
+>    4.4x attention-mask/`cache_position` API; transformers 5.x removed it and the forward
+>    pass degenerates into looping text. The `hf` extra pins `transformers>=4.44,<5` for
+>    you — don't `pip install -U transformers` past it. On a T4 you can also add
+>    `--dtype fp16` for speed (Turing has no native bf16), and `--revision <sha>` to pin
+>    the checkpoint.
+> 3. **Instruct models need their chat template**, which the pipeline applies
 >    automatically. For **accuracy numbers**, prefer **bf16** (omit `--load-in-4bit`);
 >    4-bit NF4 is a fast, lower-fidelity mode for smoke checks, not headline metrics.
 
@@ -282,7 +332,7 @@ Every command reads and writes JSONL/JSON so long jobs can be sharded, resumed, 
 | `validate-variants` | 2 | Audit a variant suite: answer-preservation rate + text well-formedness. |
 | `scan-contamination` | 1 | Lightweight lexical contamination scan. |
 | `scan-contamination-embedding` | 1 | Embedding + 13-gram scan → C / PC / N labels. |
-| `generate` | 2 | Generate completions with Transformers (chat template, 4-bit/bf16, batching, CoT prompts, `--limit`). |
+| `generate` | 2 | Generate completions with Transformers (chat template, 4-bit/`--dtype`/`--revision`, batching, CoT, `--limit`, `--fail-degenerate`). Auto-runs the degeneracy gate. |
 | `score-generations` | 2 | Benchmark-aware answer extraction + exact-match scoring. |
 | `check-generations` | 2 | Quality gate: flag degenerate (looping/empty) completions; `--fail-threshold` for CI. |
 | `accuracy-gap` | 2 | Contaminated-vs-clean accuracy, two-proportion z-test + BH-FDR; `--stratified-output` adds a difficulty-adjusted, cluster-robust gap. |
@@ -304,7 +354,9 @@ src/instella_reasoning/
 ├── text.py                  # normalization, n-grams, overlap metrics
 ├── datasets/loaders.py      # HF benchmark/corpus → JSONL (skill-tagged; MATH all-subjects)
 ├── prompting.py             # CoT templates + benchmark-aware answer extractors
-├── evaluation.py            # model generation (chat template/4-bit/bf16/CoT) + scoring
+├── answer_equivalence.py    # math-aware scoring: string -> numeric -> SymPy symbolic  [Phase 2]
+├── provenance.py            # run manifest: git commit + package versions + config   [repro]
+├── evaluation.py            # model generation (chat template/4-bit/dtype/CoT) + scoring
 ├── quality.py               # degeneracy gate: flag looping/empty completions   [Phase 2]
 ├── difficulty.py            # model-independent difficulty (steps/level/length) [confound control]
 ├── gsm_symbolic.py          # GSM-Symbolic-lite: validated numeric variants     [Phase 3]

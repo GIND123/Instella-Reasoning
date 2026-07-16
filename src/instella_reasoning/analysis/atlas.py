@@ -23,6 +23,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from instella_reasoning.analysis.accuracy_gap import contamination_labels_by_benchmark_id
+from instella_reasoning.analysis.stats import bootstrap_ci
 from instella_reasoning.metrics import cluster_consistency
 from instella_reasoning.records import ContaminationHit, EvaluationRecord
 
@@ -31,6 +32,12 @@ CONTAMINATION_LEVELS = ("all", "contaminated", "partial", "clean")
 GENUINE_THRESHOLD = 0.50
 PARTIAL_THRESHOLD = 0.30
 FRAGILE_ACCURACY = 0.60
+
+# A verdict on 1-2 clusters is noise (the demo's n=1 "FRAGILE" is meaningless). Cells with
+# fewer than this many clusters are reported but labelled ``insufficient_data`` so a reviewer
+# is never shown a categorical claim the sample cannot support.
+MIN_CLUSTERS_FOR_VERDICT = 3
+INSUFFICIENT_DATA = "insufficient_data"
 
 
 @dataclass(slots=True)
@@ -54,6 +61,10 @@ class AtlasCell:
     consistency: float
     reliability: float
     classification: str
+    # Percentile bootstrap CI on the cell's mean reliability (resampling clusters). Wide
+    # intervals / crossing a threshold are the honest signal that a verdict is uncertain.
+    reliability_ci_low: float = 0.0
+    reliability_ci_high: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -63,6 +74,7 @@ class AtlasCell:
             "accuracy": round(self.accuracy, 6),
             "consistency": round(self.consistency, 6),
             "reliability": round(self.reliability, 6),
+            "reliability_ci": [round(self.reliability_ci_low, 6), round(self.reliability_ci_high, 6)],
             "classification": self.classification,
         }
 
@@ -133,8 +145,15 @@ def build_atlas(
     scores: list[EvaluationRecord],
     contamination: list[ContaminationHit],
     skill_key: str = "skill",
+    min_clusters_for_verdict: int = MIN_CLUSTERS_FOR_VERDICT,
+    n_bootstrap: int = 2000,
 ) -> AtlasReport:
-    """Build the Reliability Atlas from scored generations and contamination hits."""
+    """Build the Reliability Atlas from scored generations and contamination hits.
+
+    ``min_clusters_for_verdict`` gates categorical verdicts: a cell backed by fewer
+    clusters is labelled ``insufficient_data`` rather than genuine/fragile/gap, and every
+    cell carries a cluster-bootstrap CI on its reliability so uncertainty is explicit.
+    """
     labels = contamination_labels_by_benchmark_id(contamination)
     clusters = _cluster_reliabilities(scores, labels, skill_key)
 
@@ -150,15 +169,25 @@ def build_atlas(
             ]
             if not subset:
                 continue
-            cells.append(_aggregate_cell(skill, level, subset))
+            cells.append(_aggregate_cell(skill, level, subset, min_clusters_for_verdict, n_bootstrap))
     return AtlasReport(cells=cells, clusters=clusters)
 
 
-def _aggregate_cell(skill: str, level: str, subset: list[ClusterReliability]) -> AtlasCell:
+def _aggregate_cell(
+    skill: str,
+    level: str,
+    subset: list[ClusterReliability],
+    min_clusters_for_verdict: int = MIN_CLUSTERS_FOR_VERDICT,
+    n_bootstrap: int = 2000,
+) -> AtlasCell:
     n = len(subset)
     accuracy = sum(c.accuracy for c in subset) / n
     consistency = sum(c.consistency for c in subset) / n
     reliability = sum(c.reliability for c in subset) / n
+    ci = bootstrap_ci([c.reliability for c in subset], n_resamples=n_bootstrap)
+    classification = (
+        classify_cell(accuracy, reliability) if n >= min_clusters_for_verdict else INSUFFICIENT_DATA
+    )
     return AtlasCell(
         skill=skill,
         contamination_level=level,
@@ -166,7 +195,9 @@ def _aggregate_cell(skill: str, level: str, subset: list[ClusterReliability]) ->
         accuracy=accuracy,
         consistency=consistency,
         reliability=reliability,
-        classification=classify_cell(accuracy, reliability),
+        classification=classification,
+        reliability_ci_low=ci.low,
+        reliability_ci_high=ci.high,
     )
 
 
@@ -182,6 +213,7 @@ _CLASSIFICATION_MARK = {
     "partial": "PARTIAL",
     "fragile": "FRAGILE",
     "gap": "GAP",
+    INSUFFICIENT_DATA: "n/a (too few clusters)",
 }
 
 
@@ -189,23 +221,26 @@ def render_atlas_markdown(report: AtlasReport) -> str:
     lines = [
         "## Reasoning Reliability Atlas",
         "",
-        "Reliability = Accuracy x Consistency, per reasoning sub-skill and contamination level.",
+        "Reliability = Accuracy x Consistency, per reasoning sub-skill and contamination level. "
+        "The 95% CI is a cluster bootstrap on the cell's mean reliability.",
         "",
-        "| Sub-skill | Level | Clusters | Accuracy | Consistency | Reliability | Verdict |",
-        "|---|---|---:|---:|---:|---:|---|",
+        "| Sub-skill | Level | Clusters | Accuracy | Consistency | Reliability | 95% CI | Verdict |",
+        "|---|---|---:|---:|---:|---:|---:|---|",
     ]
     for cell in report.cells:
         indent = "" if cell.contamination_level == "all" else "&nbsp;&nbsp;"
         lines.append(
             f"| {indent}{cell.skill} | {cell.contamination_level} | {cell.n_clusters} | "
             f"{cell.accuracy:.3f} | {cell.consistency:.3f} | {cell.reliability:.3f} | "
+            f"[{cell.reliability_ci_low:.3f}, {cell.reliability_ci_high:.3f}] | "
             f"{_CLASSIFICATION_MARK.get(cell.classification, cell.classification)} |"
         )
     lines.extend(
         [
             "",
-            "**Legend** — GENUINE (R>=0.50), PARTIAL (0.30-0.50), "
-            "FRAGILE (R<0.30 with high accuracy = memorisation signature), GAP (skill absent).",
+            f"**Legend** — GENUINE (R>=0.50), PARTIAL (0.30-0.50), "
+            "FRAGILE (R<0.30 with high accuracy = memorisation signature), GAP (skill absent), "
+            f"n/a (fewer than {MIN_CLUSTERS_FOR_VERDICT} clusters — verdict withheld).",
             "",
         ]
     )
