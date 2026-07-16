@@ -97,6 +97,30 @@ def precision_provenance(scores: list[EvaluationRecord]) -> list[str]:
     return lines
 
 
+def run_provenance_section(manifest: dict | None) -> list[str]:
+    """Render the reproducibility manifest (git commit + key package versions)."""
+    if not manifest:
+        return []
+    git = manifest.get("git", {}) or {}
+    commit = git.get("commit")
+    commit_short = commit[:10] if commit else "unknown"
+    dirty = git.get("dirty")
+    dirty_note = " (dirty tree)" if dirty else ""
+    packages = manifest.get("packages", {}) or {}
+    key = [f"{name} {packages[name]}" for name in ("transformers", "torch") if packages.get(name)]
+    lines = [
+        "### Reproducibility",
+        "",
+        f"- Git commit: `{commit_short}`{dirty_note}",
+        f"- Generated: {manifest.get('generated_at_utc', 'unknown')}",
+    ]
+    if key:
+        lines.append(f"- Key packages: {', '.join(key)}")
+    lines.append("- Full manifest: `manifest.json`")
+    lines.append("")
+    return lines
+
+
 def quality_gate_section(quality_report) -> list[str]:
     """Render the degeneracy quality gate (see :mod:`instella_reasoning.quality`)."""
     if quality_report is None or quality_report.n == 0:
@@ -134,6 +158,7 @@ def write_full_report(
     figure_paths: dict[str, str] | None = None,
     quality_report=None,
     stratified_gap_results=None,
+    manifest: dict | None = None,
 ) -> str:
     """Assemble the full reliability report: summary, atlas, accuracy gap, attribution.
 
@@ -165,6 +190,7 @@ def write_full_report(
 
     lines.extend(precision_provenance(scores))
     lines.extend(quality_gate_section(quality_report))
+    lines.extend(run_provenance_section(manifest))
 
     if atlas_report is not None and atlas_report.cells:
         lines.append(atlas_report.to_markdown())

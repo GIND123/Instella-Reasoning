@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from instella_reasoning.answer_equivalence import answers_equivalent, resolve_answer_kind
 from instella_reasoning.prompting import build_prompt, extract_answer
 from instella_reasoning.records import (
     BenchmarkItem,
@@ -47,11 +48,21 @@ def score_generations(
             predicted_final = extract_answer(item, generation.completion)
             normalized_predicted = _normalize_final(predicted_final)
             normalized_expected = _normalize_final(item.answer) if item.answer is not None else None
+            # Correctness uses the *raw* extracted answers through a kind-aware equivalence
+            # check (string -> numeric -> symbolic), so e.g. `\frac{1}{2}` == `0.5` on MATH.
+            # This recovers correct answers that exact string match drops; it is conservative
+            # (a parse failure never invents a match), so accuracy is not inflated.
+            correct = item.answer is not None and answers_equivalent(
+                item.answer, predicted_final, resolve_answer_kind(item)
+            )
         else:
             from instella_reasoning.text import normalize_answer
 
             normalized_predicted = normalize_answer(generation.completion)
             normalized_expected = normalize_answer(item.answer) if item.answer is not None else None
+            correct = (
+                normalized_expected is not None and normalized_expected == normalized_predicted
+            )
 
         rows.append(
             EvaluationRecord(
@@ -62,8 +73,7 @@ def score_generations(
                 predicted=generation.completion,
                 normalized_expected=normalized_expected,
                 normalized_predicted=normalized_predicted or "",
-                correct=normalized_expected is not None
-                and normalized_expected == normalized_predicted,
+                correct=correct,
                 model=generation.model,
                 metadata={**generation.metadata, **item.metadata},
             )
@@ -94,24 +104,58 @@ def describe_device() -> dict:
     return info
 
 
+def _resolve_dtype(dtype: str, cuda: bool):
+    """Map a dtype name to a torch dtype. ``auto`` picks bf16 on GPU, fp32 on CPU.
+
+    On a Turing card (T4, sm_75) bf16 has no native tensor-core support — it is
+    numerically fine but slow. ``fp16`` is the faster Turing choice for a headline run;
+    it is exposed explicitly rather than auto-selected because fp16 can overflow on some
+    activations, so bf16 stays the safe default when the caller does not choose.
+    """
+    import torch
+
+    table = {
+        "bf16": torch.bfloat16,
+        "bfloat16": torch.bfloat16,
+        "fp16": torch.float16,
+        "float16": torch.float16,
+        "half": torch.float16,
+        "fp32": torch.float32,
+        "float32": torch.float32,
+    }
+    if dtype != "auto":
+        if dtype not in table:
+            raise ValueError(f"Unknown dtype {dtype!r}; choose from auto/bf16/fp16/fp32.")
+        return table[dtype]
+    # auto: bf16 everywhere (matches how Instella was trained; halves the CPU footprint
+    # so a 3B model still fits a stock CPU runtime for a load/smoke check).
+    return torch.bfloat16
+
+
 def _load_model(
     model_name_or_path: str,
     load_in_4bit: bool,
     trust_remote_code: bool,
+    dtype: str = "auto",
+    revision: str | None = None,
 ):
-    import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     info = describe_device()
     cuda = info["cuda_available"]
+    resolved_dtype = _resolve_dtype(dtype, cuda)
     print(
-        f"[load] torch={info['torch_version']} device={info['device']}"
+        f"[load] torch={info['torch_version']} device={info['device']} dtype={resolved_dtype}"
+        + (f" revision={revision}" if revision else "")
         + (f" gpu={info['gpu_name']} (x{info['gpu_count']})" if cuda else "")
     )
 
     # Instella's tokenizer needs left padding for correct batched decoder-only generation.
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name_or_path, trust_remote_code=trust_remote_code, padding_side="left"
+        model_name_or_path,
+        trust_remote_code=trust_remote_code,
+        padding_side="left",
+        revision=revision,
     )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -119,6 +163,7 @@ def _load_model(
     kwargs: dict = {
         "trust_remote_code": trust_remote_code,
         "low_cpu_mem_usage": True,
+        "revision": revision,
     }
 
     if load_in_4bit and not cuda:
@@ -134,7 +179,7 @@ def _load_model(
 
             kwargs["quantization_config"] = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_compute_dtype=resolved_dtype,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
@@ -145,14 +190,14 @@ def _load_model(
                 "or pass load_in_4bit=False to run in bf16/fp32."
             ) from exc
     elif cuda:
-        kwargs["torch_dtype"] = torch.bfloat16
+        kwargs["torch_dtype"] = resolved_dtype
         kwargs["device_map"] = "auto"
     else:
         # CPU: keep the whole model in RAM. Never use device_map="auto" here — with no
         # GPU it silently spills weights to disk (the "offloaded to the disk" message),
         # which makes generation effectively hang. bf16 halves the footprint (~6 GB for
         # a 3B model) so it fits in a stock Colab CPU runtime for a load/smoke check.
-        kwargs["torch_dtype"] = torch.bfloat16
+        kwargs["torch_dtype"] = resolved_dtype
 
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
     if "device_map" not in kwargs:
@@ -197,6 +242,8 @@ def generate_with_transformers(
     batch_size: int = 1,
     use_cot_prompt: bool = True,
     use_chat_template: bool = True,
+    dtype: str = "auto",
+    revision: str | None = None,
 ) -> list[GenerationRecord]:
     """Generate model completions with chain-of-thought prompting.
 
@@ -213,11 +260,14 @@ def generate_with_transformers(
             "Install Hugging Face dependencies with `pip install -e .[hf,train]` to generate completions."
         ) from exc
 
-    tokenizer, model = _load_model(model_name_or_path, load_in_4bit, trust_remote_code)
+    tokenizer, model = _load_model(
+        model_name_or_path, load_in_4bit, trust_remote_code, dtype=dtype, revision=revision
+    )
     quantized = load_in_4bit and torch.cuda.is_available()
     # Precision provenance so downstream analysis can separate the accurate bf16 headline
     # run from a fast, lower-fidelity 4-bit pass (NF4 measurably shifts accuracy).
-    precision = "nf4-4bit" if quantized else "bf16"
+    base_dtype = "bf16" if dtype == "auto" else dtype
+    precision = "nf4-4bit" if quantized else base_dtype
     do_sample = temperature > 0
     prompts = [build_prompt(item) if use_cot_prompt else item.prompt for item in benchmark]
 
@@ -257,7 +307,8 @@ def generate_with_transformers(
                         "max_new_tokens": max_new_tokens,
                         "temperature": temperature,
                         "load_in_4bit": quantized,  # effective, not just requested
-                        "precision": precision,  # "bf16" (headline) or "nf4-4bit" (fast pass)
+                        "precision": precision,  # "bf16" (headline) / "fp16" / "nf4-4bit"
+                        "revision": revision,  # model commit pinned for reproducibility
                         "cot_prompt": use_cot_prompt,
                         "chat_template": used_template,
                     },

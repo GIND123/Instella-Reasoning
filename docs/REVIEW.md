@@ -34,11 +34,30 @@ rigor, not vision. The controls below convert the reviewer's "path to accept" in
    (`calibrate-contamination`).
 3. **Contamination as a lower bound** (reporting + docs).
 
+## Recently closed in code
+
+- **MATH answer equivalence** — [`answer_equivalence.py`](../src/instella_reasoning/answer_equivalence.py)
+  compares string → numeric → SymPy symbolic, so `\frac{1}{2}` / `0.5` / `1/2` are one answer.
+  Exact string match was silently under-counting correct MATH answers and biasing the gap.
+  Wired into `score_generations`; conservative (a parse failure never invents a match).
+- **Atlas uncertainty + verdict gate** — every `AtlasCell` now carries a cluster-bootstrap 95%
+  CI on reliability, and cells with fewer than `MIN_CLUSTERS_FOR_VERDICT` (3) clusters are
+  labelled `insufficient_data` instead of GENUINE/FRAGILE/GAP. Kills the `n=1` verdict.
+- **Run provenance** — [`provenance.py`](../src/instella_reasoning/provenance.py) writes
+  `manifest.json` (git commit + dirty flag, package versions, resolved config) beside every run;
+  the report shows a Reproducibility block. Answers "which checkpoint/versions produced this?".
+- **Degeneracy hard-stop** — `generate` auto-runs the quality gate and `--fail-degenerate`
+  exits non-zero, so a broken run (wrong chat template / transformers 5.x) cannot reach the Atlas.
+
 ## Open items (protocol, not yet code)
 
 - **M7 sampling-consistency baseline** (temp>0, k samples) alongside perturbation-consistency.
 - **Human validation** of a numeric-variant sample (the auto-templater is high-precision but
   not human-verified) and of contamination labels for the calibration set.
-- **Cross-check accuracy** against `lm-eval-harness` to bound answer-extraction error.
+- **Cross-check accuracy** against `lm-eval-harness` to bound residual extraction error (the
+  math-equivalence checker narrows this but does not replace an external cross-check).
+- **Indirect-detection baseline** (Min-K%++) to *quantify* the ground-truth-vs-indirect claim.
 - **Math-specialized embedder** for contamination (MiniLM makes distinct math problems look
   near-duplicate → false positives); use the calibration curve to pick the operating point.
+- **Multi-checkpoint TracIn** with gradient normalization + random projection (the current
+  gradient attributor is single-checkpoint and unprojected — demote to a validation tier).
