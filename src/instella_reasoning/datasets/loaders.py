@@ -15,10 +15,12 @@ multiple-choice letter, etc.) and lives here so downstream scoring stays generic
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from instella_reasoning.records import BenchmarkItem, CorpusDocument, write_jsonl
 
@@ -115,9 +117,18 @@ def _load_arc(dataset, skill: str) -> Iterator[BenchmarkItem]:
 
 def _load_logiqa(dataset, skill: str) -> Iterator[BenchmarkItem]:
     for i, row in enumerate(dataset):
+        # datatune/LogiQA2.0 packs each example as a JSON string in a single `text`
+        # column (inner keys: text/question/options/answer); other mirrors expose the
+        # columns directly. Unpack the nested form, fall back to the flat form.
+        text_val = row.get("text")
+        if isinstance(text_val, str) and text_val.lstrip().startswith("{"):
+            try:
+                row = json.loads(text_val)
+            except json.JSONDecodeError:
+                pass
         options = row.get("options") or row.get("choices") or []
         rendered = "\n".join(f"{_letter(j)}. {opt}" for j, opt in enumerate(options))
-        context = str(row.get("context", "")).strip()
+        context = str(row.get("text") or row.get("context", "")).strip()
         query = str(row.get("query") or row.get("question", "")).strip()
         prompt = "\n".join(part for part in [context, query, rendered] if part)
         correct = row.get("correct_option", row.get("answer"))
@@ -139,6 +150,48 @@ def _load_bbh(dataset, skill: str) -> Iterator[BenchmarkItem]:
             answer=str(row["target"]).strip(),
             parent_id=f"bbh_{i:05d}",
             metadata={"benchmark": "bbh", "skill": skill},
+        )
+
+
+def _load_reclor(dataset, skill: str) -> Iterator[BenchmarkItem]:
+    for i, row in enumerate(dataset):
+        options = row.get("answers") or row.get("choices") or []
+        rendered = "\n".join(f"{_letter(j)}. {opt}" for j, opt in enumerate(options))
+        context = str(row.get("context", "")).strip()
+        question = str(row.get("question", "")).strip()
+        prompt = "\n".join(part for part in [context, question, rendered] if part)
+        label = row.get("label")
+        # ReClor hides its test-split labels (label < 0); keep answer None if so.
+        answer = _letter(int(label)) if isinstance(label, int) and label >= 0 else None
+        yield BenchmarkItem(
+            id=f"reclor_{i:05d}",
+            prompt=prompt,
+            answer=answer,
+            parent_id=f"reclor_{i:05d}",
+            metadata={
+                "benchmark": "reclor",
+                "skill": skill,
+                "choices": [_letter(j) for j in range(len(options))],
+            },
+        )
+
+
+def _load_humaneval(dataset, skill: str) -> Iterator[BenchmarkItem]:
+    """Code-generation benchmark. Exact-match scoring does not apply (correctness needs
+    execution against unit tests), so ``answer`` is None and this benchmark is used for
+    contamination search only — not accuracy/reliability."""
+    for i, row in enumerate(dataset):
+        yield BenchmarkItem(
+            id=f"humaneval_{i:05d}",
+            prompt=str(row["prompt"]).strip(),
+            answer=None,
+            parent_id=f"humaneval_{i:05d}",
+            metadata={
+                "benchmark": "humaneval",
+                "skill": skill,
+                "scoring": "execution",
+                "entry_point": row.get("entry_point"),
+            },
         )
 
 
@@ -190,6 +243,12 @@ BENCHMARK_LOADERS: dict[str, BenchmarkSpec] = {
     ),
     "bbh": BenchmarkSpec(
         "bbh", "multi_step", "lukaemon/bbh", "boolean_expressions", "test", _load_bbh
+    ),
+    "reclor": BenchmarkSpec(
+        "reclor", "logical_reading", "metaeval/reclor", None, "validation", _load_reclor
+    ),
+    "humaneval": BenchmarkSpec(
+        "humaneval", "code", "openai/openai_humaneval", None, "test", _load_humaneval
     ),
 }
 
@@ -269,6 +328,26 @@ def _load_math_all_subjects(
     return merged
 
 
+def _coerce_corpus_text(value: Any) -> str:
+    """Flatten a corpus field into a single string.
+
+    Handles chat-format datasets (e.g. Instella-GSM8K-synthetic) whose payload is a
+    ``messages`` list of ``{role, content}`` dicts, as well as plain string fields.
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = [
+            str(item.get("content", "")) if isinstance(item, dict) else str(item)
+            for item in value
+        ]
+        return " ".join(p for p in parts if p)
+    return str(value)
+
+
 def load_corpus_dataset_to_jsonl(
     hf_path: str,
     output_path: str | Path,
@@ -292,12 +371,14 @@ def load_corpus_dataset_to_jsonl(
 
     rows: list[CorpusDocument] = []
     for i, row in enumerate(dataset):
-        text = row.get(text_field)
-        if text is None:
-            # For instruction datasets, join problem/solution style fields.
+        text = _coerce_corpus_text(row.get(text_field))
+        if not text:
+            # For instruction / chat datasets, join problem/solution/messages fields.
             text = " ".join(
-                str(row[key]) for key in ("problem", "question", "solution", "answer") if key in row
-            )
+                _coerce_corpus_text(row[key])
+                for key in ("problem", "question", "solution", "answer", "messages")
+                if key in row
+            ).strip()
         if not text:
             continue
         rows.append(
