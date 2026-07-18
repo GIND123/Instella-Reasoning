@@ -168,7 +168,11 @@ def symbolic_equal(a: str, b: str) -> bool:
         expr_b = parse_expr(_latex_to_expr(b), transformations=transformations, evaluate=True)
         diff = sympy.simplify(expr_a - expr_b)
         return diff == 0
-    except (SyntaxError, TypeError, ValueError, AttributeError, sympy.SympifyError, RecursionError):
+    except Exception:
+        # Inputs are arbitrary (often degenerate) model output; any parse/simplify failure
+        # means "not provably equal", never a crash. An enumerated except-list already
+        # missed tokenize.TokenError (stray backslash from unhandled LaTeX), which killed
+        # a whole scoring run — hence the deliberate blanket catch.
         return False
 
 

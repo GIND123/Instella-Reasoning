@@ -68,3 +68,13 @@ def test_symbolic_equal_handles_latex_math() -> None:
 def test_answers_equivalent_math_kind_uses_symbolic_path() -> None:
     assert answers_equivalent(r"\frac{1}{2}", "0.5", "math")
     assert answers_equivalent("2", r"\sqrt{4}", "math")
+
+
+def test_symbolic_equal_survives_unparseable_garbage():
+    # Degenerate model output with stray backslashes made sympy's tokenizer raise
+    # tokenize.TokenError (not in the old except-list), crashing a whole scoring run.
+    from instella_reasoning.answer_equivalence import answers_equivalent, symbolic_equal
+
+    garbage = "\\text{the answer is } 42 \\\\ \\x"
+    assert symbolic_equal("1", garbage) is False
+    assert answers_equivalent("1", garbage, kind="math") is False
