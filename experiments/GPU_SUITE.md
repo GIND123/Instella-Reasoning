@@ -7,7 +7,9 @@ A2/A3 reliability, A5 scale, A6 RL). It needs a GPU. This is the turnkey path.
 ## One Colab cell (Runtime → T4 GPU first)
 
 ```python
-!git clone https://github.com/GIND123/Instella-Reasoning
+# NOTE: until agent/cpu-experiment-suite is merged into main, clone that branch —
+# main still has the blank-prompt LogiQA2 bug and lacks this suite's scripts.
+!git clone -b agent/cpu-experiment-suite https://github.com/GIND123/Instella-Reasoning
 %cd Instella-Reasoning
 !pip install -e ".[hf,retrieval,viz,stats]"
 
