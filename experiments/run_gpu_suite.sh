@@ -21,6 +21,13 @@ BENCHMARKS=(gsm8k math logiqa2 arc_challenge bbh reclor)
 # Models in scale order; 4-bit fits a T4. OLMo-1B is the attribution-validation baseline.
 MODELS=(amd/AMD-OLMo-1B amd/Instella-3B amd/Instella-3B-Instruct amd/Instella-3B-Math)
 
+echo "== Stage 0: benchmark data (download any missing) =="
+mkdir -p data/processed
+for b in "${BENCHMARKS[@]}"; do
+  [[ -s "data/processed/$b.jsonl" ]] || \
+    instella-reasoning load-benchmark --benchmark "$b" --output "data/processed/$b.jsonl" $lim
+done
+
 CONTAM="experiments/runs/2026-07-17_cpu-batch/contamination/gsm8k_contam.jsonl"
 
 for model in "${MODELS[@]}"; do

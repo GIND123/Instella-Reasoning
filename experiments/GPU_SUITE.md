@@ -12,16 +12,18 @@ A2/A3 reliability, A5 scale, A6 RL). It needs a GPU. This is the turnkey path.
 !git clone -b agent/cpu-experiment-suite https://github.com/GIND123/Instella-Reasoning
 %cd Instella-Reasoning
 !pip install -e ".[hf,retrieval,viz,stats]"
+!pip install "bitsandbytes>=0.46.1"      # 4-bit loading; not in the pip extras
 
 import os
 from google.colab import userdata
 os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")   # HF token in Colab Secrets
 
-# real benchmark + corpus data (200/5000 smoke; raise for the full study)
-!bash scripts/download_data.sh 200 5000
-# generate + score every (model x benchmark), then atlas + emergence
+# downloads any missing benchmark data itself, then generate -> score -> atlas -> emergence
 !bash experiments/run_gpu_suite.sh 200
 ```
+
+**Do a sanity pass first**: run `!bash experiments/run_gpu_suite.sh 20` (~20 min) before
+the 200-item pass, to prove model loading + scoring end-to-end before burning hours.
 
 Artifacts land in `experiments/runs/<date>_gpu-suite/`:
 `generations/`, `scores/`, `atlas/`, `emergence_scale.json`, `emergence_rl.json`.
