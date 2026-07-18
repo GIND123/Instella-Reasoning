@@ -1,0 +1,9 @@
+{
+  "n_variants": 660,
+  "n_answer_preserving": 530,
+  "n_preserved_ok": 530,
+  "answer_preservation_rate": 1.0,
+  "n_answer_changing": 130,
+  "n_degenerate_text": 163,
+  "violations": []
+}
