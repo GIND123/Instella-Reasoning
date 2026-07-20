@@ -19,7 +19,13 @@ mkdir -p "$OUT"/{generations,scores,atlas}
 # Answer-scored benchmarks (humaneval is contamination-only -> excluded from generate/score).
 BENCHMARKS=(gsm8k math logiqa2 arc_challenge bbh reclor)
 # Models in scale order; 4-bit fits a T4. OLMo-1B is the attribution-validation baseline.
-MODELS=(amd/AMD-OLMo-1B amd/Instella-3B amd/Instella-3B-Instruct amd/Instella-3B-Math)
+# Instella-3B-Math is used via a local HF-loadable copy: its HF repo ships vLLM-only
+# remote code, so fetch_instella_math_hf.py swaps in the Instruct repo's modeling file
+# (checkpoints are tensor-name-identical; see that script's docstring).
+MODELS=(amd/AMD-OLMo-1B amd/Instella-3B amd/Instella-3B-Instruct models/Instella-3B-Math-hf)
+
+echo "== Stage 0a: assemble HF-loadable Instella-3B-Math =="
+python experiments/fetch_instella_math_hf.py
 
 echo "== Stage 0: benchmark data (download any missing) =="
 mkdir -p data/processed
@@ -61,7 +67,7 @@ instella-reasoning emergence \
 echo "== A6 RL effect =="
 instella-reasoning emergence \
   --pre-rl-scores  "$OUT/scores/Instella-3B-Instruct__ALL.jsonl" \
-  --post-rl-scores "$OUT/scores/Instella-3B-Math__ALL.jsonl" \
+  --post-rl-scores "$OUT/scores/Instella-3B-Math-hf__ALL.jsonl" \
   --output "$OUT/emergence_rl.json" || echo "  (needs both score files)"
 
 echo "Done. Artifacts in $OUT/"
