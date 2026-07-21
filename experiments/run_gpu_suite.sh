@@ -4,17 +4,24 @@
 # models. CPU-side stages (contamination, variants, attribution) are done in
 # experiments/runs/ and reused here. See experiments/GPU_SUITE.md.
 #
-# Usage (Colab T4):   bash experiments/run_gpu_suite.sh [LIMIT]
+# Usage (Colab T4):   bash experiments/run_gpu_suite.sh [LIMIT] [RUN_DIR]
 #   LIMIT caps items per benchmark for a fast pass (default 200; use 0 for full).
+#
+# RESUMABLE: a per-(model,benchmark) score file is the completion marker. Re-running
+# skips any (model,benchmark) already scored, so an interrupted run (Colab reclaim, VM
+# recycle) just continues where it left off — re-run the same cell and it fast-forwards.
+# The run dir is fixed per LIMIT (not date-stamped) so resuming across days finds it.
 set -euo pipefail
 export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
 export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1   # stream generation logs so a live run never looks "stopped"
 
 LIMIT="${1:-200}"
 lim=""; [[ "$LIMIT" != "0" ]] && lim="--limit $LIMIT"
 
-OUT="experiments/runs/$(date +%F)_gpu-suite"
+OUT="${2:-experiments/runs/gpu-suite-L${LIMIT}}"
 mkdir -p "$OUT"/{generations,scores,atlas}
+echo "Run dir: $OUT (resumable — already-scored model/benchmarks are skipped)"
 
 # Answer-scored benchmarks (humaneval is contamination-only -> excluded from generate/score).
 BENCHMARKS=(gsm8k math logiqa2 arc_challenge bbh reclor)
@@ -39,18 +46,26 @@ CONTAM="experiments/runs/2026-07-17_cpu-batch/contamination/gsm8k_contam.jsonl"
 for model in "${MODELS[@]}"; do
   mtag="${model##*/}"
   merged="$OUT/scores/${mtag}__ALL.jsonl"
-  : > "$merged"
   for b in "${BENCHMARKS[@]}"; do
     bench="data/processed/$b.jsonl"
     [[ -f "$bench" ]] || { echo "skip $b (no data — run scripts/download_data.sh)"; continue; }
     gen="$OUT/generations/${mtag}__${b}.jsonl"
     sco="$OUT/scores/${mtag}__${b}.jsonl"
+    if [[ -s "$sco" ]]; then
+      echo "== skip $mtag / $b (already scored) =="   # resume marker
+      continue
+    fi
     echo "== generate $mtag / $b =="
     instella-reasoning generate --benchmark "$bench" --model "$model" \
       --output "$gen" --load-in-4bit --batch-size 8 --max-new-tokens 512 $lim
     instella-reasoning score-generations --benchmark "$bench" \
       --generations "$gen" --output "$sco"
-    cat "$sco" >> "$merged"          # one merged score file per model for atlas/emergence
+  done
+  # Rebuild the merged score file from whatever per-benchmark files exist (resume-safe).
+  : > "$merged"
+  for b in "${BENCHMARKS[@]}"; do
+    sco="$OUT/scores/${mtag}__${b}.jsonl"
+    [[ -s "$sco" ]] && cat "$sco" >> "$merged"
   done
   # Per-model Atlas from that model's merged scores + the CPU-side contamination hits.
   instella-reasoning atlas --scores "$merged" --contamination "$CONTAM" \
