@@ -29,10 +29,33 @@ BENCHMARKS=(gsm8k math logiqa2 arc_challenge bbh reclor)
 # Instella-3B-Math is used via a local HF-loadable copy: its HF repo ships vLLM-only
 # remote code, so fetch_instella_math_hf.py swaps in the Instruct repo's modeling file
 # (checkpoints are tensor-name-identical; see that script's docstring).
-MODELS=(amd/AMD-OLMo-1B amd/Instella-3B amd/Instella-3B-Instruct models/Instella-3B-Math-hf)
+#
+# SPLIT ACROSS SESSIONS: set SUITE_MODELS to a space-separated subset to run just those
+# models this session (they all write to the same RUN_DIR, so the pieces assemble). E.g.
+#   SUITE_MODELS="amd/Instella-3B-Instruct" bash experiments/run_gpu_suite.sh 200 <RUN_DIR>
+# Aliases are accepted: olmo, base, instruct, math.
+_resolve_model() {
+  case "$1" in
+    olmo)     echo amd/AMD-OLMo-1B ;;
+    base)     echo amd/Instella-3B ;;
+    instruct) echo amd/Instella-3B-Instruct ;;
+    math)     echo models/Instella-3B-Math-hf ;;
+    *)        echo "$1" ;;
+  esac
+}
+if [[ -n "${SUITE_MODELS:-}" ]]; then
+  MODELS=()
+  for m in $SUITE_MODELS; do MODELS+=("$(_resolve_model "$m")"); done
+else
+  MODELS=(amd/AMD-OLMo-1B amd/Instella-3B amd/Instella-3B-Instruct models/Instella-3B-Math-hf)
+fi
+echo "Models this session: ${MODELS[*]}"
 
-echo "== Stage 0a: assemble HF-loadable Instella-3B-Math =="
-python experiments/fetch_instella_math_hf.py
+# Only assemble the (6 GB) Math checkpoint if a Math model is actually in this session.
+if [[ " ${MODELS[*]} " == *"Instella-3B-Math-hf"* ]]; then
+  echo "== Stage 0a: assemble HF-loadable Instella-3B-Math =="
+  python experiments/fetch_instella_math_hf.py
+fi
 
 echo "== Stage 0: benchmark data (download any missing) =="
 mkdir -p data/processed
