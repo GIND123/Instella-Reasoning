@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import os
+from dataclasses import asdict
 from pathlib import Path
 
 from instella_reasoning.answer_equivalence import answers_equivalent, resolve_answer_kind
@@ -8,6 +11,7 @@ from instella_reasoning.records import (
     BenchmarkItem,
     EvaluationRecord,
     GenerationRecord,
+    read_jsonl,
     write_jsonl,
 )
 from instella_reasoning.text import normalize_text
@@ -260,6 +264,35 @@ def generate_with_transformers(
             "Install Hugging Face dependencies with `pip install -e .[hf,train]` to generate completions."
         ) from exc
 
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resume: a batch is flushed to disk as soon as it is generated (below), so an
+    # interrupted run leaves valid partial output. Re-running skips items already present,
+    # continuing mid-benchmark instead of restarting it — critical on preemptible GPUs.
+    existing: list[GenerationRecord] = []
+    done_ids: set[str] = set()
+    if out.exists():
+        for row in read_jsonl(out):
+            try:
+                rec = GenerationRecord.from_dict(row)
+            except ValueError:
+                continue
+            existing.append(rec)
+            done_ids.add(rec.benchmark_id)
+    pending = [item for item in benchmark if item.id not in done_ids]
+    if done_ids:
+        print(f"[generate] resume: {len(done_ids)} done, {len(pending)} remaining -> {out}")
+    if not pending:
+        return existing
+
+    def _append(records: list[GenerationRecord]) -> None:
+        with out.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(asdict(record), ensure_ascii=True, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
     tokenizer, model = _load_model(
         model_name_or_path, load_in_4bit, trust_remote_code, dtype=dtype, revision=revision
     )
@@ -269,12 +302,12 @@ def generate_with_transformers(
     base_dtype = "bf16" if dtype == "auto" else dtype
     precision = "nf4-4bit" if quantized else base_dtype
     do_sample = temperature > 0
-    prompts = [build_prompt(item) if use_cot_prompt else item.prompt for item in benchmark]
+    prompts = [build_prompt(item) if use_cot_prompt else item.prompt for item in pending]
 
-    rows: list[GenerationRecord] = []
+    rows: list[GenerationRecord] = list(existing)
     templated_any = False
-    for start in range(0, len(benchmark), batch_size):
-        batch_items = benchmark[start : start + batch_size]
+    for start in range(0, len(pending), batch_size):
+        batch_items = pending[start : start + batch_size]
         batch_prompts = prompts[start : start + batch_size]
         texts, add_special, used_template = _format_prompts(
             tokenizer, batch_prompts, use_chat_template
@@ -296,9 +329,10 @@ def generate_with_transformers(
                 pad_token_id=tokenizer.pad_token_id,
             )
         prompt_len = inputs["input_ids"].shape[-1]
+        batch_rows: list[GenerationRecord] = []
         for item, sequence in zip(batch_items, tokens, strict=False):
             completion = tokenizer.decode(sequence[prompt_len:], skip_special_tokens=True)
-            rows.append(
+            batch_rows.append(
                 GenerationRecord(
                     benchmark_id=item.id,
                     completion=completion,
@@ -314,6 +348,8 @@ def generate_with_transformers(
                     },
                 )
             )
+        _append(batch_rows)   # flush after each batch so an interrupt leaves valid output
+        rows.extend(batch_rows)
 
     if use_chat_template and not templated_any:
         print(
@@ -321,5 +357,4 @@ def generate_with_transformers(
             "If this is an -Instruct/-Math checkpoint, output may be degenerate — verify the model id."
         )
 
-    write_jsonl(output_path, rows)
     return rows
