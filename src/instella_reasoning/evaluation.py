@@ -257,19 +257,14 @@ def generate_with_transformers(
     ``use_chat_template`` then formats it for instruction-tuned models (see
     :func:`_format_prompts`). Disable the latter only for a base (non-Instruct) model.
     """
-    try:
-        import torch
-    except ImportError as exc:
-        raise RuntimeError(
-            "Install Hugging Face dependencies with `pip install -e .[hf,train]` to generate completions."
-        ) from exc
-
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     # Resume: a batch is flushed to disk as soon as it is generated (below), so an
     # interrupted run leaves valid partial output. Re-running skips items already present,
     # continuing mid-benchmark instead of restarting it — critical on preemptible GPUs.
+    # This runs before importing torch so a fully-complete run is recognized as done even
+    # on a machine without the heavy ML deps (and CI can test the fast-forward path).
     existing: list[GenerationRecord] = []
     done_ids: set[str] = set()
     if out.exists():
@@ -285,6 +280,13 @@ def generate_with_transformers(
         print(f"[generate] resume: {len(done_ids)} done, {len(pending)} remaining -> {out}")
     if not pending:
         return existing
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install Hugging Face dependencies with `pip install -e .[hf,train]` to generate completions."
+        ) from exc
 
     def _append(records: list[GenerationRecord]) -> None:
         with out.open("a", encoding="utf-8") as handle:
