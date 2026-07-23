@@ -1,0 +1,108 @@
+{
+  "transitions": [
+    {
+      "skill": "arithmetic",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.01,
+      "large_reliability": 0.52,
+      "delta": 0.51,
+      "transition_class": "emergent"
+    },
+    {
+      "skill": "commonsense_science",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.18,
+      "large_reliability": 0.325,
+      "delta": 0.145,
+      "transition_class": "amplified"
+    },
+    {
+      "skill": "logical_deduction",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.145,
+      "large_reliability": 0.275,
+      "delta": 0.13,
+      "transition_class": "scale_resistant"
+    },
+    {
+      "skill": "logical_reading",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.22,
+      "large_reliability": 0.315,
+      "delta": 0.095,
+      "transition_class": "amplified"
+    },
+    {
+      "skill": "mathematical",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.02,
+      "large_reliability": 0.09,
+      "delta": 0.07,
+      "transition_class": "scale_resistant"
+    },
+    {
+      "skill": "multi_step",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.07,
+      "large_reliability": 0.04,
+      "delta": -0.03,
+      "transition_class": "scale_resistant"
+    }
+  ],
+  "rl_effects": [
+    {
+      "skill": "arithmetic",
+      "delta_accuracy": -0.45,
+      "delta_consistency": 0.0,
+      "delta_reliability": -0.45,
+      "verdict": "regression"
+    },
+    {
+      "skill": "commonsense_science",
+      "delta_accuracy": -0.19,
+      "delta_consistency": 0.0,
+      "delta_reliability": -0.19,
+      "verdict": "regression"
+    },
+    {
+      "skill": "logical_deduction",
+      "delta_accuracy": -0.155,
+      "delta_consistency": 0.0,
+      "delta_reliability": -0.155,
+      "verdict": "regression"
+    },
+    {
+      "skill": "logical_reading",
+      "delta_accuracy": -0.21,
+      "delta_consistency": 0.0,
+      "delta_reliability": -0.21,
+      "verdict": "regression"
+    },
+    {
+      "skill": "mathematical",
+      "delta_accuracy": -0.105,
+      "delta_consistency": 0.0,
+      "delta_reliability": -0.105,
+      "verdict": "regression"
+    },
+    {
+      "skill": "multi_step",
+      "delta_accuracy": 0.325,
+      "delta_consistency": 0.0,
+      "delta_reliability": 0.325,
+      "verdict": "accuracy_only"
+    }
+  ],
+  "rl_generalization": {
+    "math_reliability_gain": -0.2775,
+    "non_math_reliability_gain": -0.0575,
+    "domain_specific": false,
+    "verdict": "general_or_none"
+  }
+}
