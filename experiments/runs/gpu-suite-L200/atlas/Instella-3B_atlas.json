@@ -1,0 +1,173 @@
+{
+  "cells": [
+    {
+      "skill": "arithmetic",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.52,
+      "consistency": 1.0,
+      "reliability": 0.52,
+      "reliability_ci": [
+        0.455,
+        0.585
+      ],
+      "classification": "genuine"
+    },
+    {
+      "skill": "arithmetic",
+      "contamination_level": "partial",
+      "n_clusters": 2,
+      "accuracy": 1.0,
+      "consistency": 1.0,
+      "reliability": 1.0,
+      "reliability_ci": [
+        1.0,
+        1.0
+      ],
+      "classification": "insufficient_data"
+    },
+    {
+      "skill": "arithmetic",
+      "contamination_level": "clean",
+      "n_clusters": 198,
+      "accuracy": 0.515152,
+      "consistency": 1.0,
+      "reliability": 0.515152,
+      "reliability_ci": [
+        0.449495,
+        0.580934
+      ],
+      "classification": "genuine"
+    },
+    {
+      "skill": "commonsense_science",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.325,
+      "consistency": 1.0,
+      "reliability": 0.325,
+      "reliability_ci": [
+        0.26,
+        0.39
+      ],
+      "classification": "partial"
+    },
+    {
+      "skill": "commonsense_science",
+      "contamination_level": "clean",
+      "n_clusters": 200,
+      "accuracy": 0.325,
+      "consistency": 1.0,
+      "reliability": 0.325,
+      "reliability_ci": [
+        0.26,
+        0.39
+      ],
+      "classification": "partial"
+    },
+    {
+      "skill": "logical_deduction",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.275,
+      "consistency": 1.0,
+      "reliability": 0.275,
+      "reliability_ci": [
+        0.21,
+        0.335
+      ],
+      "classification": "gap"
+    },
+    {
+      "skill": "logical_deduction",
+      "contamination_level": "clean",
+      "n_clusters": 200,
+      "accuracy": 0.275,
+      "consistency": 1.0,
+      "reliability": 0.275,
+      "reliability_ci": [
+        0.21,
+        0.335
+      ],
+      "classification": "gap"
+    },
+    {
+      "skill": "logical_reading",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.315,
+      "consistency": 1.0,
+      "reliability": 0.315,
+      "reliability_ci": [
+        0.25,
+        0.38
+      ],
+      "classification": "partial"
+    },
+    {
+      "skill": "logical_reading",
+      "contamination_level": "clean",
+      "n_clusters": 200,
+      "accuracy": 0.315,
+      "consistency": 1.0,
+      "reliability": 0.315,
+      "reliability_ci": [
+        0.25,
+        0.38
+      ],
+      "classification": "partial"
+    },
+    {
+      "skill": "mathematical",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.09,
+      "consistency": 1.0,
+      "reliability": 0.09,
+      "reliability_ci": [
+        0.05,
+        0.13
+      ],
+      "classification": "gap"
+    },
+    {
+      "skill": "mathematical",
+      "contamination_level": "clean",
+      "n_clusters": 200,
+      "accuracy": 0.09,
+      "consistency": 1.0,
+      "reliability": 0.09,
+      "reliability_ci": [
+        0.05,
+        0.13
+      ],
+      "classification": "gap"
+    },
+    {
+      "skill": "multi_step",
+      "contamination_level": "all",
+      "n_clusters": 200,
+      "accuracy": 0.04,
+      "consistency": 1.0,
+      "reliability": 0.04,
+      "reliability_ci": [
+        0.015,
+        0.07
+      ],
+      "classification": "gap"
+    },
+    {
+      "skill": "multi_step",
+      "contamination_level": "clean",
+      "n_clusters": 200,
+      "accuracy": 0.04,
+      "consistency": 1.0,
+      "reliability": 0.04,
+      "reliability_ci": [
+        0.015,
+        0.07
+      ],
+      "classification": "gap"
+    }
+  ]
+}

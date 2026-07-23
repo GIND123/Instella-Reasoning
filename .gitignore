@@ -37,3 +37,9 @@ mlruns/
 .env
 .env.*
 !.env.example
+
+# Local tooling
+.rocketride/
+
+# GPU-suite raw generations are bulky and re-derivable from scores
+experiments/runs/*/generations/
