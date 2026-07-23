@@ -46,6 +46,26 @@ SECONDS_PER_ITEM="${SECONDS_PER_ITEM:-6}"
 # Contamination corpus: full synthetic set is ~small; cap for a first pass if needed.
 CORPUS_LIMIT="${CORPUS_LIMIT:-0}"              # 0 = full Instella-GSM8K-synthetic
 
+# --- Hugging Face result sync (periodic save + cross-machine resume) --------
+# On start we PULL the run dir from HF so a teammate's / an earlier session's finished
+# work is restored, then the per-benchmark score files act as completion markers and the
+# suite skips them — no GPU hours are re-spent. After each (model,benchmark) and at the
+# end we PUSH, so a reclaimed Colab VM never loses progress. Set HF_SYNC=0 to disable.
+HF_SYNC="${HF_SYNC:-1}"
+HF_RESULTS_REPO="${HF_RESULTS_REPO:-GOVINDFROM/Instella-Reasoning}"
+HF_INCLUDE_GENERATIONS="${HF_INCLUDE_GENERATIONS:-0}"   # 1 = also upload bulky raw generations
+_hf_gen_flag=""; [[ "$HF_INCLUDE_GENERATIONS" == "1" ]] && _hf_gen_flag="--include-generations"
+
+_hf_pull() {
+  [[ "$HF_SYNC" == "1" ]] || return 0
+  python experiments/hf_sync.py pull --repo "$HF_RESULTS_REPO" --path "$OUT" || true
+}
+_hf_push() {  # $1 = commit message
+  [[ "$HF_SYNC" == "1" ]] || return 0
+  python experiments/hf_sync.py push --repo "$HF_RESULTS_REPO" --path "$OUT" \
+    --message "${1:-checkpoint}" $_hf_gen_flag || true
+}
+
 # Models: scale + post-training axis. Instruct is the headline (also run in bf16 for
 # the reportable accuracy number). Set SUITE_MODELS to a subset to split sessions.
 _resolve_model() {
@@ -65,6 +85,10 @@ OUT="${OUT:-experiments/runs/reliability-B${BASE_ITEMS}-K${NUMERIC_K}}"
 mkdir -p "$OUT"/{base,variants,generations,scores,atlas,contamination}
 echo "Run dir: $OUT | base=$BASE_ITEMS numeric_k=$NUMERIC_K benchmarks=${BENCHMARKS[*]}"
 echo "Models this session: ${MODELS[*]}"
+
+# Restore any prior/teammate progress before doing anything, so resume can skip it.
+echo "== Sync: pull prior results from $HF_RESULTS_REPO (HF_SYNC=$HF_SYNC) =="
+_hf_pull
 
 # --- rough GPU-hour estimate (printed, not enforced) ------------------------
 python - "$BASE_ITEMS" "$NUMERIC_K" "${#MODELS[@]}" "${#BENCHMARKS[@]}" "$SECONDS_PER_ITEM" <<'PY'
@@ -144,6 +168,8 @@ for b in "${BENCHMARKS[@]}"; do
       --output "$OUT/variants/${b}_validation.json"
   fi
 done
+# Checkpoint the CPU-side prep (contamination index + variant clusters) before any GPU work.
+_hf_push "contamination + variants prepared"
 
 # --- Stage 3: generate + score over the VARIANT clusters --------------------
 # NOTE: both generate AND score use the *variant* file, so parent_id / variant_type /
@@ -167,6 +193,8 @@ for model in "${MODELS[@]}"; do
       --fail-degenerate 0.25
     instella-reasoning score-generations --benchmark "$var" \
       --generations "$gen" --output "$sco"
+    # Periodic save: checkpoint each finished (model,benchmark) so a VM reclaim loses nothing.
+    _hf_push "scores ${mtag}/${b}"
   done
   : > "$merged"
   for b in "${BENCHMARKS[@]}"; do
@@ -176,6 +204,7 @@ for model in "${MODELS[@]}"; do
   instella-reasoning atlas --scores "$merged" --contamination "$CONTAM" \
     --output "$OUT/atlas/${mtag}_atlas.json" --markdown "$OUT/atlas/${mtag}_atlas.md" \
     || echo "  (atlas skipped)"
+  _hf_push "atlas ${mtag}"
 done
 
 # --- Stage 4: headline analyses (CPU) ---------------------------------------
@@ -208,4 +237,8 @@ instella-reasoning emergence \
   --contamination "$CONTAM" --output "$OUT/emergence_rl.json" \
   || echo "  (needs both score files)"
 
+# Final save: whole run dir (atlas, gap, report, figures, emergence) to HF.
+_hf_push "final: atlas + gap + report + emergence"
+
 echo "Done. Reliability artifacts in $OUT/  (atlas verdicts are now consistency-probed)."
+[[ "$HF_SYNC" == "1" ]] && echo "Saved to https://huggingface.co/datasets/$HF_RESULTS_REPO (path: $OUT)."
