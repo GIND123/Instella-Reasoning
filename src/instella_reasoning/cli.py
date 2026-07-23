@@ -599,6 +599,7 @@ def main(argv: list[str] | None = None) -> int:
         from instella_reasoning.emergence import (
             EmergenceReport,
             analyze_rl_effect,
+            atlas_consistency_probed,
             capability_transitions,
             rl_generalization_summary,
         )
@@ -609,12 +610,15 @@ def main(argv: list[str] | None = None) -> int:
         transitions = capability_transitions(
             small_atlas, large_atlas, args.small_name, args.large_name
         )
+        atlases = [small_atlas, large_atlas]
         report = EmergenceReport(transitions=transitions)
         if args.pre_rl_scores and args.post_rl_scores:
             pre_atlas = build_atlas(load_evaluations(args.pre_rl_scores), contamination)
             post_atlas = build_atlas(load_evaluations(args.post_rl_scores), contamination)
             report.rl_effects = analyze_rl_effect(pre_atlas, post_atlas)
             report.rl_generalization = rl_generalization_summary(report.rl_effects)
+            atlases.extend([pre_atlas, post_atlas])
+        report.consistency_probed = atlas_consistency_probed(*atlases)
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
         print(f"Wrote emergence analysis ({len(transitions)} transitions) to {args.output}")

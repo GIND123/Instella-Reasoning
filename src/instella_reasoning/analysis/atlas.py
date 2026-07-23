@@ -10,6 +10,11 @@ broken down by contamination level, and classifies each cell:
 - ``fragile``  — reliability < 0.30 *with* high accuracy (>= 0.60): recognises the
   original but fails semantically equivalent variants (the memorisation signature).
 - ``gap``      — low accuracy and low reliability: the skill is largely absent.
+- ``accuracy_only`` — the cell's clusters are all singletons (no answer-preserving
+  variant was generated), so ``consistency`` is trivially 1.0 and reliability collapses
+  to plain accuracy. The genuine/fragile distinction is *untestable* here, so no
+  reasoning verdict is emitted. This is the honest state of a base-benchmark-only run:
+  the memorisation signal requires generating over ``make-variants`` output first.
 
 The per-cluster reliability is computed exactly as in
 :func:`instella_reasoning.metrics.summarize_reliability` (accuracy across a cluster
@@ -24,7 +29,7 @@ from dataclasses import dataclass, field
 
 from instella_reasoning.analysis.accuracy_gap import contamination_labels_by_benchmark_id
 from instella_reasoning.analysis.stats import bootstrap_ci
-from instella_reasoning.metrics import cluster_consistency
+from instella_reasoning.metrics import cluster_consistency, is_answer_changing
 from instella_reasoning.records import ContaminationHit, EvaluationRecord
 
 CONTAMINATION_LEVELS = ("all", "contaminated", "partial", "clean")
@@ -39,6 +44,14 @@ FRAGILE_ACCURACY = 0.60
 MIN_CLUSTERS_FOR_VERDICT = 3
 INSUFFICIENT_DATA = "insufficient_data"
 
+# Consistency is only *probed* when a cluster holds >= 2 answer-preserving variants. A cell
+# in which no cluster clears this bar has consistency == 1.0 by construction (every "cluster"
+# is a single item), so reliability == accuracy and the genuine/fragile distinction — the
+# study's core signal — is untestable. Such cells are labelled ``accuracy_only`` rather than
+# GENUINE, so a base-benchmark-only run can never masquerade as a measured reasoning verdict.
+MIN_VARIANTS_FOR_CONSISTENCY = 2
+ACCURACY_ONLY = "accuracy_only"
+
 
 @dataclass(slots=True)
 class ClusterReliability:
@@ -50,6 +63,9 @@ class ClusterReliability:
     accuracy: float
     consistency: float
     reliability: float
+    # Number of answer-*preserving* records the consistency term was computed over. A value
+    # < MIN_VARIANTS_FOR_CONSISTENCY means consistency is trivial (single item) and untested.
+    n_consistency_variants: int = 1
 
 
 @dataclass(slots=True)
@@ -65,6 +81,10 @@ class AtlasCell:
     # intervals / crossing a threshold are the honest signal that a verdict is uncertain.
     reliability_ci_low: float = 0.0
     reliability_ci_high: float = 0.0
+    # True only if at least one cluster carried >= MIN_VARIANTS_FOR_CONSISTENCY answer-
+    # preserving variants. When False, ``consistency`` is trivially 1.0 and the verdict is
+    # ``accuracy_only`` — reliability is just accuracy and the memorisation signal is untested.
+    consistency_probed: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -75,6 +95,7 @@ class AtlasCell:
             "consistency": round(self.consistency, 6),
             "reliability": round(self.reliability, 6),
             "reliability_ci": [round(self.reliability_ci_low, 6), round(self.reliability_ci_high, 6)],
+            "consistency_probed": self.consistency_probed,
             "classification": self.classification,
         }
 
@@ -122,6 +143,10 @@ def _cluster_reliabilities(
         # Consistency ignores answer-*changing* numeric variants (see metrics.py / M5).
         consistency = cluster_consistency(group)
         reliability = accuracy * consistency
+        # The consistency term is only meaningful over answer-preserving records; count them
+        # so a cell can tell whether consistency was actually probed or is trivially 1.0.
+        preserving = [r for r in group if not is_answer_changing(r)]
+        n_consistency_variants = len(preserving)
         skill = _modal_metadata(group, skill_key, default="unknown")
         model = group[0].model
         # A cluster inherits the contamination label of its parent/original item.
@@ -136,6 +161,7 @@ def _cluster_reliabilities(
                 accuracy=accuracy,
                 consistency=consistency,
                 reliability=reliability,
+                n_consistency_variants=n_consistency_variants,
             )
         )
     return clusters
@@ -185,9 +211,16 @@ def _aggregate_cell(
     consistency = sum(c.consistency for c in subset) / n
     reliability = sum(c.reliability for c in subset) / n
     ci = bootstrap_ci([c.reliability for c in subset], n_resamples=n_bootstrap)
-    classification = (
-        classify_cell(accuracy, reliability) if n >= min_clusters_for_verdict else INSUFFICIENT_DATA
+    consistency_probed = any(
+        c.n_consistency_variants >= MIN_VARIANTS_FOR_CONSISTENCY for c in subset
     )
+    if not consistency_probed:
+        # Consistency never tested -> reliability == accuracy; withhold the reasoning verdict.
+        classification = ACCURACY_ONLY
+    elif n >= min_clusters_for_verdict:
+        classification = classify_cell(accuracy, reliability)
+    else:
+        classification = INSUFFICIENT_DATA
     return AtlasCell(
         skill=skill,
         contamination_level=level,
@@ -198,6 +231,7 @@ def _aggregate_cell(
         classification=classification,
         reliability_ci_low=ci.low,
         reliability_ci_high=ci.high,
+        consistency_probed=consistency_probed,
     )
 
 
@@ -214,6 +248,7 @@ _CLASSIFICATION_MARK = {
     "fragile": "FRAGILE",
     "gap": "GAP",
     INSUFFICIENT_DATA: "n/a (too few clusters)",
+    ACCURACY_ONLY: "ACCURACY-ONLY (consistency untested)",
 }
 
 
@@ -240,7 +275,9 @@ def render_atlas_markdown(report: AtlasReport) -> str:
             "",
             f"**Legend** — GENUINE (R>=0.50), PARTIAL (0.30-0.50), "
             "FRAGILE (R<0.30 with high accuracy = memorisation signature), GAP (skill absent), "
-            f"n/a (fewer than {MIN_CLUSTERS_FOR_VERDICT} clusters — verdict withheld).",
+            f"n/a (fewer than {MIN_CLUSTERS_FOR_VERDICT} clusters — verdict withheld), "
+            "ACCURACY-ONLY (no answer-preserving variants generated, so consistency is trivially "
+            "1.0 and reliability == accuracy — the memorisation signal is untested for this cell).",
             "",
         ]
     )

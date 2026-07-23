@@ -284,7 +284,7 @@ The updated **FAISS library paper** (Douze et al., 2024; arXiv:2401.08281) docum
 Instella-3B is a decoder-only Transformer with:
 
 - **Parameters:** 3 billion
-- **Architecture:** 36 decoder layers, 32 attention heads, 3,072 hidden dimension
+- **Architecture:** 36 decoder layers, 32 attention heads, 2,560 hidden dimension
 - **Context length:** 4,096 tokens (base); 128K tokens (Instella-Long)
 - **Tokenizer:** OLMo tokenizer (~50K vocabulary)
 - **Training hardware:** 128 AMD Instinct MI300X GPUs
