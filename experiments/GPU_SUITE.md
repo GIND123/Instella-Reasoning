@@ -63,9 +63,46 @@ Artifacts land in `experiments/runs/reliability-B<items>-K<numeric>/`: `base/`, 
   the emergence JSON now carries `consistency_probed: false` to flag these as
   accuracy-only, not measured reasoning emergence.
 
-## Then bring results back for analysis
+## Auto-save to Hugging Face + cross-machine resume (reliability suite)
 
-Copy `experiments/runs/<date>_gpu-suite/scores/` and `atlas/` back into the repo, and the
+`run_reliability_suite.sh` mirrors its run directory to a private HF **dataset** repo (default
+`GOVINDFROM/Instella-Reasoning`) via [`hf_sync.py`](hf_sync.py), so no GPU hours are ever
+re-spent — by you across Colab timeouts, or by a teammate on another machine.
+
+**Lifecycle**
+
+1. **Pull at start** — `hf_sync.py pull` snapshots the run dir back down. The remote path
+   mirrors the local path (`experiments/runs/<name>`), so several runs coexist.
+2. **Resume markers** — each finished `(model, benchmark)` writes `scores/<model>__<bench>.jsonl`;
+   the loop `[[ -s "$sco" ]] && skip`, so restored work is skipped and generation continues
+   at the first gap.
+3. **Push as it runs** — after the CPU prep (contamination + variants), after every
+   `(model, benchmark)`, after each atlas, and once at the end. Worst-case loss on a crash is
+   the single benchmark in flight.
+
+**GPU-hour budget** (single T4, conservative 6 s/item default): the script prints an estimate
+on startup and warns past ~9 h. `gens = base × (1+4+numeric_k) × models × benchmarks`.
+Defaults (GSM8K, 120 items, 4 models) ≈ 8 h; GSM8K+MATH ≈ 16 h — both inside a 20-h
+budget before setup overhead. Time a `BASE_ITEMS=15` sanity pass first, then set
+`SECONDS_PER_ITEM` to your measured rate.
+
+**Env knobs:** `HF_RESULTS_REPO`, `HF_SYNC=0` (disable), `HF_INCLUDE_GENERATIONS=1` (also
+upload raw generations — bulky; scores alone suffice to resume), `BASE_ITEMS`, `NUMERIC_K`,
+`BENCHMARKS`, `SUITE_MODELS` (split models across sessions), `SECONDS_PER_ITEM`, `CORPUS_LIMIT`.
+Auth: `HF_TOKEN` (from the Colab `hf` secret) must have **write** access.
+
+**Manual sync** (bring a finished run onto a laptop for analysis, or seed the repo):
+
+```bash
+python experiments/hf_sync.py pull --repo GOVINDFROM/Instella-Reasoning \
+  --path experiments/runs/reliability-B120-K5
+python experiments/hf_sync.py push --repo GOVINDFROM/Instella-Reasoning \
+  --path experiments/runs/reliability-B120-K5 --message "manual checkpoint"
+```
+
+## Then bring results back for analysis (base suite)
+
+Or copy `experiments/runs/<date>_gpu-suite/scores/` and `atlas/` back into the repo, and the
 CPU-side analysis (accuracy-gap, difficulty-stratified gap, report, figures) can run on a
 laptop:
 

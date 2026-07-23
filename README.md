@@ -226,6 +226,83 @@ instella-reasoning run-all --config configs/pipeline/rigorous.yaml
 See [`docs/DATA_DOWNLOAD.md`](docs/DATA_DOWNLOAD.md) for the complete AMD data procedure
 and licensing before a full download.
 
+### D. The reliability run — the headline result (≤20 GPU-h, auto-saving, resumable)
+
+Blocks A–C measure **accuracy**. The paper's actual claim (reasoning vs memorising) needs
+**consistency**, which requires generating each model over *variant clusters*, not base
+items. [`experiments/run_reliability_suite.sh`](experiments/run_reliability_suite.sh) does
+exactly that — contamination index → variant clusters → generate-over-variants → score →
+atlas (consistency-probed) → difficulty-adjusted gap → emergence → report + figures — and
+**periodically saves every artifact to Hugging Face so any teammate can resume where the
+last session stopped, never re-spending GPU hours.**
+
+#### GPU-hour budget (single T4)
+
+Time is dominated by generation. `gens = base_items × (1 + 4 surface + numeric_k) × models
+× benchmarks`. The runner conservatively defaults to **6 s/item** on a T4 (blend of
+OLMo-1B, 4-bit 3B, and full-precision 3B); replace this assumption with the sanity run's
+measured rate. The suite prints its estimate on startup and warns past ~9 h.
+
+| Config (all 4 models) | generations | ~time @6s | fits 20 h? |
+|---|---:|---:|:--:|
+| **GSM8K only, 120 items** (default) | 4,800 | **~8 h** | ✅ |
+| GSM8K only, 200 items | 8,000 | ~13.3 h | ✅ |
+| **GSM8K + MATH, 120 items** (recommended) | 9,600 | **~16 h** | ✅ tight |
+| GSM8K + MATH + LogiQA2, 120 items | 14,400 | ~24 h | ❌ trim/split |
+| Instruct only, GSM8K, 120 items (smoke) | 1,200 | ~2 h | ✅ |
+
+> **Calibrate before you commit the budget.** Run a `BASE_ITEMS=15` sanity pass (~15 min),
+> read the reported wall-clock, then set `SECONDS_PER_ITEM` to your measured rate so the
+> printed estimate is accurate for your hardware. Split the four models across sessions with
+> `SUITE_MODELS` (e.g. `SUITE_MODELS="instruct"`) — they all write to the same run dir and
+> the HF sync stitches the pieces together.
+
+#### One Colab cell (Runtime → T4 GPU first)
+
+Assumes your **GitHub token** is in Colab Secrets as **`github`** (only needed if the repo is
+private) and your **Hugging Face token** as **`hf`** (needs *write* access, since results are
+pushed to your dataset repo).
+
+```python
+import os, subprocess
+from google.colab import userdata
+
+# 1) Clone. Public repo: the plain clone works. Private repo: uncomment the token form.
+!git clone https://github.com/GIND123/Instella-Reasoning
+# tok = userdata.get("github")
+# subprocess.run(["git","clone",
+#   f"https://x-access-token:{tok}@github.com/GIND123/Instella-Reasoning.git"], check=True)
+%cd Instella-Reasoning
+
+# 2) Install (hf extra brings huggingface_hub used by the result sync) + 4-bit loader.
+!pip install -q -e ".[hf,retrieval,viz,stats]" && pip install -q "bitsandbytes>=0.46.1"
+
+# 3) Tokens from Colab Secrets. HF_TOKEN drives both model downloads AND the result sync.
+os.environ["HF_TOKEN"] = userdata.get("hf")          # HF secret named "hf" (write access)
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
+# 4) Run. Defaults = GSM8K, 120 items, 4 models (~8 GPU-h). Results stream to HF as they
+#    finish; a reclaimed VM just re-runs this cell and continues from the last checkpoint.
+!BENCHMARKS="gsm8k math" bash experiments/run_reliability_suite.sh
+```
+
+#### How the auto-save + resume works (for the whole team)
+
+- **On start** the suite *pulls* the run directory from the private
+  `GOVINDFROM/Instella-Reasoning` dataset on Hugging Face. Each finished
+  `(model, benchmark)` has a score file that acts as a
+  **completion marker**, so generation skips whatever is already done.
+- **As it runs** it *pushes* after every `(model, benchmark)`, after each atlas, and at the
+  end — so a Colab timeout, VM recycle, or a teammate picking it up on another machine
+  **loses at most the one benchmark in flight**, never the whole run.
+- **Any teammate** runs the *same cell* (with their own `hf` secret) and it fast-forwards to
+  the first unfinished piece. No coordination needed; no GPU hours wasted re-generating.
+
+Knobs (env vars): `HF_RESULTS_REPO` (default `GOVINDFROM/Instella-Reasoning`),
+`HF_SYNC=0` to disable syncing, `HF_INCLUDE_GENERATIONS=1` to also upload the bulky raw
+generations (scores alone are enough to resume), `BASE_ITEMS`, `NUMERIC_K`, `BENCHMARKS`,
+`SUITE_MODELS`, `SECONDS_PER_ITEM`. Full mechanics: [`experiments/GPU_SUITE.md`](experiments/GPU_SUITE.md).
+
 ### Research-grade run (headline numbers)
 
 For results you intend to report, the pipeline adds methodology controls that keep

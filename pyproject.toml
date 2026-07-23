@@ -25,6 +25,7 @@ dev = [
 hf = [
   "accelerate>=0.30.0",
   "datasets>=2.19.0",
+  "huggingface-hub>=0.23.0",
   "safetensors>=0.4.3",
   # Upper bound is load-bearing: AMD Instella ships custom remote modeling code
   # (modeling_instella.py, trust_remote_code=True) written for the 4.4x attention-mask /
