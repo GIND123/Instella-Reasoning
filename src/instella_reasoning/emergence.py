@@ -299,14 +299,39 @@ def _max_numbers_per_step(steps: list[str]) -> int:
     return max((len(_NUMBER.findall(step)) for step in steps), default=0)
 
 
+def atlas_consistency_probed(*reports: AtlasReport) -> bool:
+    """True iff every given atlas has at least one cell that probed consistency.
+
+    When this is False the atlases were built from base benchmarks only (no answer-
+    preserving variants), so every 'reliability' equals plain accuracy and the
+    transition/RL verdicts below describe an *accuracy* curve, not a reasoning one.
+    """
+    return bool(reports) and all(
+        any(cell.consistency_probed for cell in report.cells) for report in reports
+    )
+
+
 @dataclass(slots=True)
 class EmergenceReport:
     transitions: list[Transition] = field(default_factory=list)
     rl_effects: list[RLEffect] = field(default_factory=list)
     rl_generalization: dict = field(default_factory=dict)
+    # False when the underlying atlases have no answer-preserving variants: every
+    # reliability collapses to accuracy, so these verdicts are accuracy-only (see
+    # :func:`atlas_consistency_probed`). Surfaced so no reader mistakes this for a
+    # measured reasoning-emergence result.
+    consistency_probed: bool = True
 
     def to_dict(self) -> dict:
         return {
+            "consistency_probed": self.consistency_probed,
+            "reliability_note": (
+                None
+                if self.consistency_probed
+                else "consistency was NOT probed (no answer-preserving variants); every "
+                "reliability below equals accuracy and these transition/RL verdicts are "
+                "accuracy-only, not measured reasoning emergence"
+            ),
             "transitions": [t.to_dict() for t in self.transitions],
             "rl_effects": [e.to_dict() for e in self.rl_effects],
             "rl_generalization": self.rl_generalization,

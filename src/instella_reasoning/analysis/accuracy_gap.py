@@ -45,6 +45,14 @@ def _canonical_label(label: str) -> str:
     return "clean"
 
 
+def _record_contamination_label(
+    record: EvaluationRecord,
+    labels: dict[str, str],
+) -> str:
+    """Resolve contamination for an original item or one of its variants."""
+    return labels.get(record.benchmark_id, labels.get(record.parent_id, "clean"))
+
+
 def _normal_sf(z: float) -> float:
     """One-sided survival function of the standard normal (1 - CDF)."""
     return 0.5 * math.erfc(z / math.sqrt(2.0))
@@ -130,7 +138,7 @@ def compute_accuracy_gap(
 
     grouped: dict[str, list[tuple[str, bool]]] = defaultdict(list)
     for record in scores:
-        label = labels.get(record.benchmark_id, "clean")
+        label = _record_contamination_label(record, labels)
         benchmark = str(record.metadata.get("benchmark", "unknown")) if per_benchmark else "all"
         model = record.model if per_model else "all"
         scope = f"{benchmark}::{model}"
@@ -263,13 +271,13 @@ def compute_stratified_accuracy_gap(
     # Group records by scope, carrying (parent_id, difficulty_bin, label, correct).
     grouped: dict[str, list[tuple[str, int, str, bool]]] = defaultdict(list)
     for record in scores:
-        label = labels.get(record.benchmark_id, "clean")
+        label = _record_contamination_label(record, labels)
         if label == "partial":
             continue  # gap contrasts contaminated vs clean; partial is excluded
         benchmark = str(record.metadata.get("benchmark", "unknown")) if per_benchmark else "all"
         model = record.model if per_model else "all"
         scope = f"{benchmark}::{model}"
-        bin_id = difficulty_bins.get(record.benchmark_id, 0)
+        bin_id = difficulty_bins.get(record.benchmark_id, difficulty_bins.get(record.parent_id, 0))
         parent = record.parent_id or record.benchmark_id
         grouped[scope].append((parent, bin_id, label, record.correct))
 

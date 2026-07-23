@@ -75,11 +75,44 @@ def test_atlas_cell_carries_reliability_ci() -> None:
     assert "reliability_ci" in cell.to_dict()
 
 
-def test_verdict_withheld_below_min_clusters() -> None:
-    # A single cluster cannot support a categorical verdict -> insufficient_data.
-    one = build_atlas([_eval("gsm_1", "original", True, "16", "arithmetic")], [])
+def test_singleton_clusters_are_accuracy_only() -> None:
+    # No answer-preserving variants exist -> consistency is trivially 1.0 and untested, so
+    # no reasoning verdict may be emitted regardless of how many singleton clusters there are.
+    scores = [_eval(f"gsm_{i}", "original", True, "16", "arithmetic") for i in range(5)]
+    report = build_atlas(scores, [], min_clusters_for_verdict=3)
+    cell = report.cell("arithmetic", "all")
+    assert cell.classification == "accuracy_only"
+    assert cell.consistency_probed is False
+    assert cell.to_dict()["consistency_probed"] is False
+
+
+def test_verdict_emitted_once_variants_are_present() -> None:
+    # A cell with real answer-preserving variants probes consistency and earns a verdict.
+    scores = []
+    for i in range(3):
+        scores.append(_eval(f"gsm_{i}", "original", True, "16", "arithmetic"))
+        scores.append(_eval(f"gsm_{i}", "entity_substitution", True, "16", "arithmetic"))
+    report = build_atlas(scores, [], min_clusters_for_verdict=3)
+    cell = report.cell("arithmetic", "all")
+    assert cell.consistency_probed is True
+    assert cell.classification == "genuine"
+    # Below the cluster floor the verdict is still withheld even when consistency is probed.
+    one = build_atlas(
+        [
+            _eval("gsm_1", "original", True, "16", "arithmetic"),
+            _eval("gsm_1", "entity_substitution", True, "16", "arithmetic"),
+        ],
+        [],
+    )
     assert one.cell("arithmetic", "all").classification == "insufficient_data"
-    # With enough clusters and a lenient gate, a real verdict is emitted.
-    scores = [_eval(f"gsm_{i}", "original", True, "16", "arithmetic") for i in range(3)]
-    many = build_atlas(scores, [], min_clusters_for_verdict=3)
-    assert many.cell("arithmetic", "all").classification == "genuine"
+
+
+def test_answer_changing_variants_alone_do_not_probe_consistency() -> None:
+    scores = [
+        _eval("gsm_1", "numeric_perturbation", True, "20", "arithmetic"),
+        _eval("gsm_1", "gsm_symbolic", True, "24", "arithmetic"),
+    ]
+    cell = build_atlas(scores, []).cell("arithmetic", "all")
+    assert cell is not None
+    assert cell.consistency_probed is False
+    assert cell.classification == "accuracy_only"

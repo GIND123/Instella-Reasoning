@@ -11,7 +11,8 @@
         0.455,
         0.585
       ],
-      "classification": "genuine"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "arithmetic",
@@ -24,7 +25,8 @@
         1.0,
         1.0
       ],
-      "classification": "insufficient_data"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "arithmetic",
@@ -37,7 +39,8 @@
         0.449495,
         0.580934
       ],
-      "classification": "genuine"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "commonsense_science",
@@ -50,7 +53,8 @@
         0.26,
         0.39
       ],
-      "classification": "partial"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "commonsense_science",
@@ -63,7 +67,8 @@
         0.26,
         0.39
       ],
-      "classification": "partial"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "logical_deduction",
@@ -76,7 +81,8 @@
         0.21,
         0.335
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "logical_deduction",
@@ -89,7 +95,8 @@
         0.21,
         0.335
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "logical_reading",
@@ -102,7 +109,8 @@
         0.25,
         0.38
       ],
-      "classification": "partial"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "logical_reading",
@@ -115,7 +123,8 @@
         0.25,
         0.38
       ],
-      "classification": "partial"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "mathematical",
@@ -128,7 +137,8 @@
         0.05,
         0.13
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "mathematical",
@@ -141,7 +151,8 @@
         0.05,
         0.13
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "multi_step",
@@ -154,7 +165,8 @@
         0.015,
         0.07
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     },
     {
       "skill": "multi_step",
@@ -167,7 +179,8 @@
         0.015,
         0.07
       ],
-      "classification": "gap"
+      "consistency_probed": false,
+      "classification": "accuracy_only"
     }
   ]
 }

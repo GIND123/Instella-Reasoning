@@ -1,4 +1,6 @@
 {
+  "consistency_probed": false,
+  "reliability_note": "consistency was NOT probed (no answer-preserving variants); every reliability below equals accuracy and these transition/RL verdicts are accuracy-only, not measured reasoning emergence",
   "transitions": [
     {
       "skill": "arithmetic",

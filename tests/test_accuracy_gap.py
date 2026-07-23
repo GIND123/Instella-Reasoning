@@ -19,11 +19,17 @@ def _hit(benchmark_id: str, label: str) -> ContaminationHit:
     )
 
 
-def _eval(benchmark_id: str, correct: bool, benchmark: str = "gsm8k", model: str = "m") -> EvaluationRecord:
+def _eval(
+    benchmark_id: str,
+    correct: bool,
+    benchmark: str = "gsm8k",
+    model: str = "m",
+    parent_id: str | None = None,
+) -> EvaluationRecord:
     return EvaluationRecord(
         benchmark_id=benchmark_id,
-        parent_id=benchmark_id,
-        variant_type="original",
+        parent_id=parent_id or benchmark_id,
+        variant_type="rephrase" if parent_id else "original",
         expected="1",
         predicted="1" if correct else "0",
         normalized_expected="1",
@@ -77,3 +83,14 @@ def test_compute_accuracy_gap_splits_by_label() -> None:
     assert result.by_label["contaminated"].accuracy == 1.0
     assert result.by_label["clean"].accuracy == 0.0
     assert result.gap == 1.0
+
+
+def test_variant_inherits_parent_contamination_label() -> None:
+    scores = [
+        _eval("q1__rephrase", True, parent_id="q1"),
+        _eval("q2__rephrase", False, parent_id="q2"),
+    ]
+    result = compute_accuracy_gap(scores, [_hit("q1", "contaminated")])[0]
+    assert result.by_label["contaminated"].total == 1
+    assert result.by_label["contaminated"].accuracy == 1.0
+    assert result.by_label["clean"].total == 1

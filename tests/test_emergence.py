@@ -1,6 +1,7 @@
 from instella_reasoning.analysis.atlas import AtlasCell, AtlasReport
 from instella_reasoning.emergence import (
     analyze_rl_effect,
+    atlas_consistency_probed,
     capability_transitions,
     classify_divergence,
     classify_transition,
@@ -32,6 +33,15 @@ def test_capability_transitions_across_models() -> None:
     by_skill = {t.skill: t for t in transitions}
     assert by_skill["arithmetic"].transition_class == "emergent"
     assert by_skill["arithmetic"].delta > 0
+
+
+def test_consistency_probe_requires_every_compared_atlas() -> None:
+    first = _report({"arithmetic": (0.5, 0.8, 0.4)})
+    second = _report({"arithmetic": (0.6, 0.9, 0.54)})
+    first.cells[0].consistency_probed = True
+    assert atlas_consistency_probed(first, second) is False
+    second.cells[0].consistency_probed = True
+    assert atlas_consistency_probed(first, second) is True
 
 
 def test_schaeffer_flags_metric_artifact() -> None:

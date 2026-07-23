@@ -26,14 +26,21 @@ and `atlas/` are committed.
   may be answer-format/extraction, not pure capability loss — needs a spot-check before this
   is stated as a finding.
 
-## IMPORTANT LIMITATION — reliability is not yet measured
+## IMPORTANT LIMITATION — reliability is not yet measured (now encoded in the atlas)
 
 The atlas reports **consistency = 1.000 for every cell**, so Reliability collapses to plain
 Accuracy. That is because this run generated on the **base benchmarks only** — the
 semantics-preserving **variant clusters were not generated**, so each "cluster" is a single
 item and consistency is trivially perfect. The memorization-vs-reasoning signal (the study's
-core contribution, A2/A3) is therefore **not yet tested**. Closing it requires generating the
-models over the `make-variants` output (numeric + surface variants), then re-atlasing.
+core contribution, A2/A3) is therefore **not yet tested**.
+
+As of the atlas-honesty fix, every cell here is labelled **`ACCURACY-ONLY (consistency
+untested)`** instead of GENUINE/FRAGILE — the atlas will no longer emit a reasoning verdict
+from a base-only run (see `analysis/atlas.py::MIN_VARIANTS_FOR_CONSISTENCY`). Likewise
+`emergence.json` now carries `consistency_probed: false`. To actually measure reliability,
+run **`experiments/run_reliability_suite.sh`** (configured to target a 10-hour GPU budget):
+it generates over the `make-variants` clusters and re-atlases, at which point the verdicts
+become earned. Time its sanity pass before relying on the estimate.
 
 ## Contamination cross-reference is thin
 
