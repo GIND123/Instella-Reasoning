@@ -43,3 +43,5 @@ mlruns/
 
 # GPU-suite raw generations are bulky and re-derivable from scores
 experiments/runs/*/generations/
+# Contamination corpus snapshot is ~1.5 GB and re-downloadable from HF
+experiments/runs/*/contamination/synthetic_corpus.jsonl

@@ -1,0 +1,26 @@
+[
+  {
+    "scope": "gsm8k::amd/Instella-3B-Instruct",
+    "gap": 0.0,
+    "z": 0.0,
+    "p_value": 1.0,
+    "q_value": 1.0,
+    "groups": {
+      "contaminated": {
+        "total": 0,
+        "correct": 0,
+        "accuracy": 0.0
+      },
+      "partial": {
+        "total": 158,
+        "correct": 98,
+        "accuracy": 0.620253
+      },
+      "clean": {
+        "total": 398,
+        "correct": 263,
+        "accuracy": 0.660804
+      }
+    }
+  }
+]

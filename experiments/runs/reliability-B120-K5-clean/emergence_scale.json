@@ -1,0 +1,17 @@
+{
+  "consistency_probed": true,
+  "reliability_note": null,
+  "transitions": [
+    {
+      "skill": "arithmetic",
+      "small_model": "OLMo-1B",
+      "large_model": "Instella-3B",
+      "small_reliability": 0.00353,
+      "large_reliability": 0.409565,
+      "delta": 0.406035,
+      "transition_class": "amplified"
+    }
+  ],
+  "rl_effects": [],
+  "rl_generalization": {}
+}

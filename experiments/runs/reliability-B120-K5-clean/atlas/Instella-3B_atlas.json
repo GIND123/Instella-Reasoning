@@ -1,0 +1,46 @@
+{
+  "cells": [
+    {
+      "skill": "arithmetic",
+      "contamination_level": "all",
+      "n_clusters": 120,
+      "accuracy": 0.482731,
+      "consistency": 0.686111,
+      "reliability": 0.409565,
+      "reliability_ci": [
+        0.340963,
+        0.479387
+      ],
+      "consistency_probed": true,
+      "classification": "partial"
+    },
+    {
+      "skill": "arithmetic",
+      "contamination_level": "partial",
+      "n_clusters": 33,
+      "accuracy": 0.5829,
+      "consistency": 0.705556,
+      "reliability": 0.5145,
+      "reliability_ci": [
+        0.376684,
+        0.656862
+      ],
+      "consistency_probed": true,
+      "classification": "genuine"
+    },
+    {
+      "skill": "arithmetic",
+      "contamination_level": "clean",
+      "n_clusters": 87,
+      "accuracy": 0.444736,
+      "consistency": 0.678736,
+      "reliability": 0.369762,
+      "reliability_ci": [
+        0.294479,
+        0.452589
+      ],
+      "consistency_probed": true,
+      "classification": "partial"
+    }
+  ]
+}
