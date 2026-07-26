@@ -1,0 +1,53 @@
+[
+  {
+    "scope": "gsm8k::amd/Instella-3B-Instruct",
+    "unadjusted_gap": 0.0,
+    "pooled_gap_difficulty_adjusted": 0.0,
+    "cluster_bootstrap_ci": [
+      0.0,
+      0.0
+    ],
+    "n_clusters": 87,
+    "strata": [
+      {
+        "difficulty_bin": 0,
+        "contaminated": {
+          "n": 0,
+          "acc": 0.0
+        },
+        "clean": {
+          "n": 143,
+          "acc": 0.678322
+        },
+        "gap": 0.0,
+        "weight": 0.0
+      },
+      {
+        "difficulty_bin": 1,
+        "contaminated": {
+          "n": 0,
+          "acc": 0.0
+        },
+        "clean": {
+          "n": 146,
+          "acc": 0.732877
+        },
+        "gap": 0.0,
+        "weight": 0.0
+      },
+      {
+        "difficulty_bin": 2,
+        "contaminated": {
+          "n": 0,
+          "acc": 0.0
+        },
+        "clean": {
+          "n": 109,
+          "acc": 0.541284
+        },
+        "gap": 0.0,
+        "weight": 0.0
+      }
+    ]
+  }
+]

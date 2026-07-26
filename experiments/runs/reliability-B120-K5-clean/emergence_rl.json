@@ -1,0 +1,30 @@
+{
+  "consistency_probed": true,
+  "reliability_note": null,
+  "transitions": [
+    {
+      "skill": "arithmetic",
+      "small_model": "Instella-3B-Instruct",
+      "large_model": "Instella-3B-Math",
+      "small_reliability": 0.590043,
+      "large_reliability": 0.129299,
+      "delta": -0.460744,
+      "transition_class": "amplified"
+    }
+  ],
+  "rl_effects": [
+    {
+      "skill": "arithmetic",
+      "delta_accuracy": -0.433552,
+      "delta_consistency": -0.289028,
+      "delta_reliability": -0.460744,
+      "verdict": "regression"
+    }
+  ],
+  "rl_generalization": {
+    "math_reliability_gain": -0.460744,
+    "non_math_reliability_gain": 0.0,
+    "domain_specific": false,
+    "verdict": "general_or_none"
+  }
+}
