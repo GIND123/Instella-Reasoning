@@ -23,7 +23,7 @@
 > better on problems it *provably memorised*: GSM8K **train** items are verbatim in
 > Instella's stage-2 training data, GSM8K **test** items are not, and membership is
 > verified per item by exact 13-gram containment rather than inferred from an embedding
-> proxy. Crossed with numeric perturbation across the full Instella-3B checkpoint
+> proxy. Crossed with numeric perturbation across the validated Instella-3B checkpoint
 > trajectory, the difference-in-differences isolates the memorisation component and cancels
 > the magnitude confound.
 >
@@ -35,6 +35,60 @@
 > The earlier `reliability-B*` runs under `experiments/runs/` are **superseded pilots**;
 > [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) explains why four of their five
 > headline findings are artifacts. Do not cite those numbers.
+
+## Current validated full-scale workflow
+
+**This is the authoritative handoff for agents and Colab operators.** Use
+[`notebooks/fullscale_colab.ipynb`](notebooks/fullscale_colab.ipynb) and
+[`experiments/run_fullscale_suite.sh`](experiments/run_fullscale_suite.sh) for the headline
+run. The generic Atlas demo and superseded reliability examples later in this README are not
+the current experiment.
+
+- **Headline scope:** `SUITE_TIER=1` runs `stage1`, `stage2`, and `instruct`. This preserves
+  the controlled Stage-1 → Stage-2 intervention where GSM8K-derived data enters, plus the
+  aligned Instruct endpoint. The costed run is about 10.5 GPU-hours on the measured hardware.
+- **Math is diagnostic-only:** `math` moved to `SUITE_TIER=2` after live smoke tests reached
+  only 75% semantic completion even at 3072 tokens. Do not lower or bypass the 85%
+  completion gate to force it into headline results.
+- **Completion semantics:** a generation is complete when it emits EOS, reaches the `####`
+  final-answer marker, or crosses into the next few-shot exemplar. This prevents valid base
+  checkpoint answers from being mislabeled as token-cap truncations.
+- **Colab secrets:** add `github` (GitHub repo read access) and `hf` (Hugging Face write
+  access). The notebook authenticates Git with an in-memory HTTP header; do not put either
+  token in a remote URL or printed command.
+- **Hugging Face destination:** results live in the private dataset repo
+  `GOVINDFROM/Instella-Reasoning`, under
+  `experiments/runs/fullscale-S250/`. The successful preflight report is
+  `analysis/preflight.json` inside that run path.
+- **Cross-runtime resume:** the suite pulls this run directory before starting and pushes
+  after every completed preparation stage and `(checkpoint, block)`, including raw
+  generations by default. Re-run the same launch cell in a new Colab environment to resume.
+  Work in the currently active block remains local until that block finishes.
+
+Required gate and launch:
+
+```bash
+export OUT=experiments/runs/fullscale-S250
+export SUITE_TIER=1
+export HF_RESULTS_REPO=GOVINDFROM/Instella-Reasoning
+
+python scripts/preflight_fullscale.py --smoke --tier 1 \
+  --out "$OUT" --repo "$HF_RESULTS_REPO" \
+  --json "$OUT/analysis/preflight.json"
+# Continue only after: SAFE TO LAUNCH
+
+python experiments/hf_sync.py push \
+  --repo "$HF_RESULTS_REPO" --path "$OUT" \
+  --message "successful Tier-1 preflight"
+
+bash experiments/run_fullscale_suite.sh
+```
+
+On a fresh Pro runtime, clone or pull `main`, install
+`.[hf,retrieval,viz,stats]`, expose the same `hf` secret as `HF_TOKEN`, and run the same
+launch command with the same `OUT`. The initial HF pull restores completed work. Full design,
+budget, artifacts, and failure gates are documented in
+[`experiments/FULLSCALE.md`](experiments/FULLSCALE.md).
 
 When a language model answers a reasoning problem correctly, **accuracy alone cannot
 tell you whether it reasoned or remembered.** Instella is one of the very few
