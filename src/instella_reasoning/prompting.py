@@ -30,17 +30,111 @@ MC_SUFFIX = (
 YESNO_SUFFIX = "\nThink step by step, then answer 'yes' or 'no' after '####'."
 
 
-def build_prompt(item: BenchmarkItem) -> str:
-    """Wrap a benchmark prompt with the chain-of-thought instruction for its type."""
+# -- few-shot exemplars --------------------------------------------------------
+#
+# Base (non-instruction-tuned) checkpoints cannot follow a zero-shot CoT instruction:
+# measured on this repo's own run, AMD-OLMo-1B produced degenerate loops on 408/556 items
+# and emitted the '####' marker on 2%. Comparing a base checkpoint to an instruction-tuned
+# one under zero-shot prompting measures instruction-following, not reasoning, which
+# silently confounds every scale and post-training claim.
+#
+# Exemplars are hand-written in the style of Wei et al. (2022) rather than sampled from
+# GSM8K, deliberately: this study's treatment variable is whether a *benchmark item* was
+# in training, so putting real GSM8K items in the prompt would contaminate the prompt with
+# the very thing being measured.
+
+_ARITHMETIC_SHOTS: tuple[tuple[str, str], ...] = (
+    (
+        "A baker has 5 trays with 8 muffins on each tray. He sells 17 muffins. "
+        "How many muffins are left?",
+        "The baker starts with 5 * 8 = 40 muffins.\n"
+        "After selling 17, he has 40 - 17 = 23 muffins left.\n#### 23",
+    ),
+    (
+        "Maria reads 12 pages every night. Her book has 96 pages. "
+        "How many nights will it take her to finish?",
+        "Each night Maria reads 12 pages.\n"
+        "To finish 96 pages she needs 96 / 12 = 8 nights.\n#### 8",
+    ),
+    (
+        "A shirt costs $24. It is on sale for a quarter off. How much does it cost now?",
+        "A quarter of $24 is 24 / 4 = $6.\n"
+        "So the sale price is 24 - 6 = $18.\n#### 18",
+    ),
+    (
+        "Tom has 3 boxes of pencils with 15 pencils each, and he buys 20 more pencils. "
+        "How many pencils does he have?",
+        "The boxes hold 3 * 15 = 45 pencils.\n"
+        "Adding the 20 he bought gives 45 + 20 = 65 pencils.\n#### 65",
+    ),
+)
+
+_MC_SHOTS: tuple[tuple[str, str], ...] = (
+    (
+        "Which object is the best conductor of electricity?\n"
+        "A. a rubber band\nB. a copper wire\nC. a glass rod\nD. a wooden spoon",
+        "Metals conduct electricity well, and copper is a metal.\n"
+        "Rubber, glass, and wood are insulators.\n#### B",
+    ),
+    (
+        "All birds have feathers. A robin is a bird. What follows?\n"
+        "A. A robin has feathers.\nB. A robin can swim.\n"
+        "C. All feathered animals are robins.\nD. Nothing follows.",
+        "Every bird has feathers, and a robin is a bird.\n"
+        "So a robin must have feathers.\n#### A",
+    ),
+)
+
+_YESNO_SHOTS: tuple[tuple[str, str], ...] = (
+    ("Is the expression ( True and False ) or True true or false?",
+     "( True and False ) is False.\nFalse or True is True.\n#### yes"),
+    ("Is the expression not ( True or False ) true or false?",
+     "( True or False ) is True.\nnot True is False.\n#### no"),
+)
+
+
+def _render_shots(shots: tuple[tuple[str, str], ...], n_shot: int) -> str:
+    used = shots[: max(0, n_shot)]
+    if not used:
+        return ""
+    blocks = [f"Question: {q}\nAnswer: {a}" for q, a in used]
+    return "\n\n".join(blocks) + "\n\n"
+
+
+def _shots_for(item: BenchmarkItem) -> tuple[tuple[str, str], ...]:
+    benchmark = str(item.metadata.get("benchmark", ""))
+    if benchmark in {"arc_challenge", "logiqa2", "reclor"} or "choices" in item.metadata:
+        return _MC_SHOTS
+    if benchmark == "bbh" and _looks_like_yes_no(item):
+        return _YESNO_SHOTS
+    return _ARITHMETIC_SHOTS
+
+
+def build_prompt(item: BenchmarkItem, n_shot: int = 0) -> str:
+    """Wrap a benchmark prompt with the chain-of-thought instruction for its type.
+
+    ``n_shot`` > 0 prepends worked exemplars in a ``Question:``/``Answer:`` format and
+    frames the item the same way, which is what makes a base checkpoint emit a parseable
+    final answer instead of looping. Instruction-tuned checkpoints should stay at
+    ``n_shot=0`` and use their chat template.
+    """
     benchmark = str(item.metadata.get("benchmark", ""))
     skill = str(item.metadata.get("skill", ""))
     if benchmark in {"arc_challenge", "logiqa2", "reclor"} or "choices" in item.metadata:
-        return item.prompt + MC_SUFFIX
-    if benchmark == "bbh" and _looks_like_yes_no(item):
-        return item.prompt + YESNO_SUFFIX
-    if skill in {"arithmetic", "mathematical"} or benchmark in {"gsm8k", "math"}:
-        return item.prompt + COT_SUFFIX
-    return item.prompt + COT_SUFFIX
+        suffix = MC_SUFFIX
+    elif benchmark == "bbh" and _looks_like_yes_no(item):
+        suffix = YESNO_SUFFIX
+    elif skill in {"arithmetic", "mathematical"} or benchmark in {"gsm8k", "math"}:
+        suffix = COT_SUFFIX
+    else:
+        suffix = COT_SUFFIX
+
+    if n_shot > 0:
+        preamble = _render_shots(_shots_for(item), n_shot)
+        # The trailing "Answer:" is load-bearing: it puts the model in completion mode so
+        # it continues the pattern rather than restating the question.
+        return f"{preamble}Question: {item.prompt}{suffix}\nAnswer:"
+    return item.prompt + suffix
 
 
 def _looks_like_yes_no(item: BenchmarkItem) -> bool:

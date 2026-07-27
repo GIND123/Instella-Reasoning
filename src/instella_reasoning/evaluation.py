@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict
+import re
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from instella_reasoning.answer_equivalence import answers_equivalent, resolve_answer_kind
@@ -15,6 +16,80 @@ from instella_reasoning.records import (
     write_jsonl,
 )
 from instella_reasoning.text import normalize_text
+
+#: A completed generation run must clear this natural-termination rate, or the accuracy it
+#: produces is an artifact of the token budget rather than a property of the model.
+MIN_TERMINATION_RATE = 0.85
+
+# In few-shot mode the model continues the Question/Answer pattern past its own answer.
+# Everything after the next exemplar header belongs to a hallucinated follow-up question,
+# not to this item's response, and would otherwise poison last-number answer extraction.
+_NEXT_EXEMPLAR = re.compile(r"\n\s*(?:Question|Q)\s*:", re.IGNORECASE)
+
+
+def _truncate_at_next_exemplar(completion: str) -> str:
+    match = _NEXT_EXEMPLAR.search(completion)
+    return completion[: match.start()].rstrip() if match else completion
+
+
+@dataclass(slots=True)
+class TerminationReport:
+    """Whether a generation set actually finished, or was cut off at the token cap."""
+
+    model: str
+    n: int
+    n_finished: int
+    n_with_answer_marker: int
+    median_chars: int
+    termination_rate: float
+    marker_rate: float
+    passes: bool
+    threshold: float = MIN_TERMINATION_RATE
+
+    def to_dict(self) -> dict:
+        return {
+            "model": self.model,
+            "n": self.n,
+            "n_finished": self.n_finished,
+            "termination_rate": round(self.termination_rate, 4),
+            "n_with_answer_marker": self.n_with_answer_marker,
+            "marker_rate": round(self.marker_rate, 4),
+            "median_chars": self.median_chars,
+            "threshold": self.threshold,
+            "passes": self.passes,
+        }
+
+
+def termination_report(
+    generations: list[GenerationRecord], threshold: float = MIN_TERMINATION_RATE
+) -> TerminationReport:
+    """Audit a generation set for truncation before its accuracy is believed.
+
+    Two independent signals, because either alone can mislead: ``finished`` (the model
+    emitted EOS) and the presence of the ``####`` final-answer marker. A model that never
+    terminates, or terminates but never emits the marker, is being scored on truncated
+    or unparseable text — which is exactly how a long-CoT checkpoint gets mistaken for a
+    weak one.
+    """
+    if not generations:
+        return TerminationReport("unknown", 0, 0, 0, 0, 0.0, 0.0, False, threshold)
+    model = generations[0].model
+    n = len(generations)
+    n_finished = sum(1 for g in generations if g.metadata.get("finished", True))
+    n_marker = sum(1 for g in generations if "####" in g.completion)
+    lengths = sorted(len(g.completion) for g in generations)
+    rate = n_finished / n
+    return TerminationReport(
+        model=model,
+        n=n,
+        n_finished=n_finished,
+        n_with_answer_marker=n_marker,
+        median_chars=lengths[len(lengths) // 2],
+        termination_rate=rate,
+        marker_rate=n_marker / n,
+        passes=rate >= threshold,
+        threshold=threshold,
+    )
 
 
 def _normalize_final(value: str | None) -> str | None:
@@ -248,6 +323,7 @@ def generate_with_transformers(
     use_chat_template: bool = True,
     dtype: str = "auto",
     revision: str | None = None,
+    n_shot: int = 0,
 ) -> list[GenerationRecord]:
     """Generate model completions with chain-of-thought prompting.
 
@@ -304,7 +380,10 @@ def generate_with_transformers(
     base_dtype = "bf16" if dtype == "auto" else dtype
     precision = "nf4-4bit" if quantized else base_dtype
     do_sample = temperature > 0
-    prompts = [build_prompt(item) if use_cot_prompt else item.prompt for item in pending]
+    prompts = [
+        build_prompt(item, n_shot=n_shot) if use_cot_prompt else item.prompt for item in pending
+    ]
+    eos_id = getattr(tokenizer, "eos_token_id", None)
 
     rows: list[GenerationRecord] = list(existing)
     templated_any = False
@@ -333,7 +412,19 @@ def generate_with_transformers(
         prompt_len = inputs["input_ids"].shape[-1]
         batch_rows: list[GenerationRecord] = []
         for item, sequence in zip(batch_items, tokens, strict=False):
-            completion = tokenizer.decode(sequence[prompt_len:], skip_special_tokens=True)
+            generated = sequence[prompt_len:]
+            # Did the model stop on its own, or did it run out of budget mid-sentence?
+            # This distinction is not cosmetic: at 512 tokens the Math checkpoint hit the
+            # cap on 81% of items, emitted its '####' marker on 2%, and 26% of its
+            # responses contained the gold answer yet scored wrong. Recording it per row
+            # lets `termination_report` gate the run before the numbers are believed.
+            if eos_id is not None:
+                finished = bool((generated == eos_id).any().item())
+            else:  # pragma: no cover - tokenizer without an EOS id
+                finished = int(generated.shape[-1]) < max_new_tokens
+            completion = tokenizer.decode(generated, skip_special_tokens=True)
+            if n_shot > 0:
+                completion = _truncate_at_next_exemplar(completion)
             batch_rows.append(
                 GenerationRecord(
                     benchmark_id=item.id,
@@ -347,6 +438,8 @@ def generate_with_transformers(
                         "revision": revision,  # model commit pinned for reproducibility
                         "cot_prompt": use_cot_prompt,
                         "chat_template": used_template,
+                        "n_shot": n_shot,
+                        "finished": finished,
                     },
                 )
             )

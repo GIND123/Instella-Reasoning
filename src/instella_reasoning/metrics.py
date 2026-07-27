@@ -10,7 +10,13 @@ from instella_reasoning.records import EvaluationRecord
 # they are scored by correctness, not agreement. Answer-preserving perturbations
 # (entity/reorder/distractor/rephrase) keep the gold answer and drive the consistency
 # term. This split fixes the incoherence flagged in reviewer concern M5.
-ANSWER_CHANGING_VARIANTS = frozenset({"gsm_symbolic", "numeric_perturbation"})
+ANSWER_CHANGING_VARIANTS = frozenset(
+    {
+        "gsm_symbolic",  # auto-derived numeric resampling (instella_reasoning.gsm_symbolic)
+        "gsm_symbolic_official",  # Apple's hand-written GSM-Symbolic instances
+        "numeric_perturbation",
+    }
+)
 
 
 def is_answer_changing(record: EvaluationRecord) -> bool:
@@ -30,6 +36,15 @@ class ReliabilitySummary:
     # sentinel -1.0 means "no answer-changing variants in this cluster".
     accuracy_under_perturbation: float = -1.0
     n_answer_changing: int = 0
+    # Secondary metric: agreement of *correctness labels* with the original item, the
+    # definition used in the project proposal. Reported alongside the primary
+    # modal-answer share because the two can disagree and the difference is diagnostic
+    # (see `label_agreement_consistency`).
+    label_agreement: float = -1.0
+    # Consistency restricted to `resample` copies: pure decoding noise, no perturbation.
+    # This is the null against which the perturbation-driven consistency drop is judged.
+    decoding_consistency: float = -1.0
+    n_resample: int = 0
 
 
 def cluster_consistency(records: list[EvaluationRecord]) -> float:
@@ -44,6 +59,36 @@ def cluster_consistency(records: list[EvaluationRecord]) -> float:
         return 0.0
     answer_counts = Counter(r.normalized_predicted for r in pool)
     return max(answer_counts.values()) / len(pool)
+
+
+def label_agreement_consistency(records: list[EvaluationRecord]) -> float:
+    """Fraction of answer-preserving variants whose *correctness label* matches the original.
+
+    This is the definition stated in the project proposal, kept as a reported secondary so
+    the paper's metric section can show both. It differs from
+    :func:`cluster_consistency` in a way that matters: a model that is confidently and
+    identically **wrong** across every variant scores 1.0 here but is also 1.0 on modal
+    agreement, whereas a model that is wrong in a *different* way each time scores 1.0
+    here and low on modal agreement. Modal agreement is therefore the stricter
+    memorisation probe and stays primary; the divergence between the two is itself a
+    diagnostic (high label-agreement with low modal-agreement = unstable guessing).
+    """
+    preserving = [r for r in records if not is_answer_changing(r)]
+    originals = [r for r in preserving if r.variant_type == "original"]
+    others = [r for r in preserving if r.variant_type != "original"]
+    if not originals or not others:
+        return -1.0
+    reference = originals[0].correct
+    return sum(1 for r in others if r.correct == reference) / len(others)
+
+
+def decoding_noise_consistency(records: list[EvaluationRecord]) -> tuple[float, int]:
+    """Modal-answer agreement over ``resample`` copies only — the sampling-noise null."""
+    copies = [r for r in records if r.variant_type == "resample"]
+    if len(copies) < 2:
+        return -1.0, len(copies)
+    counts = Counter(r.normalized_predicted for r in copies)
+    return max(counts.values()) / len(copies), len(copies)
 
 
 def summarize_reliability(records: list[EvaluationRecord]) -> list[ReliabilitySummary]:
@@ -61,6 +106,7 @@ def summarize_reliability(records: list[EvaluationRecord]) -> list[ReliabilitySu
         acc_under_perturbation = (
             sum(r.correct for r in changing) / len(changing) if changing else -1.0
         )
+        decoding, n_resample = decoding_noise_consistency(group)
 
         summaries.append(
             ReliabilitySummary(
@@ -73,6 +119,9 @@ def summarize_reliability(records: list[EvaluationRecord]) -> list[ReliabilitySu
                     round(acc_under_perturbation, 6) if changing else -1.0
                 ),
                 n_answer_changing=len(changing),
+                label_agreement=round(label_agreement_consistency(group), 6),
+                decoding_consistency=round(decoding, 6) if decoding >= 0 else -1.0,
+                n_resample=n_resample,
             )
         )
     return summaries

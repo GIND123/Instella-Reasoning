@@ -7,15 +7,34 @@
 </p>
 
 <p align="center">
-  <a href="#run-instructions">Run instructions</a> ·
-  <a href="notebooks/instella_reasoning_atlas.ipynb">Colab notebook</a> ·
+  <a href="experiments/FULLSCALE.md"><b>Full-scale suite</b></a> ·
+  <a href="notebooks/fullscale_colab.ipynb">Colab</a> ·
+  <a href="docs/AUDIT_2026-07-26.md">Audit</a> ·
+  <a href="docs/BUILD_PLAN.md">Design</a> ·
   <a href="#command-reference">Commands</a> ·
   <a href="docs/COMPUTE.md">Compute</a> ·
-  <a href="docs/DATA_DOWNLOAD.md">Data download</a> ·
   <a href="docs/proposal/">Proposal</a>
 </p>
 
 ---
+
+> **The current experiment is the seen/unseen memorisation suite** —
+> [`experiments/FULLSCALE.md`](experiments/FULLSCALE.md). It asks whether the model does
+> better on problems it *provably memorised*: GSM8K **train** items are verbatim in
+> Instella's stage-2 training data, GSM8K **test** items are not, and membership is
+> verified per item by exact 13-gram containment rather than inferred from an embedding
+> proxy. Crossed with numeric perturbation across the full Instella-3B checkpoint
+> trajectory, the difference-in-differences isolates the memorisation component and cancels
+> the magnitude confound.
+>
+> ```bash
+> python scripts/preflight_fullscale.py --smoke   # the gate — must print SAFE TO LAUNCH
+> bash experiments/run_fullscale_suite.sh
+> ```
+>
+> The earlier `reliability-B*` runs under `experiments/runs/` are **superseded pilots**;
+> [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) explains why four of their five
+> headline findings are artifacts. Do not cite those numbers.
 
 When a language model answers a reasoning problem correctly, **accuracy alone cannot
 tell you whether it reasoned or remembered.** Instella is one of the very few
