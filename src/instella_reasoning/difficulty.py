@@ -18,6 +18,7 @@ can be pooled *within* difficulty (Mantel-Haenszel style), removing the confound
 from __future__ import annotations
 
 import re
+import zlib
 from dataclasses import dataclass
 
 from instella_reasoning.records import BenchmarkItem
@@ -74,7 +75,19 @@ def assign_difficulty_bins(
     """
     if not items:
         return {}
-    scored = sorted(estimate_all(items).values(), key=lambda d: d.score)
+    # Ties must NOT be broken by input order. GSM8K step counts are discrete, so most
+    # items tie; ranking by list position then hands the first-listed group the low bins
+    # and the second group the high bins. When the two groups are the seen and unseen
+    # arms, that manufactures a difficulty imbalance out of nothing and confounds the
+    # headline contrast. Hashing the id breaks ties deterministically but independently of
+    # the order items were passed in, so tied items spread evenly across bins.
+    def _tiebreak(benchmark_id: str) -> int:
+        return zlib.crc32(benchmark_id.encode("utf-8"))
+
+    scored = sorted(
+        estimate_all(items).values(),
+        key=lambda d: (d.score, _tiebreak(d.benchmark_id)),
+    )
     n = len(scored)
     n_bins = max(1, min(n_bins, n))
     bins: dict[str, int] = {}

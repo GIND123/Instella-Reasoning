@@ -282,6 +282,43 @@ def make_variant_suite(
     return suite
 
 
+def make_resample_cluster(item: BenchmarkItem, n: int) -> list[BenchmarkItem]:
+    """Duplicate an item ``n`` times as the **decoding-noise control**.
+
+    Every copy is textually identical and shares the parent's gold answer, so under
+    temperature sampling the cluster's consistency measures *run-to-run variance alone* —
+    with no perturbation applied. That number is the baseline the perturbation-consistency
+    drop has to beat.
+
+    Without it the study cannot answer the first question a reviewer asks: at temperature
+    0 there is no sampling variance at all, so an observed inconsistency across variants
+    has no null to be compared against. The copies are answer-*preserving*, which puts
+    them in the consistency term exactly like a surface variant.
+    """
+    parent = item.parent_id or item.id
+    return [
+        BenchmarkItem(
+            id=f"{parent}__resample_{i:02d}",
+            prompt=item.prompt,
+            answer=item.answer,
+            parent_id=parent,
+            variant_type="resample",
+            metadata={**item.metadata, "sample_index": i, "decoding_noise_control": True},
+        )
+        for i in range(n)
+    ]
+
+
+def make_resample_suite(items: Iterable[BenchmarkItem], n: int) -> list[BenchmarkItem]:
+    """Flat original+copies suite for the decoding-noise control."""
+    suite: list[BenchmarkItem] = []
+    for item in items:
+        original = _ensure_parent(item)
+        suite.append(original)
+        suite.extend(make_resample_cluster(original, n))
+    return suite
+
+
 # -- variant validation (reviewer concern M2) ----------------------------------
 
 

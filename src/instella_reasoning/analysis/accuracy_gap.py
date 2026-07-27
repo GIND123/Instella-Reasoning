@@ -95,6 +95,16 @@ class GroupStats:
         return self.correct / self.total if self.total else 0.0
 
 
+#: Emitted instead of a gap when one side of the contrast has no items. Distinguishes
+#: "measured, and the gap is zero" from "never measured". The two look identical in the
+#: raw JSON (``gap: 0.0, z: 0.0, p_value: 1.0``) and conflating them is how a run can
+#: appear to report a null result when in fact the analysis never ran — which is exactly
+#: what happened when GSM8K *test* items were scanned against a GSM8K *train*-derived
+#: corpus and produced zero contaminated items.
+NO_TREATMENT_GROUP = "insufficient_treatment_group"
+MEASURED = "measured"
+
+
 @dataclass(slots=True)
 class AccuracyGapResult:
     scope: str  # e.g. "gsm8k::amd/Instella-3B" or "overall"
@@ -103,10 +113,17 @@ class AccuracyGapResult:
     p_value: float = 1.0
     q_value: float = 1.0  # BH-FDR adjusted p-value across all scopes
     gap: float = 0.0  # contaminated accuracy - clean accuracy
+    status: str = MEASURED
+    # Secondary contrast. When retrieval yields only `partial` candidates (topical
+    # neighbours rather than true duplicates), this is the only populated comparison —
+    # reporting it prevents the scan's output from looking like an empty result.
+    partial_gap: float | None = None
+    partial_p_value: float | None = None
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             "scope": self.scope,
+            "status": self.status,
             "gap": round(self.gap, 6),
             "z": round(self.z, 6),
             "p_value": round(self.p_value, 6),
@@ -120,6 +137,12 @@ class AccuracyGapResult:
                 for label, stats in self.by_label.items()
             },
         }
+        if self.partial_gap is not None:
+            payload["partial_vs_clean"] = {
+                "gap": round(self.partial_gap, 6),
+                "p_value": round(self.partial_p_value or 1.0, 6),
+            }
+        return payload
 
 
 def compute_accuracy_gap(
@@ -151,18 +174,35 @@ def compute_accuracy_gap(
             subset = [correct for lab, correct in entries if lab == label]
             by_label[label] = GroupStats(label, len(subset), sum(subset))
         contaminated = by_label["contaminated"]
+        partial = by_label["partial"]
         clean = by_label["clean"]
         z, p_value = two_proportion_z_test(
             contaminated.correct, contaminated.total, clean.correct, clean.total
         )
-        # A gap is only meaningful when both groups are populated; otherwise report 0.
-        gap = (
-            contaminated.accuracy - clean.accuracy
-            if contaminated.total and clean.total
-            else 0.0
-        )
+        # A gap is only meaningful when both groups are populated; otherwise report 0
+        # *and say so*, so a never-run analysis cannot be read as a measured null.
+        both_populated = bool(contaminated.total and clean.total)
+        gap = contaminated.accuracy - clean.accuracy if both_populated else 0.0
+        status = MEASURED if both_populated else NO_TREATMENT_GROUP
+
+        partial_gap = partial_p = None
+        if partial.total and clean.total:
+            partial_gap = partial.accuracy - clean.accuracy
+            _, partial_p = two_proportion_z_test(
+                partial.correct, partial.total, clean.correct, clean.total
+            )
+
         results.append(
-            AccuracyGapResult(scope=scope, by_label=by_label, z=z, p_value=p_value, gap=gap)
+            AccuracyGapResult(
+                scope=scope,
+                by_label=by_label,
+                z=z,
+                p_value=p_value,
+                gap=gap,
+                status=status,
+                partial_gap=partial_gap,
+                partial_p_value=partial_p,
+            )
         )
 
     # Benjamini-Hochberg FDR across every scope tested (reviewer concern M3: many

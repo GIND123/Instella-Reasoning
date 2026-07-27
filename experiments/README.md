@@ -2,8 +2,29 @@
 
 This directory is the single home for the study's experiments: the **planned suite**
 (from `docs/IMPLEMENTATION_PLAN.md` §Tests, the ambitious full scope), the **executed
-runs** (labeled, under `runs/`), and the **turnkey GPU launcher** for the parts that need
-a T4 (`GPU_SUITE.md`). Supersedes the earlier `docs/EXPERIMENTS.md` sketch.
+runs** (labeled, under `runs/`), and the turnkey launchers. Supersedes the earlier
+`docs/EXPERIMENTS.md` sketch.
+
+> ## ⚠️ Start here: the current suite is [`FULLSCALE.md`](FULLSCALE.md)
+>
+> The `reliability-B*` runs under `runs/` are **superseded pilots**, kept for reference.
+> [`docs/AUDIT_2026-07-26.md`](../docs/AUDIT_2026-07-26.md) shows that four of their five
+> headline findings are artifacts — a truncated long-CoT checkpoint, an empty contamination
+> treatment group, 15% wrong numeric labels, and a 2.61× magnitude confound. **Do not cite
+> those numbers.**
+>
+> The replacement is the seen/unseen memorisation design in
+> [`run_fullscale_suite.sh`](run_fullscale_suite.sh): GSM8K train (verifiably in Instella's
+> stage-2 data) vs GSM8K test (verifiably not), across the full Instella-3B checkpoint
+> trajectory, with every defect above closed and gated. Rationale:
+> [`docs/BUILD_PLAN.md`](../docs/BUILD_PLAN.md).
+>
+> ```bash
+> python scripts/preflight_fullscale.py --smoke   # must print SAFE TO LAUNCH
+> bash experiments/run_fullscale_suite.sh
+> ```
+>
+> `GPU_SUITE.md` and `run_reliability_suite.sh` remain for reproducing the pilots.
 
 Status legend: ✅ done · 🟡 runnable now (CPU) · 🔴 needs GPU · ⛔ blocked (data/label)
 

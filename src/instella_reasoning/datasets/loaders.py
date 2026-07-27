@@ -195,6 +195,64 @@ def _load_humaneval(dataset, skill: str) -> Iterator[BenchmarkItem]:
         )
 
 
+def _load_gsm_symbolic_official(dataset, skill: str) -> Iterator[BenchmarkItem]:
+    """Apple's official GSM-Symbolic release — hand-written templates, correct by design.
+
+    Each row is one instantiation of one of 100 hand-annotated templates, and carries the
+    GSM8K item it was derived from (``original_question`` / ``original_answer``). We emit
+    the original **once per template** as the cluster head and every instance as an
+    answer-*changing* variant sharing its ``parent_id``, which is exactly the cluster
+    shape :mod:`instella_reasoning.metrics` expects — so reliability, consistency, and
+    accuracy-under-perturbation all work on it with no special-casing.
+
+    Using the official release for the headline perturbation removes the label-correctness
+    risk inherent in auto-derived templates (see :mod:`instella_reasoning.gsm_symbolic`)
+    and makes the numbers directly comparable to the published GSM-Symbolic results.
+
+    The ``canary`` column is a deliberate contamination tripwire, not question text; it is
+    dropped from the prompt and kept in metadata so a corpus scan can look for it.
+    """
+    emitted_parents: set[int] = set()
+    for row in dataset:
+        template_id = int(row["id"])
+        parent = f"gsmsym_{template_id:03d}"
+        if template_id not in emitted_parents:
+            emitted_parents.add(template_id)
+            yield BenchmarkItem(
+                id=parent,
+                prompt=str(row["original_question"]).strip(),
+                answer=_gsm8k_answer(str(row["original_answer"])),
+                parent_id=parent,
+                variant_type="original",
+                metadata={
+                    "benchmark": "gsm_symbolic",
+                    "skill": skill,
+                    "rationale": str(row["original_answer"]),
+                    "template_id": template_id,
+                    "gsm8k_original_id": row.get("original_id"),
+                    "source_release": "apple/GSM-Symbolic",
+                },
+            )
+        instance = int(row["instance"])
+        yield BenchmarkItem(
+            id=f"{parent}__inst_{instance:03d}",
+            prompt=str(row["question"]).strip(),
+            answer=_gsm8k_answer(str(row["answer"])),
+            parent_id=parent,
+            variant_type="gsm_symbolic_official",
+            metadata={
+                "benchmark": "gsm_symbolic",
+                "skill": skill,
+                "rationale": str(row["answer"]),
+                "template_id": template_id,
+                "instance": instance,
+                "answer_changing": True,
+                "canary": row.get("canary"),
+                "source_release": "apple/GSM-Symbolic",
+            },
+        )
+
+
 def _load_generic_qa(dataset, skill: str) -> Iterator[BenchmarkItem]:
     """Fallback loader for question/answer-style datasets (best effort)."""
     for i, row in enumerate(dataset):
@@ -227,6 +285,39 @@ MATH_SUBJECTS = (
 
 BENCHMARK_LOADERS: dict[str, BenchmarkSpec] = {
     "gsm8k": BenchmarkSpec("gsm8k", "arithmetic", "openai/gsm8k", "main", "test", _load_gsm8k),
+    # The *train* split is the verified-seen arm of the memorisation contrast: its items
+    # are verbatim in Instella's stage-2 data (via amd/Instella-GSM8K-synthetic), whereas
+    # the test split is not. Same distribution, same annotators — see datasets.splits.
+    "gsm8k_train": BenchmarkSpec(
+        "gsm8k_train", "arithmetic", "openai/gsm8k", "main", "train", _load_gsm8k
+    ),
+    # Apple's hand-written GSM-Symbolic templates. main < p1 < p2 in difficulty; p1/p2 add
+    # clauses on top of the numeric resampling, so the trio gives a graded perturbation
+    # ladder rather than a single on/off probe.
+    "gsm_symbolic": BenchmarkSpec(
+        "gsm_symbolic",
+        "arithmetic",
+        "apple/GSM-Symbolic",
+        "main",
+        "train",
+        _load_gsm_symbolic_official,
+    ),
+    "gsm_symbolic_p1": BenchmarkSpec(
+        "gsm_symbolic_p1",
+        "arithmetic",
+        "apple/GSM-Symbolic",
+        "p1",
+        "train",
+        _load_gsm_symbolic_official,
+    ),
+    "gsm_symbolic_p2": BenchmarkSpec(
+        "gsm_symbolic_p2",
+        "arithmetic",
+        "apple/GSM-Symbolic",
+        "p2",
+        "train",
+        _load_gsm_symbolic_official,
+    ),
     "math": BenchmarkSpec(
         "math", "mathematical", "EleutherAI/hendrycks_math", "algebra", "test", _load_math
     ),
@@ -259,12 +350,16 @@ def load_benchmark_to_jsonl(
     split: str | None = None,
     hf_name: str | None = None,
     limit: int | None = None,
+    max_per_parent: int | None = None,
 ) -> int:
     """Download a benchmark from HuggingFace and write it as a normalized JSONL.
 
     Returns the number of items written. ``hf_name`` overrides the default config
     (e.g. a different MATH subject or BBH subtask); ``limit`` caps the item count
-    for quick local runs.
+    for quick local runs. ``max_per_parent`` caps how many variants share a
+    ``parent_id`` — for GSM-Symbolic that trims 50 instances/template down to the
+    handful the power analysis actually needs (ICC ~0.48 makes the 5th instance of a
+    template worth ~7% of a fresh template), while ``limit`` still counts total rows.
     """
 
     spec = BENCHMARK_LOADERS.get(benchmark)
@@ -281,10 +376,23 @@ def load_benchmark_to_jsonl(
         return len(rows)
 
     config = hf_name if hf_name is not None else spec.hf_name
-    dataset = load_dataset(spec.hf_path, config, split=split or spec.split)
+    if spec.hf_path == "apple/GSM-Symbolic":
+        # Plain JSONL files in per-variant directories; the repo has no loading script,
+        # so point `data_files` at the right one instead of passing a config name.
+        dataset = load_dataset(
+            spec.hf_path, data_files=f"{config}/test.jsonl", split=split or "train"
+        )
+    else:
+        dataset = load_dataset(spec.hf_path, config, split=split or spec.split)
 
-    rows = []
+    rows: list[BenchmarkItem] = []
+    per_parent: dict[str, int] = {}
     for item in spec.loader(dataset, spec.skill):
+        if max_per_parent is not None and item.variant_type != "original":
+            key = item.parent_id or item.id
+            if per_parent.get(key, 0) >= max_per_parent:
+                continue
+            per_parent[key] = per_parent.get(key, 0) + 1
         rows.append(item)
         if limit is not None and len(rows) >= limit:
             break
@@ -326,6 +434,77 @@ def _load_math_all_subjects(
         item.id = new_id
         item.parent_id = new_id
     return merged
+
+
+@dataclass(slots=True)
+class CorpusSpec:
+    """A documented Instella training source, with its indexing policy."""
+
+    name: str
+    hf_path: str
+    hf_name: str | None
+    split: str
+    text_field: str
+    #: ``full`` sources are indexed exhaustively (contamination claims are exact);
+    #: ``sampled`` sources are subsampled and the report states coverage as a lower bound.
+    policy: str
+    default_limit: int | None
+    note: str = ""
+
+
+# Every entry was probed against the Hub. Sources whose only loader is a Python script
+# (``CLUTRR/v1`` -> v1.py, ``deepmind/math_dataset`` -> math_dataset.py) are deliberately
+# absent: `datasets` >= 3 removed script support, and pinning an old `datasets` inside a
+# multi-hour GPU run to recover them is a bad trade.
+CORPUS_SOURCES: dict[str, CorpusSpec] = {
+    "instella-gsm8k-synthetic": CorpusSpec(
+        "instella-gsm8k-synthetic",
+        "amd/Instella-GSM8K-synthetic",
+        None,
+        "train",
+        "messages",
+        "full",
+        None,
+        "Stage-2 source derived from GSM8K train. The ground truth for the seen arm.",
+    ),
+    "openmathinstruct2": CorpusSpec(
+        "openmathinstruct2",
+        "nvidia/OpenMathInstruct-2",
+        None,
+        "train",
+        "problem",
+        "sampled",
+        400_000,
+        "Math instruction corpus; 55 parquet shards.",
+    ),
+    "tulu3-sft": CorpusSpec(
+        "tulu3-sft",
+        "allenai/tulu-3-sft-mixture",
+        None,
+        "train",
+        "messages",
+        "sampled",
+        300_000,
+        "Named in the Instella stage-2 mixture; contains GSM8K-style supervision.",
+    ),
+    "dolmino-mix": CorpusSpec(
+        "dolmino-mix",
+        "allenai/dolmino-mix-1124",
+        None,
+        "train",
+        "text",
+        "sampled",
+        200_000,
+        "Stage-2 web/math mixture; 7k+ shards, sampled with coverage reported.",
+    ),
+}
+
+
+def corpus_spec(name: str) -> CorpusSpec:
+    spec = CORPUS_SOURCES.get(name)
+    if spec is None:
+        raise ValueError(f"Unknown corpus source {name!r}. Known: {sorted(CORPUS_SOURCES)}")
+    return spec
 
 
 def _coerce_corpus_text(value: Any) -> str:

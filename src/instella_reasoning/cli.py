@@ -21,6 +21,7 @@ from instella_reasoning.records import (
     read_benchmark,
     read_corpus,
     read_jsonl,
+    write_jsonl,
 )
 from instella_reasoning.reporting import write_markdown_report
 from instella_reasoning.training import TorchrunLaunchConfig, build_torchrun_command, shell_join
@@ -69,6 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
     loadbench.add_argument("--split", default=None)
     loadbench.add_argument("--hf-name", default=None, help="Override the HF config (subject/subtask).")
     loadbench.add_argument("--limit", type=int, default=None)
+    loadbench.add_argument(
+        "--max-per-parent",
+        type=int,
+        default=None,
+        help="Cap variants sharing a parent_id (e.g. GSM-Symbolic's 50 instances/template).",
+    )
 
     loadcorpus = subparsers.add_parser(
         "load-corpus", help="Stream a HuggingFace corpus/dataset into CorpusDocument JSONL."
@@ -99,6 +106,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate.add_argument("--batch-size", type=int, default=1)
     generate.add_argument("--no-cot-prompt", action="store_true", help="Disable CoT prompt wrapping.")
+    generate.add_argument(
+        "--n-shot",
+        type=int,
+        default=0,
+        help="Few-shot exemplars. Base checkpoints need >0 or they loop instead of answering.",
+    )
+    generate.add_argument(
+        "--min-termination-rate",
+        type=float,
+        default=0.0,
+        help="Abort if fewer than this share of outputs terminate naturally (0 = warn only).",
+    )
     generate.add_argument(
         "--no-chat-template", action="store_true",
         help="Do not apply the tokenizer chat template (use only for base, non-Instruct models).",
@@ -252,6 +271,79 @@ def build_parser() -> argparse.ArgumentParser:
     runall = subparsers.add_parser("run-all", help="Run the full end-to-end pipeline from a YAML config.")
     runall.add_argument("--config", required=True)
 
+    # -- full-scale memorisation study ------------------------------------------
+
+    splits = subparsers.add_parser(
+        "build-splits",
+        help="Build the verified seen/unseen GSM8K arms (exact 13-gram containment).",
+    )
+    splits.add_argument("--train", required=True, help="GSM8K train JSONL (candidate seen arm).")
+    splits.add_argument("--test", required=True, help="GSM8K test JSONL (candidate unseen arm).")
+    splits.add_argument("--corpus", required=True, help="Training corpus JSONL to verify against.")
+    splits.add_argument("--output", required=True, help="Combined arms JSONL.")
+    splits.add_argument("--containment-output", default=None, help="Per-item evidence JSON.")
+    splits.add_argument("--n-per-arm", type=int, default=250)
+    splits.add_argument("--n-bins", type=int, default=3, help="Difficulty strata for matching.")
+    splits.add_argument("--seen-threshold", type=float, default=0.80)
+    splits.add_argument("--unseen-threshold", type=float, default=0.10)
+    splits.add_argument("--seed", type=int, default=6198)
+
+    resample = subparsers.add_parser(
+        "make-resample-suite",
+        help="Duplicate items n times as the decoding-noise control (use with --temperature>0).",
+    )
+    resample.add_argument("--benchmark", required=True)
+    resample.add_argument("--output", required=True)
+    resample.add_argument("--n-samples", type=int, default=5)
+    resample.add_argument("--limit", type=int, default=None)
+
+    templates = subparsers.add_parser(
+        "export-templates",
+        help="Export auto-derived numeric variants for hand verification (CSV).",
+    )
+    templates.add_argument("--variants", required=True)
+    templates.add_argument("--output", required=True)
+    templates.add_argument(
+        "--per-template", type=int, default=2, help="Rows to review per parent item."
+    )
+
+    review = subparsers.add_parser(
+        "apply-template-review",
+        help="Drop variants whose parent a human marked bad in the reviewed CSV.",
+    )
+    review.add_argument("--variants", required=True)
+    review.add_argument("--review", required=True, help="The reviewed CSV (verdict column).")
+    review.add_argument("--output", required=True)
+    review.add_argument(
+        "--require-complete",
+        action="store_true",
+        help="Fail if any template is unreviewed (the pre-run gate).",
+    )
+
+    termcheck = subparsers.add_parser(
+        "check-termination",
+        help="Audit a generations JSONL for truncation before its accuracy is believed.",
+    )
+    termcheck.add_argument("--generations", required=True, nargs="+")
+    termcheck.add_argument("--output", default=None)
+    termcheck.add_argument("--min-rate", type=float, default=0.85)
+
+    memo = subparsers.add_parser(
+        "memorization",
+        help="Seen/unseen difference-in-differences + cluster-robust regression (headline).",
+    )
+    memo.add_argument("--scores", required=True, nargs="+")
+    memo.add_argument("--output", required=True)
+    memo.add_argument("--n-bootstrap", type=int, default=4000)
+
+    figs = subparsers.add_parser("figures", help="Render the eight-figure publication set.")
+    figs.add_argument("--scores", required=True, nargs="+")
+    figs.add_argument("--analysis", required=True, help="memorization command output JSON.")
+    figs.add_argument("--output-dir", required=True)
+    figs.add_argument("--containment", default=None)
+    figs.add_argument("--termination", default=None)
+    figs.add_argument("--n-items", type=int, default=250)
+
     return parser
 
 
@@ -305,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
             split=args.split,
             hf_name=args.hf_name,
             limit=args.limit,
+            max_per_parent=args.max_per_parent,
         )
         print(f"Wrote {count} benchmark items to {args.output}")
         return 0
@@ -341,8 +434,30 @@ def main(argv: list[str] | None = None) -> int:
             use_chat_template=not args.no_chat_template,
             dtype=args.dtype,
             revision=args.revision,
+            n_shot=args.n_shot,
         )
         print(f"Wrote {len(rows)} generations to {args.output}")
+
+        # Truncation gate. A long-CoT checkpoint that never reaches its final-answer
+        # marker inside the token budget scores as a weak model; that is a measurement
+        # failure, not a result, and it must stop the run rather than flow downstream.
+        from instella_reasoning.evaluation import termination_report
+
+        term = termination_report(rows, threshold=max(args.min_termination_rate, 0.0))
+        print(
+            f"[generate] terminated naturally: {term.termination_rate:.1%} · "
+            f"'####' marker: {term.marker_rate:.1%} · median {term.median_chars} chars"
+        )
+        if args.min_termination_rate > 0 and not term.passes:
+            print(
+                "\n" + "!" * 72 + "\n"
+                f"ABORT: only {term.termination_rate:.1%} of completions terminated naturally "
+                f"(gate {args.min_termination_rate:.0%}).\n"
+                "The model is being cut off mid-reasoning, so its accuracy would be an\n"
+                "artifact of --max-new-tokens. Raise the budget for this checkpoint and\n"
+                "regenerate. A better answer extractor does NOT fix this.\n" + "!" * 72
+            )
+            return 1
 
         # Auto degeneracy gate: a broken run (wrong chat template, transformers 5.x vs
         # Instella remote code) yields looping/empty text that scores as pure "wrong" and
@@ -660,8 +775,286 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {stage}: {path}")
         return 0
 
+    if args.command == "build-splits":
+        return _cmd_build_splits(args)
+
+    if args.command == "make-resample-suite":
+        from instella_reasoning.perturbations import make_resample_suite
+
+        items = read_benchmark(args.benchmark)
+        if args.limit is not None:
+            items = items[: args.limit]
+        suite = make_resample_suite(items, args.n_samples)
+        write_jsonl(args.output, suite)
+        print(f"Wrote {len(suite)} items ({len(items)} originals x {args.n_samples} copies) to {args.output}")
+        return 0
+
+    if args.command == "export-templates":
+        return _cmd_export_templates(args)
+
+    if args.command == "apply-template-review":
+        return _cmd_apply_template_review(args)
+
+    if args.command == "check-termination":
+        return _cmd_check_termination(args)
+
+    if args.command == "memorization":
+        return _cmd_memorization(args)
+
+    if args.command == "figures":
+        return _cmd_figures(args)
+
     parser.error(f"Unhandled command: {args.command}")
     return 2
+
+
+# -- full-scale study command bodies ------------------------------------------------
+
+
+def _cmd_build_splits(args) -> int:
+    import json
+
+    from instella_reasoning.datasets.splits import (
+        balance_report,
+        build_seen_unseen_split,
+        verify_containment,
+    )
+    from instella_reasoning.difficulty import assign_difficulty_bins
+    from instella_reasoning.records import CorpusDocument, read_jsonl
+
+    train = read_benchmark(args.train)
+    test = read_benchmark(args.test)
+    print(f"[splits] candidates: {len(train)} train (seen?) / {len(test)} test (unseen?)")
+
+    def stream():
+        for row in read_jsonl(args.corpus):
+            yield CorpusDocument.from_dict(row)
+
+    containment = verify_containment(
+        [*train, *test],
+        stream(),
+        seen_threshold=args.seen_threshold,
+        unseen_threshold=args.unseen_threshold,
+    )
+    bins = assign_difficulty_bins([*train, *test], n_bins=args.n_bins)
+    split = build_seen_unseen_split(
+        train, test, containment, n_per_arm=args.n_per_arm, difficulty_bins=bins, seed=args.seed
+    )
+    write_jsonl(args.output, split.all_items())
+
+    balance = balance_report(split, bins)
+    summary = {**split.summary(), "balance": balance}
+    print(json.dumps(summary, indent=2))
+    if args.containment_output:
+        intended = {i.id: "seen" for i in train}
+        intended.update({i.id: "unseen" for i in test})
+        payload = [
+            {**result.to_dict(), "intended_arm": intended.get(bid)}
+            for bid, result in sorted(containment.items())
+        ]
+        Path(args.containment_output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.containment_output).write_text(
+            json.dumps({"summary": summary, "items": payload}, indent=2), encoding="utf-8"
+        )
+        print(f"Wrote containment evidence to {args.containment_output}")
+    if not split.usable:
+        # Loud, and non-zero: an empty split means every downstream stage would run on
+        # nothing and the GPU budget would be spent producing no measurable contrast.
+        print("\n" + "!" * 72)
+        print("ABORT: the seen/unseen split is empty — no contrast can be measured.")
+        print(f"  {split.diagnosis()}")
+        print("!" * 72)
+        return 1
+    if not balance["balanced"]:
+        print("WARNING: arms are not difficulty-balanced; the seen/unseen contrast is confounded.")
+    print(f"Wrote {len(split.all_items())} arm items to {args.output}")
+    return 0
+
+
+def _cmd_export_templates(args) -> int:
+    """Emit a CSV a human can read left-to-right and mark ok/bad, one row per variant."""
+    import csv
+    from collections import defaultdict
+
+    items = read_benchmark(args.variants)
+    originals = {i.id: i for i in items if i.variant_type == "original"}
+    per_parent: dict[str, list] = defaultdict(list)
+    for item in items:
+        if item.variant_type == "gsm_symbolic":
+            per_parent[item.parent_id].append(item)
+
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with out.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "parent_id", "verdict(ok|bad)", "original_question", "original_answer",
+                "variant_question", "variant_answer", "magnitude_ratio", "reviewer_note",
+            ]
+        )
+        for parent_id, variants in sorted(per_parent.items()):
+            parent = originals.get(parent_id)
+            for variant in variants[: args.per_template]:
+                writer.writerow(
+                    [
+                        parent_id, "", " ".join((parent.prompt if parent else "").split()),
+                        parent.answer if parent else "",
+                        " ".join(variant.prompt.split()), variant.answer,
+                        variant.metadata.get("magnitude_ratio", ""), "",
+                    ]
+                )
+                n += 1
+    print(
+        f"Wrote {n} rows for {len(per_parent)} templates to {out}\n"
+        "Fill the verdict column with ok/bad, then run apply-template-review."
+    )
+    return 0
+
+
+def _cmd_apply_template_review(args) -> int:
+    import csv
+
+    items = read_benchmark(args.variants)
+    verdicts: dict[str, str] = {}
+    with Path(args.review).open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            parent = (row.get("parent_id") or "").strip()
+            verdict = (row.get("verdict(ok|bad)") or row.get("verdict") or "").strip().lower()
+            if not parent or not verdict:
+                continue
+            # Any 'bad' row condemns the whole template: one wrong instantiation means the
+            # template's substitution rule is unsound, not just that instance.
+            if verdicts.get(parent) != "bad":
+                verdicts[parent] = verdict
+
+    templated = {i.parent_id for i in items if i.variant_type == "gsm_symbolic"}
+    unreviewed = sorted(templated - set(verdicts))
+    if unreviewed:
+        message = f"{len(unreviewed)} template(s) unreviewed: {unreviewed[:5]}"
+        if args.require_complete:
+            print(f"FAIL: {message}")
+            return 1
+        print(f"WARNING: {message}")
+
+    bad = {p for p, v in verdicts.items() if v.startswith("b")}
+    kept = [i for i in items if not (i.variant_type == "gsm_symbolic" and i.parent_id in bad)]
+    write_jsonl(args.output, kept)
+    print(
+        f"Reviewed {len(verdicts)} templates, rejected {len(bad)}; "
+        f"wrote {len(kept)}/{len(items)} items to {args.output}"
+    )
+    return 0
+
+
+def _cmd_check_termination(args) -> int:
+    import json
+
+    from instella_reasoning.evaluation import termination_report
+    from instella_reasoning.records import GenerationRecord, read_jsonl
+
+    reports = []
+    failed = False
+    for path in args.generations:
+        rows = [GenerationRecord.from_dict(r) for r in read_jsonl(path)]
+        report = termination_report(rows, threshold=args.min_rate)
+        reports.append({**report.to_dict(), "path": path})
+        flag = "OK " if report.passes else "FAIL"
+        failed = failed or not report.passes
+        print(
+            f"  [{flag}] {report.model:34s} n={report.n:5d} "
+            f"terminated={report.termination_rate:6.1%} marker={report.marker_rate:6.1%} "
+            f"median_chars={report.median_chars}"
+        )
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(json.dumps(reports, indent=2), encoding="utf-8")
+    if failed:
+        print(
+            "\nAt least one model is being scored on truncated output. Raise --max-new-tokens\n"
+            "for that checkpoint and regenerate; a better answer extractor will not fix this."
+        )
+        return 1
+    return 0
+
+
+def _read_scores(paths: list[str]):
+    from instella_reasoning.records import EvaluationRecord, read_jsonl
+
+    records = []
+    for path in paths:
+        for row in read_jsonl(path):
+            records.append(
+                EvaluationRecord(
+                    benchmark_id=row["benchmark_id"],
+                    parent_id=row.get("parent_id") or row["benchmark_id"],
+                    variant_type=row.get("variant_type", "original"),
+                    expected=row.get("expected"),
+                    predicted=row.get("predicted", ""),
+                    normalized_expected=row.get("normalized_expected"),
+                    normalized_predicted=row.get("normalized_predicted", ""),
+                    correct=bool(row.get("correct")),
+                    model=row.get("model", "unknown"),
+                    metadata=dict(row.get("metadata", {})),
+                )
+            )
+    return records
+
+
+def _cmd_memorization(args) -> int:
+    import json
+
+    from instella_reasoning.analysis.memorization import summarize
+
+    records = _read_scores(args.scores)
+    result = summarize(records, n_bootstrap=args.n_bootstrap)
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.output).write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    print(f"\nMemorisation analysis over {len(records)} scored generations\n")
+    for model, payload in result["per_model"].items():
+        did = payload["did"]
+        if did["status"] != "measured":
+            print(f"  {model:34s} {did['status']}")
+            continue
+        lo, hi = did["cluster_bootstrap_ci95"]
+        print(
+            f"  {model:34s} DiD={did['difference_in_differences']:+.3f} "
+            f"CI=[{lo:+.3f},{hi:+.3f}] {'*' if did['excludes_zero'] else ' '}"
+        )
+        print(f"      {did['interpretation']}")
+    print(f"\nWrote {args.output}")
+    return 0
+
+
+def _cmd_figures(args) -> int:
+    import json
+
+    from instella_reasoning.analysis.figures import render_all
+
+    records = _read_scores(args.scores)
+    analysis = json.loads(Path(args.analysis).read_text(encoding="utf-8"))
+    containment = None
+    if args.containment:
+        payload = json.loads(Path(args.containment).read_text(encoding="utf-8"))
+        containment = payload.get("items", payload) if isinstance(payload, dict) else payload
+    termination = None
+    if args.termination:
+        termination = json.loads(Path(args.termination).read_text(encoding="utf-8"))
+
+    written = render_all(
+        records, analysis, args.output_dir,
+        containment=containment, termination=termination, n_items=args.n_items,
+    )
+    made = {k: v for k, v in written.items() if v}
+    for name, path in sorted(made.items()):
+        print(f"  {name}: {path}")
+    missing = sorted(k for k, v in written.items() if not v)
+    if missing:
+        print(f"  (skipped, inputs unavailable: {', '.join(missing)})")
+    print(f"Wrote {len(made)} figures to {args.output_dir}")
+    return 0
 
 
 if __name__ == "__main__":
