@@ -131,8 +131,11 @@ INSTELLA_TRAJECTORY: tuple[Checkpoint, ...] = (
         # wrong. A live preflight still truncated 2/4 items at 1536, so 3072 is the
         # measurement-validity budget rather than a cosmetic allowance.
         max_new_tokens=3072,
-        tier=1,
-        notes="Long-CoT reasoner; REQUIRES a large token budget or accuracy is an artifact.",
+        tier=2,
+        notes=(
+            "Diagnostic tier: live smoke reached only 75% completion even at 3072 tokens; "
+            "exclude from headline runs until the output instability is resolved."
+        ),
         aliases=("math_rl",),
         local_assembly="models/Instella-3B-Math-hf",
     ),

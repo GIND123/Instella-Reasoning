@@ -37,8 +37,10 @@ Stage1 ──stage-2 data──▶ Instella-3B ──SFT──▶ SFT ──DPO�
 control: no GSM8K data    treated: GSM8K-targeted data enters here
 ```
 
-`SUITE_TIER=1` runs `stage1, stage2, instruct, math`. `SUITE_TIER=2` adds `sft` and
-`math_sft`, which separates SFT from DPO and SFT from RL (~1.5 h more).
+`SUITE_TIER=1` runs the reliable headline trajectory: `stage1, stage2, instruct`.
+`SUITE_TIER=2` additionally runs `sft`, `math_sft`, and `math`; it is diagnostic because
+the assembled Math endpoint reached only 75% semantic completion at 3072 tokens in a live
+smoke test and must not silently enter the headline result.
 
 `AMD-OLMo-1B` is deliberately **off** the headline axis: its comparison to Instella-3B is
 confounded (different data, different token budget) and its zero-shot output was degenerate
@@ -76,8 +78,8 @@ SURFACE_K=2              # answer-preserving variants per item
 NUMERIC_K=2              # answer-changing numeric variants per item
 GSMSYM_PER_TEMPLATE=3    # official GSM-Symbolic instances per template
 RESAMPLE_ITEMS=100  RESAMPLE_N=5  RESAMPLE_TEMP=0.7   # decoding-noise control
-RESAMPLE_MODELS="instruct math"   # the control is a null, not a headline measurement
-SUITE_TIER=1             # 1 = core 4 checkpoints, 2 = all 6
+RESAMPLE_MODELS="instruct math"   # Math is used only in diagnostic Tier 2
+SUITE_TIER=1             # 1 = reliable core 3, 2 = diagnostic all 6
 BATCH=8  MIN_TERMINATION=0.85  SEED=6198
 ```
 
@@ -85,12 +87,13 @@ At the defaults, on the ~1,000 generations/hour observed for this hardware at 10
 
 | block | generations | hours |
 |---|---:|---:|
-| core arms (2 × 250 items × 5 variants × 4 checkpoints) | 10,000 | 10.0 |
-| official GSM-Symbolic (200 templates × 4 × 4 checkpoints) | 3,200 | 3.2 |
-| decoding-noise control (100 × 6 × 2 checkpoints) | 1,200 | 1.2 |
-| **total** | **14,400** | **14.4** |
+| core arms (2 × 250 items × 5 variants × 3 checkpoints) | 7,500 | 7.5 |
+| official GSM-Symbolic (200 templates × 4 × 3 checkpoints) | 2,400 | 2.4 |
+| decoding-noise control (100 × 6 × Instruct) | 600 | 0.6 |
+| **total** | **10,500** | **10.5** |
 
-leaving ~0.6 h inside a 15-hour budget for retries. `SUITE_TIER=2` adds ~1.5 h.
+This leaves room in a long Colab runtime for retries and syncing. Tier 2 is not included in
+that budget because the long-CoT Math checkpoints require separate output-validity work.
 
 **Do not raise `SURFACE_K`/`NUMERIC_K` to buy power.** Measured intra-cluster correlation
 on the pilot data is ≈0.48, so the marginal effective-n of the k-th variant is
