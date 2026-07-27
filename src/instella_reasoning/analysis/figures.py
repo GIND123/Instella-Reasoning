@@ -473,7 +473,7 @@ def plot_measurement_validity(reports: list[dict], output_dir: str | Path) -> st
     fig, ax = plt.subplots(figsize=(7.4, 0.62 * len(models) + 2.2))
     # 2px surface gap between adjacent bars is achieved by the offset + edge colour.
     ax.barh([v + height / 2 for v in y], term, height=height, color=SERIES[0],
-            edgecolor=SURFACE, linewidth=1.4, label="terminated naturally", zorder=3)
+            edgecolor=SURFACE, linewidth=1.4, label="completed before cap", zorder=3)
     ax.barh([v - height / 2 for v in y], marker, height=height, color=SERIES[2],
             edgecolor=SURFACE, linewidth=1.4, label="emitted '####' marker", zorder=3)
     threshold = reports[0].get("threshold", 0.85)

@@ -19,8 +19,8 @@ from instella_reasoning.records import (
 )
 from instella_reasoning.text import normalize_text
 
-#: A completed generation run must clear this natural-termination rate, or the accuracy it
-#: produces is an artifact of the token budget rather than a property of the model.
+#: A generation run must clear this semantic-completion rate, or its accuracy is an artifact
+#: of the token budget rather than a property of the model.
 MIN_TERMINATION_RATE = 0.85
 
 # In few-shot mode the model continues the Question/Answer pattern past its own answer.
@@ -34,9 +34,22 @@ def _truncate_at_next_exemplar(completion: str) -> str:
     return completion[: match.start()].rstrip() if match else completion
 
 
+def _finalize_completion(completion: str, emitted_eos: bool, n_shot: int) -> tuple[str, bool]:
+    """Return scoreable text and whether generation reached a semantic stopping point.
+
+    Base checkpoints often finish an answer and continue into the next few-shot exemplar
+    instead of emitting EOS. GSM-style models may likewise emit the final-answer marker
+    before their EOS token. Both are completed measurements, not token-budget truncations.
+    """
+    scoreable = _truncate_at_next_exemplar(completion) if n_shot > 0 else completion
+    reached_next_exemplar = scoreable != completion
+    reached_answer_marker = "####" in scoreable
+    return scoreable, emitted_eos or reached_next_exemplar or reached_answer_marker
+
+
 @dataclass(slots=True)
 class TerminationReport:
-    """Whether a generation set actually finished, or was cut off at the token cap."""
+    """Whether a generation set reached a semantic stop or was cut off at the token cap."""
 
     model: str
     n: int
@@ -67,11 +80,10 @@ def termination_report(
 ) -> TerminationReport:
     """Audit a generation set for truncation before its accuracy is believed.
 
-    Two independent signals, because either alone can mislead: ``finished`` (the model
-    emitted EOS) and the presence of the ``####`` final-answer marker. A model that never
-    terminates, or terminates but never emits the marker, is being scored on truncated
-    or unparseable text — which is exactly how a long-CoT checkpoint gets mistaken for a
-    weak one.
+    ``finished`` records EOS, a final-answer marker, or a few-shot exemplar boundary.
+    ``marker_rate`` remains separate because a semantically complete response can still be
+    hard to parse. A model that reaches neither signal is being scored on truncated text,
+    which is exactly how a long-CoT checkpoint gets mistaken for a weak one.
     """
     if not generations:
         return TerminationReport("unknown", 0, 0, 0, 0, 0.0, 0.0, False, threshold)
@@ -424,18 +436,19 @@ def generate_with_transformers(
             batch_rows: list[GenerationRecord] = []
             for item, sequence in zip(batch_items, tokens, strict=False):
                 generated = sequence[prompt_len:]
-                # Did the model stop on its own, or did it run out of budget mid-sentence?
+                # Did the model reach a semantic stop, or run out of budget mid-sentence?
                 # This distinction is not cosmetic: at 512 tokens the Math checkpoint hit the
                 # cap on 81% of items, emitted its '####' marker on 2%, and 26% of its
                 # responses contained the gold answer yet scored wrong. Recording it per row
                 # lets `termination_report` gate the run before the numbers are believed.
                 if eos_id is not None:
-                    finished = bool((generated == eos_id).any().item())
+                    emitted_eos = bool((generated == eos_id).any().item())
                 else:  # pragma: no cover - tokenizer without an EOS id
-                    finished = int(generated.shape[-1]) < max_new_tokens
-                completion = tokenizer.decode(generated, skip_special_tokens=True)
-                if n_shot > 0:
-                    completion = _truncate_at_next_exemplar(completion)
+                    emitted_eos = int(generated.shape[-1]) < max_new_tokens
+                raw_completion = tokenizer.decode(generated, skip_special_tokens=True)
+                completion, finished = _finalize_completion(
+                    raw_completion, emitted_eos=emitted_eos, n_shot=n_shot
+                )
                 batch_rows.append(
                     GenerationRecord(
                         benchmark_id=item.id,
@@ -450,6 +463,7 @@ def generate_with_transformers(
                             "cot_prompt": use_cot_prompt,
                             "chat_template": used_template,
                             "n_shot": n_shot,
+                            "emitted_eos": emitted_eos,
                             "finished": finished,
                         },
                     )

@@ -445,13 +445,13 @@ def main(argv: list[str] | None = None) -> int:
 
         term = termination_report(rows, threshold=max(args.min_termination_rate, 0.0))
         print(
-            f"[generate] terminated naturally: {term.termination_rate:.1%} · "
+            f"[generate] completed before token cap: {term.termination_rate:.1%} · "
             f"'####' marker: {term.marker_rate:.1%} · median {term.median_chars} chars"
         )
         if args.min_termination_rate > 0 and not term.passes:
             print(
                 "\n" + "!" * 72 + "\n"
-                f"ABORT: only {term.termination_rate:.1%} of completions terminated naturally "
+                f"ABORT: only {term.termination_rate:.1%} of completions reached a semantic stop "
                 f"(gate {args.min_termination_rate:.0%}).\n"
                 "The model is being cut off mid-reasoning, so its accuracy would be an\n"
                 "artifact of --max-new-tokens. Raise the budget for this checkpoint and\n"
@@ -964,7 +964,7 @@ def _cmd_check_termination(args) -> int:
         failed = failed or not report.passes
         print(
             f"  [{flag}] {report.model:34s} n={report.n:5d} "
-            f"terminated={report.termination_rate:6.1%} marker={report.marker_rate:6.1%} "
+            f"completed={report.termination_rate:6.1%} marker={report.marker_rate:6.1%} "
             f"median_chars={report.median_chars}"
         )
     if args.output:

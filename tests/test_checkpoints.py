@@ -42,7 +42,7 @@ def test_contamination_intervention_is_the_stage1_to_stage2_step() -> None:
 def test_long_cot_checkpoints_get_a_larger_token_budget() -> None:
     """The Math checkpoints emitted their answer marker on 2% of items at 512 tokens."""
     for tag in ("math", "math_sft"):
-        assert resolve(tag).max_new_tokens >= 1536
+        assert resolve(tag).max_new_tokens >= 3072
 
 
 def test_base_checkpoints_request_few_shot_prompting() -> None:

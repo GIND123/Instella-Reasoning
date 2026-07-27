@@ -114,7 +114,7 @@ INSTELLA_TRAJECTORY: tuple[Checkpoint, ...] = (
         intervention="+ math-focused SFT",
         is_base=False,
         saw_gsm8k_derived_data=True,
-        max_new_tokens=1536,
+        max_new_tokens=3072,
         tier=2,
         notes="Separates math SFT from the RL step in the A6 story.",
         local_assembly="models/Instella-3B-Math-SFT-hf",
@@ -128,8 +128,9 @@ INSTELLA_TRAJECTORY: tuple[Checkpoint, ...] = (
         saw_gsm8k_derived_data=True,
         # Long-CoT self-verifying reasoner. At 512 tokens it emitted the '####' marker in
         # 2% of outputs and 26% of its responses contained the gold answer but scored
-        # wrong. 1536 is a measurement-validity requirement, not a nicety.
-        max_new_tokens=1536,
+        # wrong. A live preflight still truncated 2/4 items at 1536, so 3072 is the
+        # measurement-validity budget rather than a cosmetic allowance.
+        max_new_tokens=3072,
         tier=1,
         notes="Long-CoT reasoner; REQUIRES a large token budget or accuracy is an artifact.",
         aliases=("math_rl",),
