@@ -61,7 +61,7 @@ def test_resolution_accepts_tags_aliases_hf_ids_and_bare_names() -> None:
 
 def test_tier_one_is_the_core_run_and_excludes_off_trajectory_models() -> None:
     core = tier(1)
-    assert [c.tag for c in core] == ["stage1", "stage2", "instruct", "math"]
+    assert [c.tag for c in core] == ["stage1", "stage2", "instruct"]
     assert all(c.step >= 0 for c in core)
     assert "olmo1b" not in {c.tag for c in tier(3)}
     assert "olmo1b" in {c.tag for c in tier(3, include_off_trajectory=True)}
@@ -72,7 +72,6 @@ def test_transitions_are_consecutive_pairs() -> None:
     assert [(a.tag, b.tag) for a, b in pairs] == [
         ("stage1", "stage2"),
         ("stage2", "instruct"),
-        ("instruct", "math"),
     ]
 
 

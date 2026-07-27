@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# FULL-SCALE MEMORISATION SUITE — one run, ~13-15 GPU hours.
+# FULL-SCALE MEMORISATION SUITE — reliable Tier-1 run, ~10-11 GPU hours.
 #
 # WHAT THIS MEASURES
 #   Does the model do better on problems it PROVABLY memorised?
@@ -53,7 +53,7 @@ RESAMPLE_TEMP="${RESAMPLE_TEMP:-0.7}"
 # interpreted. Running it on all four costs ~1.2 GPU-hours and answers nothing extra.
 RESAMPLE_MODELS="${RESAMPLE_MODELS:-instruct math}"
 BATCH="${BATCH:-8}"
-SUITE_TIER="${SUITE_TIER:-1}"          # 1 = core 4 checkpoints, 2 = all 6
+SUITE_TIER="${SUITE_TIER:-1}"          # 1 = reliable core 3, 2 = diagnostic all 6
 CORPUS_LIMIT="${CORPUS_LIMIT:-0}"      # 0 = full Instella-GSM8K-synthetic
 MIN_TERMINATION="${MIN_TERMINATION:-0.85}"
 SEED="${SEED:-6198}"
