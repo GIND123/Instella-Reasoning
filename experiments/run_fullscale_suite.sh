@@ -44,10 +44,14 @@ export PYTHONUNBUFFERED=1
 N_PER_ARM="${N_PER_ARM:-250}"          # verified items per arm (seen / unseen)
 SURFACE_K="${SURFACE_K:-2}"            # answer-preserving variants per item
 NUMERIC_K="${NUMERIC_K:-2}"            # answer-changing numeric variants per item
-GSMSYM_PER_TEMPLATE="${GSMSYM_PER_TEMPLATE:-5}"   # official GSM-Symbolic instances/template
+GSMSYM_PER_TEMPLATE="${GSMSYM_PER_TEMPLATE:-3}"   # official GSM-Symbolic instances/template
 RESAMPLE_ITEMS="${RESAMPLE_ITEMS:-100}"           # decoding-noise control items
 RESAMPLE_N="${RESAMPLE_N:-5}"                     # samples per item at T>0
 RESAMPLE_TEMP="${RESAMPLE_TEMP:-0.7}"
+# The decoding-noise control is a *null* for the consistency comparison, not a headline
+# measurement, so it only needs the checkpoints whose consistency is actually being
+# interpreted. Running it on all four costs ~1.2 GPU-hours and answers nothing extra.
+RESAMPLE_MODELS="${RESAMPLE_MODELS:-instruct math}"
 BATCH="${BATCH:-8}"
 SUITE_TIER="${SUITE_TIER:-1}"          # 1 = core 4 checkpoints, 2 = all 6
 CORPUS_LIMIT="${CORPUS_LIMIT:-0}"      # 0 = full Instella-GSM8K-synthetic
@@ -238,9 +242,13 @@ for tag in "${MODEL_TAGS[@]}"; do
       || echo "  (assembly failed; skipping $tag)"
   fi
 
-  run_block "$tag" arms     "$VARIANTS"  0.0
-  run_block "$tag" gsmsym   "$GSMSYM"    0.0
-  run_block "$tag" resample "$RESAMPLE"  "$RESAMPLE_TEMP"
+  run_block "$tag" arms   "$VARIANTS" 0.0
+  run_block "$tag" gsmsym "$GSMSYM"   0.0
+  if [[ " $RESAMPLE_MODELS " == *" $tag "* ]]; then
+    run_block "$tag" resample "$RESAMPLE" "$RESAMPLE_TEMP"
+  else
+    echo "  == skip $tag/resample (not in RESAMPLE_MODELS) =="
+  fi
 
   merged="$OUT/scores/${tag}__ALL.jsonl"
   : > "$merged"

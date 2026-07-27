@@ -74,11 +74,23 @@ Two stages can **abort the run on purpose**:
 N_PER_ARM=250            # verified items per arm  <- the power-driving number
 SURFACE_K=2              # answer-preserving variants per item
 NUMERIC_K=2              # answer-changing numeric variants per item
-GSMSYM_PER_TEMPLATE=5    # official GSM-Symbolic instances per template
+GSMSYM_PER_TEMPLATE=3    # official GSM-Symbolic instances per template
 RESAMPLE_ITEMS=100  RESAMPLE_N=5  RESAMPLE_TEMP=0.7   # decoding-noise control
+RESAMPLE_MODELS="instruct math"   # the control is a null, not a headline measurement
 SUITE_TIER=1             # 1 = core 4 checkpoints, 2 = all 6
 BATCH=8  MIN_TERMINATION=0.85  SEED=6198
 ```
+
+At the defaults, on the ~1,000 generations/hour observed for this hardware at 1024 tokens:
+
+| block | generations | hours |
+|---|---:|---:|
+| core arms (2 × 250 items × 5 variants × 4 checkpoints) | 10,000 | 10.0 |
+| official GSM-Symbolic (200 templates × 4 × 4 checkpoints) | 3,200 | 3.2 |
+| decoding-noise control (100 × 6 × 2 checkpoints) | 1,200 | 1.2 |
+| **total** | **14,400** | **14.4** |
+
+leaving ~0.6 h inside a 15-hour budget for retries. `SUITE_TIER=2` adds ~1.5 h.
 
 **Do not raise `SURFACE_K`/`NUMERIC_K` to buy power.** Measured intra-cluster correlation
 on the pilot data is ≈0.48, so the marginal effective-n of the k-th variant is
