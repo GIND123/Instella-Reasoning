@@ -356,12 +356,12 @@ def check_gpu_smoke(suite_tier: int, n_items: int) -> str:
                 record(
                     f"  smoke {ckpt.tag}",
                     status,
-                    f"terminated {report.termination_rate:.0%}, marker {report.marker_rate:.0%}, "
+                    f"completed {report.termination_rate:.0%}, marker {report.marker_rate:.0%}, "
                     f"median {report.median_chars} chars",
                 )
                 if not report.passes:
                     failures.append(
-                        f"{ckpt.tag}: only {report.termination_rate:.0%} terminated at "
+                        f"{ckpt.tag}: only {report.termination_rate:.0%} completed at "
                         f"{ckpt.max_new_tokens} tokens — raise its budget in checkpoints.py"
                     )
         if failures:
