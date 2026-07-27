@@ -63,7 +63,40 @@ the current experiment.
 - **Cross-runtime resume:** the suite pulls this run directory before starting and pushes
   after every completed preparation stage and `(checkpoint, block)`, including raw
   generations by default. Re-run the same launch cell in a new Colab environment to resume.
-  Work in the currently active block remains local until that block finishes.
+  Work in the currently active block normally remains local until that block finishes;
+  interrupted raw generations can also be pushed manually and resumed item-by-item.
+
+### Current Hugging Face snapshot (2026-07-27)
+
+The private dataset repo `GOVINDFROM/Instella-Reasoning` currently holds the recoverable
+state below under `experiments/runs/fullscale-S250/`. This is a progress checkpoint, not a
+finished experiment.
+
+| Area | Current contents |
+|---|---|
+| `markers/` | Successful preflight write probe and all four preparation markers: `stage1_corpus`, `stage2_splits`, `stage3_variants`, `stage4_aux` |
+| `analysis/` | `preflight.json` and the verified-arm containment report |
+| `contamination/` | The approximately 1.45 GB `synthetic_corpus.jsonl` used for exact containment |
+| `base/` | Normalized GSM8K train and test inputs |
+| `arms/` | The verified seen/unseen GSM8K arms |
+| `variants/` | Raw and validated arm variants, official GSM-Symbolic inputs, and the decoding-noise resample control |
+| `review/` | Exported template-review CSV |
+| `generations/` | `stage1__arms.jsonl`: 1,553/1,553 rows, approximately 1.72 MB |
+| `scores/`, `atlas/`, `figures/` | No completed result artifacts yet |
+
+The `stage1/arms` generation reached every benchmark item, but only **83.2%** of outputs
+reached EOS or the final-answer marker, below the required **85%** termination gate.
+Consequently it is deliberately **unscored** and must not be treated as a result. Of its
+1,553 rows, 1,292 are valid and approximately 261 truncated rows need a targeted retry with
+a larger token budget. Preserve the original file, retain rows whose
+`metadata.finished` value is true, regenerate only the unfinished IDs at 2,048 tokens, then
+run `score-generations` and push the resulting `scores/stage1__arms.jsonl`.
+
+At this checkpoint all CPU/data preparation is complete, the first raw-generation block is
+complete but not yet valid, and none of the seven Tier-1 GPU blocks has a score completion
+marker. A fresh runtime must pull from HF before doing any repair or launch work. After the
+repaired `stage1__arms.jsonl` passes the gate and is scored, rerunning the suite will skip
+that block and continue with `stage1/gsmsym`.
 
 Required gate and launch:
 
