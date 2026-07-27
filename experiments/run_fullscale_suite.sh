@@ -236,10 +236,13 @@ for tag in "${MODEL_TAGS[@]}"; do
   echo "== Checkpoint: $tag =="
   # Assemble a local HF-loadable copy when the Hub repo ships vLLM-only remote code.
   assembly="$(_ckpt_field "$tag" local_assembly)"
-  if [[ "$assembly" != "None" && ! -d "$assembly" ]]; then
-    echo "  assembling $assembly"
-    python experiments/fetch_instella_math_hf.py --out "$assembly" \
-      || echo "  (assembly failed; skipping $tag)"
+  if [[ "$assembly" != "None" ]]; then
+    echo "  ensuring complete local assembly at $assembly"
+    source_repo="$(_ckpt_field "$tag" hf_id)"
+    if ! python experiments/fetch_instella_math_hf.py --repo "$source_repo" --out "$assembly"; then
+      echo "  (assembly failed; skipping $tag)"
+      continue
+    fi
   fi
 
   run_block "$tag" arms   "$VARIANTS" 0.0

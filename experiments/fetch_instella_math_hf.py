@@ -38,6 +38,11 @@ HF_AUTO_MAP = {
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=DEFAULT_OUT)
+    parser.add_argument(
+        "--repo",
+        default=MATH_REPO,
+        help="Source checkpoint repo whose weights/config/tokenizer should be assembled.",
+    )
     parser.add_argument("--no-weights", action="store_true",
                         help="Skip the safetensors download (assembly smoke test only).")
     args = parser.parse_args()
@@ -49,16 +54,11 @@ def main() -> int:
         return 1
 
     out = Path(args.out)
-    marker = out / "modeling_instella.py"
-    if marker.exists() and (out / "config.json").exists():
-        if args.no_weights or any(out.glob("*.safetensors")):
-            print(out)
-            return 0
 
     ignore = ["*.py"]  # never take the Math repo's vLLM-only python files
     if args.no_weights:
         ignore.append("*.safetensors")
-    snapshot_download(MATH_REPO, local_dir=out, ignore_patterns=ignore)
+    snapshot_download(args.repo, local_dir=out, ignore_patterns=ignore)
 
     modeling = hf_hub_download(INSTRUCT_REPO, "modeling_instella.py")
     shutil.copy(modeling, out / "modeling_instella.py")
