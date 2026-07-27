@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -322,6 +323,22 @@ def check_gpu_smoke(suite_tier: int, n_items: int) -> str:
                 progress.set_postfix_str(f"{ckpt.tag}: load + generate", refresh=True)
                 out = Path(tmp) / f"{ckpt.tag}.jsonl"
                 try:
+                    if ckpt.local_assembly:
+                        assembly = REPO / ckpt.local_assembly
+                        progress.set_postfix_str(f"{ckpt.tag}: assemble checkpoint", refresh=True)
+                        subprocess.run(
+                            [
+                                sys.executable,
+                                str(REPO / "experiments/fetch_instella_math_hf.py"),
+                                "--repo",
+                                ckpt.hf_id,
+                                "--out",
+                                str(assembly),
+                            ],
+                            cwd=REPO,
+                            check=True,
+                        )
+                        progress.set_postfix_str(f"{ckpt.tag}: load + generate", refresh=True)
                     rows = generate_with_transformers(
                         benchmark=items,
                         model_name_or_path=ckpt.load_path,
