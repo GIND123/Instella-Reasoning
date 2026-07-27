@@ -6,6 +6,8 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 from instella_reasoning.answer_equivalence import answers_equivalent, resolve_answer_kind
 from instella_reasoning.prompting import build_prompt, extract_answer
 from instella_reasoning.records import (
@@ -387,64 +389,74 @@ def generate_with_transformers(
 
     rows: list[GenerationRecord] = list(existing)
     templated_any = False
-    for start in range(0, len(pending), batch_size):
-        batch_items = pending[start : start + batch_size]
-        batch_prompts = prompts[start : start + batch_size]
-        texts, add_special, used_template = _format_prompts(
-            tokenizer, batch_prompts, use_chat_template
-        )
-        templated_any = templated_any or used_template
-        inputs = tokenizer(
-            texts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            add_special_tokens=add_special,
-        ).to(model.device)
-        with torch.no_grad():
-            tokens = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature if do_sample else None,
-                do_sample=do_sample,
-                pad_token_id=tokenizer.pad_token_id,
+    model_label = Path(model_name_or_path).name
+    with tqdm(
+        total=len(benchmark),
+        initial=len(benchmark) - len(pending),
+        desc=f"Generate {model_label}",
+        unit="item",
+        dynamic_ncols=True,
+        leave=True,
+    ) as progress:
+        for start in range(0, len(pending), batch_size):
+            batch_items = pending[start : start + batch_size]
+            batch_prompts = prompts[start : start + batch_size]
+            texts, add_special, used_template = _format_prompts(
+                tokenizer, batch_prompts, use_chat_template
             )
-        prompt_len = inputs["input_ids"].shape[-1]
-        batch_rows: list[GenerationRecord] = []
-        for item, sequence in zip(batch_items, tokens, strict=False):
-            generated = sequence[prompt_len:]
-            # Did the model stop on its own, or did it run out of budget mid-sentence?
-            # This distinction is not cosmetic: at 512 tokens the Math checkpoint hit the
-            # cap on 81% of items, emitted its '####' marker on 2%, and 26% of its
-            # responses contained the gold answer yet scored wrong. Recording it per row
-            # lets `termination_report` gate the run before the numbers are believed.
-            if eos_id is not None:
-                finished = bool((generated == eos_id).any().item())
-            else:  # pragma: no cover - tokenizer without an EOS id
-                finished = int(generated.shape[-1]) < max_new_tokens
-            completion = tokenizer.decode(generated, skip_special_tokens=True)
-            if n_shot > 0:
-                completion = _truncate_at_next_exemplar(completion)
-            batch_rows.append(
-                GenerationRecord(
-                    benchmark_id=item.id,
-                    completion=completion,
-                    model=model_name_or_path,
-                    metadata={
-                        "max_new_tokens": max_new_tokens,
-                        "temperature": temperature,
-                        "load_in_4bit": quantized,  # effective, not just requested
-                        "precision": precision,  # "bf16" (headline) / "fp16" / "nf4-4bit"
-                        "revision": revision,  # model commit pinned for reproducibility
-                        "cot_prompt": use_cot_prompt,
-                        "chat_template": used_template,
-                        "n_shot": n_shot,
-                        "finished": finished,
-                    },
+            templated_any = templated_any or used_template
+            inputs = tokenizer(
+                texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                add_special_tokens=add_special,
+            ).to(model.device)
+            with torch.no_grad():
+                tokens = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature if do_sample else None,
+                    do_sample=do_sample,
+                    pad_token_id=tokenizer.pad_token_id,
                 )
-            )
-        _append(batch_rows)   # flush after each batch so an interrupt leaves valid output
-        rows.extend(batch_rows)
+            prompt_len = inputs["input_ids"].shape[-1]
+            batch_rows: list[GenerationRecord] = []
+            for item, sequence in zip(batch_items, tokens, strict=False):
+                generated = sequence[prompt_len:]
+                # Did the model stop on its own, or did it run out of budget mid-sentence?
+                # This distinction is not cosmetic: at 512 tokens the Math checkpoint hit the
+                # cap on 81% of items, emitted its '####' marker on 2%, and 26% of its
+                # responses contained the gold answer yet scored wrong. Recording it per row
+                # lets `termination_report` gate the run before the numbers are believed.
+                if eos_id is not None:
+                    finished = bool((generated == eos_id).any().item())
+                else:  # pragma: no cover - tokenizer without an EOS id
+                    finished = int(generated.shape[-1]) < max_new_tokens
+                completion = tokenizer.decode(generated, skip_special_tokens=True)
+                if n_shot > 0:
+                    completion = _truncate_at_next_exemplar(completion)
+                batch_rows.append(
+                    GenerationRecord(
+                        benchmark_id=item.id,
+                        completion=completion,
+                        model=model_name_or_path,
+                        metadata={
+                            "max_new_tokens": max_new_tokens,
+                            "temperature": temperature,
+                            "load_in_4bit": quantized,  # effective, not just requested
+                            "precision": precision,  # "bf16" (headline) / "fp16" / "nf4-4bit"
+                            "revision": revision,  # model commit pinned for reproducibility
+                            "cot_prompt": use_cot_prompt,
+                            "chat_template": used_template,
+                            "n_shot": n_shot,
+                            "finished": finished,
+                        },
+                    )
+                )
+            _append(batch_rows)  # flush so an interrupt leaves valid output
+            rows.extend(batch_rows)
+            progress.update(len(batch_rows))
 
     if use_chat_template and not templated_any:
         print(

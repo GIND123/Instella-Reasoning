@@ -38,6 +38,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 REPO = Path(__file__).resolve().parents[1]
 PASS, FAIL, WARN, SKIP = "PASS", "FAIL", "WARN", "SKIP"
 
@@ -47,7 +49,7 @@ _results: list[tuple[str, str, str]] = []
 def record(name: str, status: str, detail: str = "") -> str:
     _results.append((name, status, detail))
     icon = {PASS: "  ok ", FAIL: "FAIL ", WARN: "warn ", SKIP: "skip "}[status]
-    print(f"[{icon}] {name}" + (f" — {detail}" if detail else ""))
+    tqdm.write(f"[{icon}] {name}" + (f" — {detail}" if detail else ""))
     return status
 
 
@@ -308,34 +310,43 @@ def check_gpu_smoke(suite_tier: int, n_items: int) -> str:
         items = read_benchmark(bench_path)
 
         failures = []
-        for ckpt in tier(suite_tier):
-            out = Path(tmp) / f"{ckpt.tag}.jsonl"
-            try:
-                rows = generate_with_transformers(
-                    benchmark=items,
-                    model_name_or_path=ckpt.load_path,
-                    output_path=out,
-                    max_new_tokens=ckpt.max_new_tokens,
-                    batch_size=min(4, n_items),
-                    n_shot=ckpt.n_shot,
-                    use_chat_template=not ckpt.is_base,
+        checkpoints = tier(suite_tier)
+        with tqdm(
+            checkpoints,
+            desc="GPU smoke",
+            unit="checkpoint",
+            dynamic_ncols=True,
+            leave=True,
+        ) as progress:
+            for ckpt in progress:
+                progress.set_postfix_str(f"{ckpt.tag}: load + generate", refresh=True)
+                out = Path(tmp) / f"{ckpt.tag}.jsonl"
+                try:
+                    rows = generate_with_transformers(
+                        benchmark=items,
+                        model_name_or_path=ckpt.load_path,
+                        output_path=out,
+                        max_new_tokens=ckpt.max_new_tokens,
+                        batch_size=min(4, n_items),
+                        n_shot=ckpt.n_shot,
+                        use_chat_template=not ckpt.is_base,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"{ckpt.tag}: {type(exc).__name__}: {str(exc)[:70]}")
+                    continue
+                report = termination_report(rows)
+                status = PASS if report.passes else FAIL
+                record(
+                    f"  smoke {ckpt.tag}",
+                    status,
+                    f"terminated {report.termination_rate:.0%}, marker {report.marker_rate:.0%}, "
+                    f"median {report.median_chars} chars",
                 )
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{ckpt.tag}: {type(exc).__name__}: {str(exc)[:70]}")
-                continue
-            report = termination_report(rows)
-            status = PASS if report.passes else FAIL
-            record(
-                f"  smoke {ckpt.tag}",
-                status,
-                f"terminated {report.termination_rate:.0%}, marker {report.marker_rate:.0%}, "
-                f"median {report.median_chars} chars",
-            )
-            if not report.passes:
-                failures.append(
-                    f"{ckpt.tag}: only {report.termination_rate:.0%} terminated at "
-                    f"{ckpt.max_new_tokens} tokens — raise its budget in checkpoints.py"
-                )
+                if not report.passes:
+                    failures.append(
+                        f"{ckpt.tag}: only {report.termination_rate:.0%} terminated at "
+                        f"{ckpt.max_new_tokens} tokens — raise its budget in checkpoints.py"
+                    )
         if failures:
             return record("GPU smoke", FAIL, "; ".join(failures))
     return record("GPU smoke", PASS, "all checkpoints generate and terminate")
@@ -359,17 +370,33 @@ def main() -> int:
     print(f" run dir: {args.out}   repo: {args.repo}   tier: {args.tier}")
     print("=" * 74)
 
-    check_imports()
-    check_hf(args.repo, args.out)
-    check_run_dir(args.out)
-    check_models(args.tier)
-    check_datasets()
-    check_variant_generator()
-    check_disk()
-    if args.smoke:
-        check_gpu_smoke(args.tier, args.smoke_items)
-    else:
-        record("GPU smoke", SKIP, "pass --smoke to verify generation before the real run")
+    checks = (
+        ("package imports", check_imports, ()),
+        ("Hugging Face access", check_hf, (args.repo, args.out)),
+        ("run directory", check_run_dir, (args.out,)),
+        ("model registry", check_models, (args.tier,)),
+        ("datasets", check_datasets, ()),
+        ("variant generator", check_variant_generator, ()),
+        ("disk headroom", check_disk, ()),
+    )
+    with tqdm(
+        total=len(checks) + 1,
+        desc="Preflight",
+        unit="check",
+        dynamic_ncols=True,
+        leave=True,
+    ) as progress:
+        for label, check, check_args in checks:
+            progress.set_postfix_str(label, refresh=True)
+            check(*check_args)
+            progress.update()
+
+        progress.set_postfix_str("GPU smoke", refresh=True)
+        if args.smoke:
+            check_gpu_smoke(args.tier, args.smoke_items)
+        else:
+            record("GPU smoke", SKIP, "pass --smoke to verify generation before the real run")
+        progress.update()
 
     fails = [r for r in _results if r[1] == FAIL]
     warns = [r for r in _results if r[1] == WARN]
