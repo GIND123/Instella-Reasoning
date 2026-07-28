@@ -388,6 +388,14 @@ def load_benchmark_to_jsonl(
     rows: list[BenchmarkItem] = []
     per_parent: dict[str, int] = {}
     for item in spec.loader(dataset, spec.skill):
+        if spec.hf_path == "apple/GSM-Symbolic":
+            # The main/p1/p2 files reuse template and instance numbers. Namespace them
+            # before the suite concatenates configs; generation resume and scoring both
+            # require benchmark IDs to be globally unique.
+            item.id = f"{config}__{item.id}"
+            if item.parent_id is not None:
+                item.parent_id = f"{config}__{item.parent_id}"
+            item.metadata["benchmark_config"] = config
         if max_per_parent is not None and item.variant_type != "original":
             key = item.parent_id or item.id
             if per_parent.get(key, 0) >= max_per_parent:
