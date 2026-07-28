@@ -7,8 +7,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/GIND123/Instella-Reasoning"><b>GitHub</b></a> ·
   <a href="experiments/FULLSCALE.md"><b>Full-scale suite</b></a> ·
   <a href="notebooks/fullscale_colab.ipynb">Colab</a> ·
+  <a href="https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning">HF results</a> ·
   <a href="docs/AUDIT_2026-07-26.md">Audit</a> ·
   <a href="docs/BUILD_PLAN.md">Design</a> ·
   <a href="#command-reference">Commands</a> ·
@@ -38,89 +40,332 @@
 
 ## Current validated full-scale workflow
 
-**This is the authoritative handoff for agents and Colab operators.** Use
-[`notebooks/fullscale_colab.ipynb`](notebooks/fullscale_colab.ipynb) and
-[`experiments/run_fullscale_suite.sh`](experiments/run_fullscale_suite.sh) for the headline
-run. The generic Atlas demo and superseded reliability examples later in this README are not
-the current experiment.
+**This is the authoritative handoff for agents and Colab operators.** Repository:
+[github.com/GIND123/Instella-Reasoning](https://github.com/GIND123/Instella-Reasoning).
+Results:
+[GOVINDFROM/Instella-Reasoning](https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning)
+under `experiments/runs/fullscale-S250/`. Use the three cells below in order on a fresh
+Colab GPU runtime. In a replacement runtime, run all three again; the third cell restores
+the HF checkpoint and skips scored blocks.
 
-- **Headline scope:** `SUITE_TIER=1` runs `stage1`, `stage2`, and `instruct`. This preserves
-  the controlled Stage-1 → Stage-2 intervention where GSM8K-derived data enters, plus the
-  aligned Instruct endpoint. The costed run is about 10.5 GPU-hours on the measured hardware.
-- **Math is diagnostic-only:** `math` moved to `SUITE_TIER=2` after live smoke tests reached
-  only 75% semantic completion even at 3072 tokens. Do not lower or bypass the 85%
-  completion gate to force it into headline results.
-- **Completion semantics:** a generation is complete when it emits EOS, reaches the `####`
-  final-answer marker, or crosses into the next few-shot exemplar. This prevents valid base
-  checkpoint answers from being mislabeled as token-cap truncations.
-- **Colab secrets:** add `github` (GitHub repo read access) and `hf` (Hugging Face write
-  access). The notebook authenticates Git with an in-memory HTTP header; do not put either
-  token in a remote URL or printed command.
-- **Hugging Face destination:** results live in the private dataset repo
-  `GOVINDFROM/Instella-Reasoning`, under
-  `experiments/runs/fullscale-S250/`. The successful preflight report is
-  `analysis/preflight.json` inside that run path.
-- **Cross-runtime resume:** the suite pulls this run directory before starting and pushes
-  after every completed preparation stage and `(checkpoint, block)`, including raw
-  generations by default. Re-run the same launch cell in a new Colab environment to resume.
-  Work in the currently active block normally remains local until that block finishes;
-  interrupted raw generations can also be pushed manually and resumed item-by-item.
+- **Headline scope:** `SUITE_TIER=1` runs `stage1`, `stage2`, and `instruct`, preserving the
+  controlled Stage-1 → Stage-2 intervention where GSM8K-derived data enters.
+- **Math is diagnostic-only:** `math` remains in Tier 2 after failing semantic-completion
+  smoke tests at 3,072 tokens. Never lower or bypass the 85% gate to force it into a result.
+- **Completion semantics:** EOS, the `####` final-answer marker, or entering the next
+  few-shot exemplar counts as a semantic stop.
+- **Checkpoints:** the suite pushes after each completed preparation stage and scored GPU
+  block. Cell 3 also pushes partial local work if the suite exits nonzero.
+- **Progress visibility:** Cell 3 prints the newest generation row count and GPU utilization
+  every minute even when subprocess `tqdm` rendering is hidden by Colab.
+- **Final artifacts:** the suite runs the termination audit, memorization statistics, atlas,
+  and publication plots only after all requested Tier-1 GPU blocks finish.
 
-### Current Hugging Face snapshot (2026-07-27)
+### Current HF snapshot (2026-07-28)
 
-The private dataset repo `GOVINDFROM/Instella-Reasoning` currently holds the recoverable
-state below under `experiments/runs/fullscale-S250/`. This is a progress checkpoint, not a
-finished experiment.
+This is a recoverable progress checkpoint, not a finished experiment.
 
-| Area | Current contents |
+| Area | Validated contents |
 |---|---|
-| `markers/` | Successful preflight write probe and all four preparation markers: `stage1_corpus`, `stage2_splits`, `stage3_variants`, `stage4_aux` |
-| `analysis/` | `preflight.json` and the verified-arm containment report |
-| `contamination/` | The approximately 1.45 GB `synthetic_corpus.jsonl` used for exact containment |
-| `base/` | Normalized GSM8K train and test inputs |
-| `arms/` | The verified seen/unseen GSM8K arms |
-| `variants/` | Raw and validated arm variants, official GSM-Symbolic inputs, and the decoding-noise resample control |
-| `review/` | Exported template-review CSV |
-| `generations/` | `stage1__arms.jsonl`: 1,553/1,553 rows, approximately 1.72 MB |
-| `scores/`, `atlas/`, `figures/` | No completed result artifacts yet |
+| `markers/` | Preflight probe plus `stage1_corpus`, `stage2_splits`, `stage3_variants`, and `stage4_aux` |
+| `analysis/` | Preflight and exact-containment reports |
+| `contamination/` | Approximately 1.45 GB synthetic corpus used for treatment verification |
+| `arms/`, `variants/`, `review/` | Verified arms, perturbations, corrected official GSM-Symbolic inputs, noise control, and review CSV |
+| `generations/stage1__arms.jsonl` | 1,553 repaired generation rows |
+| `scores/stage1__arms.jsonl` | 1,553 scored rows; authoritative completion marker |
+| `generations/stage1__gsmsym.jsonl` | 800 rows remapped to 800 unique `main`/`p1` IDs |
+| `scores/stage1__gsmsym.jsonl` | 800 scored rows after passing the 85% termination gate |
+| Stage 2 and Instruct | Pending |
+| Final analysis, atlas, and figures | Pending until all Tier-1 score blocks exist |
 
-The `stage1/arms` generation reached every benchmark item, but only **83.2%** of outputs
-reached EOS or the final-answer marker, below the required **85%** termination gate.
-Consequently it is deliberately **unscored** and must not be treated as a result. Of its
-1,553 rows, 1,292 are valid and approximately 261 truncated rows need a targeted retry with
-a larger token budget. Preserve the original file, retain rows whose
-`metadata.finished` value is true, regenerate only the unfinished IDs at 2,048 tokens, then
-run `score-generations` and push the resulting `scores/stage1__arms.jsonl`.
+Completed and scored: **2,353 / 7,659 rows (30.7%)**. Remaining: **5,306 rows**.
+The next expected block is `stage2/arms`.
 
-At this checkpoint all CPU/data preparation is complete, the first raw-generation block is
-complete but not yet valid, and none of the seven Tier-1 GPU blocks has a score completion
-marker. A fresh runtime must pull from HF before doing any repair or launch work. After the
-repaired `stage1__arms.jsonl` passes the gate and is scored, rerunning the suite will skip
-that block and continue with `stage1/gsmsym`.
+The Stage-1 arms repair retained 1,292 valid rows, regenerated 261 truncated rows at 2,048
+tokens, then scored and pushed the complete block. GSM-Symbolic exposed a separate
+measurement bug: Apple's `main` and `p1` configs reused IDs. Commit `bd5074b` namespaces
+those IDs and adds a regression test. The untouched 800-row backup was remapped safely;
+654 rows were salvaged, the 2,048-token pass reached 678/800 (84.8%), and the 3,072-token
+pass reached 689/800 (86.1%). The corrected generation and score files are now on HF.
+Pre-fix duplicate-ID GSM-Symbolic artifacts must not be analyzed.
 
-Required gate and launch:
+### Cell 1 - clone or update `main`
 
-```bash
-export OUT=experiments/runs/fullscale-S250
-export SUITE_TIER=1
-export HF_RESULTS_REPO=GOVINDFROM/Instella-Reasoning
+Add Colab secrets named `github` (GitHub read token; optional if the repo is public) and
+`hf` (Hugging Face token with write access). This cell keeps credentials out of the Git
+remote URL and handles an existing checkout without relying on branch tracking.
 
-python scripts/preflight_fullscale.py --smoke --tier 1 \
-  --out "$OUT" --repo "$HF_RESULTS_REPO" \
-  --json "$OUT/analysis/preflight.json"
-# Continue only after: SAFE TO LAUNCH
+```python
+import base64
+import os
+import subprocess
+from pathlib import Path
 
-python experiments/hf_sync.py push \
-  --repo "$HF_RESULTS_REPO" --path "$OUT" \
-  --message "successful Tier-1 preflight"
+from google.colab import userdata
 
-bash experiments/run_fullscale_suite.sh
+REPO = Path("/content/Instella-Reasoning")
+REPO_URL = "https://github.com/GIND123/Instella-Reasoning.git"
+
+def colab_secret(name):
+    try:
+        return userdata.get(name)
+    except Exception:
+        return None
+
+github_token = colab_secret("github")
+git_env = os.environ.copy()
+if github_token:
+    git_env.update({
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+        "GIT_CONFIG_VALUE_0": "AUTHORIZATION: basic " + base64.b64encode(
+            f"x-access-token:{github_token}".encode()
+        ).decode(),
+    })
+
+if not (REPO / ".git").is_dir():
+    subprocess.run(
+        ["git", "clone", REPO_URL, str(REPO)],
+        check=True,
+        env=git_env,
+    )
+
+subprocess.run(["git", "remote", "set-url", "origin", REPO_URL], cwd=REPO, check=True)
+subprocess.run(["git", "checkout", "main"], cwd=REPO, check=True)
+subprocess.run(["git", "fetch", "origin", "main"], cwd=REPO, check=True, env=git_env)
+subprocess.run(["git", "merge", "--ff-only", "origin/main"], cwd=REPO, check=True)
+subprocess.run(
+    ["git", "merge-base", "--is-ancestor", "bd5074b", "HEAD"],
+    cwd=REPO,
+    check=True,
+)
+
+commit = subprocess.check_output(
+    ["git", "rev-parse", "--short", "HEAD"],
+    cwd=REPO,
+    text=True,
+).strip()
+print("Repository ready:", REPO)
+print("Current commit:", commit)
+print("GitHub:", "https://github.com/GIND123/Instella-Reasoning")
 ```
 
-On a fresh Pro runtime, clone or pull `main`, install
-`.[hf,retrieval,viz,stats]`, expose the same `hf` secret as `HF_TOKEN`, and run the same
-launch command with the same `OUT`. The initial HF pull restores completed work. Full design,
-budget, artifacts, and failure gates are documented in
+### Cell 2 - install, restore, test, and preflight
+
+This cell restores the HF run, runs the repository tests, proves HF write access, checks
+the GPU/models/datasets, and performs the Tier-1 generation smoke. Continue only after
+`SAFE TO LAUNCH`.
+
+```python
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from google.colab import userdata
+
+REPO = Path("/content/Instella-Reasoning")
+RUN_DIR = "experiments/runs/fullscale-S250"
+HF_REPO = "GOVINDFROM/Instella-Reasoning"
+os.chdir(REPO)
+
+if not os.environ.get("HF_TOKEN"):
+    os.environ["HF_TOKEN"] = userdata.get("hf")
+if not os.environ.get("HF_TOKEN"):
+    raise RuntimeError("Missing write-enabled Colab secret named 'hf'.")
+
+os.environ.update({
+    "OUT": RUN_DIR,
+    "HF_RESULTS_REPO": HF_REPO,
+    "HF_HUB_DISABLE_XET": "1",
+    "HF_INCLUDE_GENERATIONS": "1",
+    "TOKENIZERS_PARALLELISM": "false",
+    "PYTHONUNBUFFERED": "1",
+    "SUITE_TIER": "1",
+})
+
+print("Installing runtime dependencies...")
+subprocess.run([
+    sys.executable, "-m", "pip", "install", "-q", "-e",
+    ".[dev,hf,retrieval,viz,stats]",
+], check=True)
+subprocess.run([
+    sys.executable, "-m", "pip", "install", "-q", "statsmodels",
+], check=True)
+
+import torch
+if not torch.cuda.is_available():
+    raise RuntimeError("No GPU detected. Select Runtime > Change runtime type > GPU.")
+print("GPU:", torch.cuda.get_device_name(0))
+
+print("\nRestoring the current run from Hugging Face...")
+subprocess.run([
+    sys.executable, "experiments/hf_sync.py", "pull",
+    "--repo", HF_REPO,
+    "--path", RUN_DIR,
+], check=True)
+
+print("\nRunning repository tests...")
+subprocess.run([sys.executable, "-m", "pytest"], check=True)
+
+print("\nRunning Tier-1 GPU/HF preflight...")
+preflight_json = f"{RUN_DIR}/analysis/preflight.json"
+subprocess.run([
+    sys.executable, "scripts/preflight_fullscale.py",
+    "--smoke",
+    "--out", RUN_DIR,
+    "--repo", HF_REPO,
+    "--tier", "1",
+    "--json", preflight_json,
+], check=True)
+
+print("\nSaving successful preflight...")
+subprocess.run([
+    sys.executable, "experiments/hf_sync.py", "push",
+    "--repo", HF_REPO,
+    "--path", RUN_DIR,
+    "--message", "successful Tier-1 preflight",
+], check=True)
+
+print("\nSAFE TO LAUNCH CELL 3.")
+```
+
+### Cell 3 - monitored, resumable full launch
+
+This is the cell to rerun after a Colab interruption. It pulls HF first, launches the
+remaining suite, reports live file/GPU progress every 60 seconds, and attempts a recovery
+push on every exit. A score file is the completion marker; partial row counts alone are not.
+
+```python
+import glob
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from google.colab import userdata
+
+REPO = Path("/content/Instella-Reasoning")
+RUN_DIR = Path("experiments/runs/fullscale-S250")
+HF_REPO = "GOVINDFROM/Instella-Reasoning"
+os.chdir(REPO)
+
+if not os.environ.get("HF_TOKEN"):
+    os.environ["HF_TOKEN"] = userdata.get("hf")
+if not os.environ.get("HF_TOKEN"):
+    raise RuntimeError("Missing write-enabled Colab secret named 'hf'.")
+
+run_env = os.environ.copy()
+run_env.update({
+    "OUT": str(RUN_DIR),
+    "HF_RESULTS_REPO": HF_REPO,
+    "HF_HUB_DISABLE_XET": "1",
+    "HF_INCLUDE_GENERATIONS": "1",
+    "TOKENIZERS_PARALLELISM": "false",
+    "PYTHONUNBUFFERED": "1",
+    "SUITE_TIER": "1",
+    "N_PER_ARM": "250",
+    "BATCH": "8",
+})
+
+print("GPU check...")
+import torch
+if not torch.cuda.is_available():
+    raise RuntimeError("No GPU detected. Select Runtime > Change runtime type > GPU.")
+print("GPU:", torch.cuda.get_device_name(0))
+
+print("\nRestoring completed and partial work from Hugging Face...")
+subprocess.run([
+    sys.executable, "experiments/hf_sync.py", "pull",
+    "--repo", HF_REPO,
+    "--path", str(RUN_DIR),
+], check=True, env=run_env)
+
+def count_jsonl(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return sum(1 for line in handle if line.strip())
+    except (FileNotFoundError, OSError):
+        return 0
+
+def print_progress():
+    generation_files = [
+        Path(path) for path in glob.glob(str(RUN_DIR / "generations/*.jsonl"))
+    ]
+    score_files = [
+        Path(path) for path in glob.glob(str(RUN_DIR / "scores/*.jsonl"))
+        if not path.endswith("__ALL.jsonl")
+    ]
+    newest = max(generation_files, key=lambda path: path.stat().st_mtime, default=None)
+    gpu = subprocess.run([
+        "nvidia-smi",
+        "--query-gpu=utilization.gpu,memory.used,memory.total",
+        "--format=csv,noheader,nounits",
+    ], text=True, capture_output=True, check=False).stdout.strip()
+    current = (
+        f"{newest.name}: {count_jsonl(newest)} rows"
+        if newest is not None else "no generation file yet"
+    )
+    print(
+        f"[progress] {current} | completed score blocks={len(score_files)}"
+        + (f" | GPU {gpu}" if gpu else ""),
+        flush=True,
+    )
+
+print("\nLaunching or resuming the full Tier-1 analysis...")
+process = subprocess.Popen(
+    ["bash", "experiments/run_fullscale_suite.sh"],
+    env=run_env,
+)
+
+exit_code = None
+try:
+    while process.poll() is None:
+        time.sleep(60)
+        print_progress()
+    exit_code = process.returncode
+except KeyboardInterrupt:
+    print("\nInterrupt received; stopping the suite cleanly...")
+    process.send_signal(2)
+    try:
+        exit_code = process.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        exit_code = process.wait()
+finally:
+    print("\nCheckpointing all current local progress to Hugging Face...")
+    subprocess.run([
+        sys.executable, "experiments/hf_sync.py", "push",
+        "--repo", HF_REPO,
+        "--path", str(RUN_DIR),
+        "--message", "Cell 3 exit checkpoint",
+    ], check=False, env=run_env)
+
+if exit_code != 0:
+    raise RuntimeError(
+        f"Suite stopped with exit code {exit_code}. "
+        "Local work was checkpointed; rerun Cell 3 to resume after diagnosing "
+        "any termination-gate message above."
+    )
+
+print("\nFULL TIER-1 ANALYSIS COMPLETE.")
+print("Results:", RUN_DIR / "analysis/memorization.json")
+print("Figures:", RUN_DIR / "figures")
+print("HF:", "https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning")
+```
+
+Expected first messages for the current checkpoint:
+
+```text
+== skip stage1/arms (already scored) ==
+== skip stage1/gsmsym (already scored) ==
+== generate stage2/arms ==
+```
+
+HF normally changes after a scored block finishes, not while a block is generating. The
+one-minute Cell 3 monitor is the live signal during long blocks. Full design, budget,
+artifacts, recovery behavior, and validity gates are documented in
 [`experiments/FULLSCALE.md`](experiments/FULLSCALE.md).
 
 When a language model answers a reasoning problem correctly, **accuracy alone cannot
