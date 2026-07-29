@@ -47,14 +47,20 @@ scale-up — both described under [What is left](#what-is-left), with costs.
 
 | | |
 |---|---|
-| Rows generated and scored | **11,668 / 11,668 (100%)** |
-| Generation blocks complete | **9 / 9 (100%)** |
+| Rows generated and scored | **12,468 / 12,468 (100%)** |
+| Generation blocks complete | **10 / 10 (100%)** |
 | Checkpoints measured | **4** — `stage1`, `stage2`, `sft`, `instruct` |
-| Quality gates passed | **8 / 9** — `stage1/arms` sits at 84.9% against an 85% gate |
-| Rows needing optional rework | **304 / 11,668 (2.6%)** |
-| Analysis, atlas, and F1–F8 figures | Produced and pushed |
-| GPU time spent on the corrected run | ~4.2 h (A100-40GB) |
+| Quality gates passed | **9 / 10** — `stage1/arms` sits at 84.9% against an 85% gate |
+| Rows needing optional rework | **304 / 12,468 (2.4%)** |
+| Analysis, atlas, and F1–F8 figures | Produced, pushed, and reproduced in [`docs/figures/`](docs/figures/) |
+| Test suite | 173 passed, 2 skipped |
+| GPU time spent on the v2 run | ~4.9 h (A100-40GB) |
 | GPU time required to finish everything outstanding | **0 h** — nothing is required |
+
+**Headline:** the memorisation difference-in-differences is **flat across the entire training
+pipeline** — +0.014 → +0.008 → +0.010 → +0.040, every interval spanning zero — and it does not
+move at the step where GSM8K-derived data enters training, even though accuracy on seen items
+rises 58 points across that same step. Full numbers in [Results](#results).
 
 The authoritative run is `experiments/runs/fullscale-S250-v2`. The earlier
 `experiments/runs/fullscale-S250` is kept, complete, and reproducible, but its arms were
@@ -214,44 +220,119 @@ directory, which also leaves v1 intact.
 checkpoints on different minor versions, which enters the DiD as if it were a model difference.
 Now pinned exactly to `transformers==4.56.0`, matching what stage1 was originally generated under.
 
+**7. The decoding-noise control was being counted as DiD evidence — the second serious one.**
+Stage 7 is invoked with `--scores <run>/scores/*__ALL.jsonl`, which merges arms + gsmsym +
+resample. `make_resample_suite` emits, per item, the cluster's **original plus** N copies; that
+original reuses the arms block's `benchmark_id` while being generated at T=0.7, and the copies
+inherit the parent's `arm` label without being answer-changing. Every one of those 600 rows landed
+in the `seen|original` cell:
+
+```
+stage2   seen|original  n=1345      (745 arms + 600 resample)
+instruct seen|original  n=1345
+stage1   seen|original  n= 745      (no resample block)
+sft      seen|original  n= 745
+```
+
+Three faults simultaneously: temperature-0.7 samples entered a temperature-0 contrast, the
+resampled items were weighted once per copy, and — because the control is only run for the
+checkpoints whose consistency is interpreted — the DiD shifted **for those checkpoints alone**.
+That last one is the dangerous part: it made a measurement difference look like a checkpoint
+difference in exactly the `stage1`→`stage2` comparison the study rests on. Fixed by excluding
+control variants at the shared entry points and computing the DiD from the arms block alone; F3
+needed a de-duplication because it reads records directly; F7 is untouched, since the resample
+block is legitimately its null. Recovery tests now inject a deliberately lopsided resample block
+and assert the DiD, cell counts and cluster counts do not move.
+
+**8. A silent non-zero exit left a stale audit in place.** The finalize step ignored return codes,
+so a malformed `check-termination` invocation failed without complaint and left a
+`termination.json` describing seven files while the rest of the analysis had refreshed to ten.
+Return codes are now checked, with `check-termination` explicitly allowed to exit non-zero because
+there its non-zero is a *finding* (a block below the gate), not an error.
+
 ---
 
 ## Results
 
-**Headline result — the DiD is flat across the entire training pipeline.** Cluster-robust
-bootstrap over parent items, 250 seen / 250 unseen per checkpoint:
+Every number below is from `experiments/runs/fullscale-S250-v2`, 250 verified-seen and 250
+verified-unseen items per checkpoint, cluster-robust bootstrap over parent items.
 
-| checkpoint | training stage | DiD | CI95 |
+### The headline: the memorisation DiD is flat across the entire training pipeline
+
+| checkpoint | training stage | seen orig | unseen orig | seen pert | unseen pert | adv. orig | adv. pert | **DiD** | CI95 |
+|---|---|---|---|---|---|---|---|---|---|
+| `stage1` | never saw GSM8K | 0.0752 | 0.0853 | 0.0658 | 0.0897 | −0.0101 | −0.0238 | **+0.0137** | [−0.037, +0.064] |
+| `stage2` | **GSM8K data enters** | 0.6550 | 0.4547 | 0.5679 | 0.3759 | +0.2004 | +0.1920 | **+0.0083** | [−0.103, +0.117] |
+| `sft` | + supervised fine-tuning | 0.7852 | 0.7267 | 0.6420 | 0.5931 | +0.0586 | +0.0489 | **+0.0097** | [−0.098, +0.118] |
+| `instruct` | + DPO | 0.8121 | 0.5602 | 0.6502 | 0.4379 | +0.2519 | +0.2123 | **+0.0396** | [−0.071, +0.149] |
+
+All four checkpoints are measured on identical cells — 745 seen-original, 739 unseen-original,
+243 seen-perturbed, 290 unseen-perturbed, 250 clusters per arm — so nothing in this table is a
+sample-composition artifact.
+
+**Every interval spans zero.** The seen-arm advantage is large for `stage2` and `instruct`
+(+0.20 and +0.25 on originals) but it **does not shrink under perturbation** (+0.19 and +0.21).
+That is the whole result: the advantage is not the kind that disappears when the numbers change,
+which is what memorisation would look like.
+
+### What moves along the trajectory, and what does not
+
+| transition | introduces GSM8K data | Δ accuracy seen | Δ accuracy unseen | **Δ DiD** |
+|---|---|---|---|---|
+| `stage1` → `stage2` | **yes** | +0.5799 | +0.3694 | **−0.0054** |
+| `stage2` → `sft` | no | +0.1302 | +0.2720 | +0.0014 |
+| `sft` → `instruct` | no | +0.0268 | −0.1664 | +0.0299 |
+
+This is the sharpest statement the design supports. The `stage1`→`stage2` step is the release
+boundary where GSM8K-derived data enters training — the closest thing to a controlled data
+intervention a public model offers. Across it, accuracy on seen items rises by **58 points**, and
+the memorisation DiD moves by **−0.005**. The capability arrives; the memorisation signature does
+not. Neither post-training stage changes that.
+
+### Robustness
+
+**Magnitude-matched re-estimate.** Perturbed items whose gold answer shifted in magnitude are
+dropped, then the DiD is recomputed — because a perturbation effect could otherwise be a
+bigger-arithmetic effect (arXiv:2605.28700):
+
+| checkpoint | matched DiD | CI95 |
+|---|---|---|
+| `stage1` | −0.0042 | [−0.092, +0.081] |
+| `stage2` | +0.0191 | [−0.198, +0.216] |
+| `sft` | −0.0576 | [−0.272, +0.139] |
+| `instruct` | +0.0042 | [−0.212, +0.214] |
+
+Still no effect, with intervals widened by the smaller matched sample.
+
+**Three independent arm constructions.** The conclusion does not depend on how the arms were
+built — including the construction that was later found to be 43% mislabelled:
+
+| checkpoint | v1 full (194, mislabelled) | v1 verified-only (111) | **v2 (250, all verified)** |
 |---|---|---|---|
-| `stage1` | never saw GSM8K | +0.0137 | [−0.037, +0.064] |
-| `stage2` | **GSM8K-derived data enters** | +0.0083 | [−0.103, +0.117] |
-| `sft` | + supervised fine-tuning | +0.0097 | [−0.098, +0.118] |
-| `instruct` | + DPO | +0.0396 | [−0.071, +0.149] |
+| `stage1` | +0.0128 | +0.0066 | **+0.0137** |
+| `stage2` | −0.0592 | −0.0069 | **+0.0083** |
+| `instruct` | −0.0735 | −0.0192 | **+0.0396** |
 
-**Every interval spans zero, and the estimate does not move at the step where GSM8K enters
-training.** `stage1`→`stage2` is the closest thing to a controlled data intervention available
-in a public model — it is the release boundary at which GSM8K-targeted data is added — and the
-memorisation DiD is 0.014 before and 0.008 after. Neither post-training stage changes that.
+Point estimates wander between −0.074 and +0.040 with no stable sign, which is the signature of a
+true effect near zero rather than of an effect being missed.
 
-Robustness across three independent arm constructions, none of which alters the conclusion:
+**Extraction-tier leakage.** `extract_numeric` falls back in three tiers (the `#### N` marker →
+an "answer is …" phrase → the last number in the text), and the marker rate differs enormously
+across checkpoints — 84.9% for `stage1`, 98.3% for `stage2`, 35.4% for `sft`, 33.6% for
+`instruct`. What matters is not that difference but whether it is *correlated with the treatment*,
+which is the second difference of the tier-1 rate:
 
-| checkpoint | v1 full (194, 43% mislabelled) | v1 verified-only (111) | **v2 (250, all verified)** |
+| checkpoint | accuracy DiD | tier-1 DiD | verdict |
 |---|---|---|---|
-| `stage1` | +0.0128 [−0.047, +0.073] | +0.0066 [−0.061, +0.072] | **+0.0137 [−0.037, +0.064]** |
-| `stage2` | −0.0592 [−0.191, +0.067] | −0.0069 [−0.161, +0.153] | **+0.0083 [−0.103, +0.117]** |
-| `instruct` | −0.0735 [−0.198, +0.047] | −0.0192 [−0.175, +0.134] | **+0.0396 [−0.071, +0.149]** |
+| `stage1` | +0.0137 | −0.0127 | cancels |
+| `stage2` | +0.0083 | −0.0136 | cancels |
+| `sft` | +0.0097 | **−0.0583** | marginally above the ±0.05 flag |
+| `instruct` | +0.0396 | +0.0143 | cancels |
 
-**What this supports.** Point estimates wander between −0.074 and +0.040 with no stable sign
-across three independent constructions. That is the signature of a true effect near zero, not of
-an effect being missed. Paired with the detector result below — membership is being identified
-correctly — the claim is: *detection is accurate, membership is verified, and the accuracy
-advantage still is not there.*
-
-**What this does NOT support.** The upper confidence bounds are +0.064 (`stage1`), +0.117
-(`stage2`), +0.149 (`instruct`). Contamination effects claimed in the literature are typically
-5–15pp, so this design **excludes the top of that range but not the middle**. Do not write "we
-rule out contamination effects of the size others report" — the data does not carry it. The
-honest claim is "no evidence of a memorisation advantage; effects above ~12–15pp are excluded."
+`sft` is the one checkpoint where extraction composition differs across cells by more than the
+threshold. Its practical impact is limited — tier-3 recovers the correct answer 70.4% of the time
+for `sft`, close to its overall accuracy, so a shift in tier composition moves little. It is
+recorded here rather than smoothed over.
 
 ### Supporting analyses
 
@@ -265,79 +346,148 @@ detector's error rate measurable rather than arguable:
 | containment ≥ 0.50 | 584 (58.4%) | 1 (0.1%) | 0.1% |
 | containment ≥ 0.80 (this study) | 303 (30.3%) | 0 (0.0%) | **0.0%** |
 
-Test-item containment: median 0.000, p99 0.000, max 0.538. **The detector works.** This was run
-expecting the opposite — that shared GSM8K templates would produce many false positives — and it
-did not. The finding is more useful than the one predicted: it removes "your detector is noisy"
-as an explanation for the null.
+Test-item containment: median 0.000, p99 0.000, max 0.538. **The detector works**, which removes
+"you found nothing because your detector is noisy" as an explanation for the null. This analysis
+was run expecting the opposite result — that shared GSM8K templates would produce many false
+positives — and the finding it produced is the more useful one.
 
-Note also that **86.6% of train items have *some* overlap but only 30.3% reach ≥0.80**. The
+Note also that **86.6% of train items have *some* overlap but only 30.3% reach ≥0.80.** The
 synthetic corpus mostly *derives from* GSM8K train rather than copying it, which is exactly why a
 binary contaminated/clean label is the wrong instrument and a continuous measure with an explicit
 ambiguous band is the right one.
 
-**Measurement validity (termination).** A model cut off at the token limit scores as a weak model
-when it is really a truncated measurement:
+**Measurement validity.** A model cut off at the token cap scores as a weak model when it is
+really a truncated measurement. All 12,468 generations audited:
 
-| checkpoint | reached a semantic stop | `####` marker | median chars | flagged degenerate |
-|---|---|---|---|---|
-| `stage1` | **84.9%** | 84.9% | 196 | 19% |
-| `stage2` | 98.4% | 98.3% | 277 | 3% |
-| `sft` | 99.5% | 35.4% | 505 | — |
-| `instruct` | 99.8% | 33.6% | 700 | 3% |
+| file | n | reached semantic stop | `####` marker | median chars | gate |
+|---|---|---|---|---|---|
+| `stage1__arms` | 2,017 | **84.9%** | 84.9% | 196 | **below 85%** |
+| `stage1__gsmsym` | 800 | 86.1% | 86.1% | 215 | pass |
+| `stage2__arms` | 2,017 | 98.4% | 98.3% | 277 | pass |
+| `stage2__gsmsym` | 800 | 96.9% | 96.4% | 320 | pass |
+| `stage2__resample` | 600 | 99.8% | 97.0% | 302 | pass |
+| `sft__arms` | 2,017 | 99.5% | 35.4% | 505 | pass |
+| `sft__gsmsym` | 800 | 99.4% | 31.0% | 651 | pass |
+| `instruct__arms` | 2,017 | 99.8% | 33.6% | 700 | pass |
+| `instruct__gsmsym` | 800 | 99.9% | 33.4% | 852 | pass |
+| `instruct__resample` | 600 | 100.0% | 26.0% | 693 | pass |
 
-`sft` was added outside the preregistered Tier-1 scope, so its profile was checked against
-`instruct` before it was allowed into the headline figures rather than after. The two are
-near-identical; the shorter median is consistent with DPO not yet having been applied.
-
-`stage1`'s 19% is genuine model weakness, not a formatting break — a broken chat template or a
-`transformers` 5.x mismatch shows ~10% marker rate, not 85%. Those items score as incorrect,
-which is conservative. `instruct`'s low marker rate is DPO conversational style, already shown
-above not to affect the DiD.
+`stage1/arms` is the single block below the gate. The cause is diagnosed, not assumed: v1 repaired
+261 truncated rows at 2,048 tokens and v2's 644 new rows were generated at 1,024, so the block
+mixes budgets (reused rows terminate at 85.6%, new rows at 83.5%). The truncation is **balanced
+across the DiD cells** — its second difference is −0.013 — so it attenuates every cell alike
+rather than biasing the contrast, and `stage1` is the control arm whose DiD is ~0 under every
+construction.
 
 ---
 
-## Every figure explained
+## Figures
 
-Rendered to `experiments/runs/fullscale-S250-v2/figures/`. Each answers one question a reviewer
-will actually ask.
+All eight are regenerated from the final data and live in [`docs/figures/`](docs/figures/).
+Design rules are enforced in code rather than left to taste: one y-axis per panel (a dual-scale
+chart lets the author choose the visual conclusion), fixed categorical colours so a checkpoint
+keeps its hue when a filter changes the series count, CVD-safe palettes (worst adjacent separation
+dE 9.4 under simulated protanopia/deuteranopia/tritanopia, above the 8 floor), identity carried by
+direct labels so it is never colour-alone, and error bars that are the same parent-item bootstrap
+used in the analysis.
 
-| figure | question it answers |
-|---|---|
-| **F1** `f1_trajectory` | Where along the training pipeline does accuracy appear, and does it appear on seen items only? |
-| **F2** `f2_did_forest` | How large is the memorisation component, with intervals? *This is the headline figure.* |
-| **F3** `f3_perturbation_slopes` | Does accuracy survive numeric perturbation, per checkpoint? |
-| **F4** `f4_containment` | Is the seen/unseen treatment assignment actually verified? *Was unplottable in v1 — it drew containment above 1.0 on a "fraction" axis. Fixed in v2.* |
-| **F5** `f5_magnitude_control` | Is the perturbation effect just bigger arithmetic? |
-| **F6** `f6_measurement_validity` | Are the models being scored on complete outputs? |
-| **F7** `f7_consistency_decomposition` | Is the inconsistency real perturbation sensitivity, or just decoding noise? |
-| **F8** `f8_design_power` | Is the sample size adequate, given the measured ICC? |
+### F1 — Trajectory
 
-Design rules are enforced in code, not left to taste: one y-axis per panel (a dual-scale chart
-lets the author pick the visual conclusion), fixed categorical colours so a checkpoint keeps its
-hue when a filter changes the series count, colours validated CVD-safe (worst adjacent separation
-dE 9.4 under simulated protanopia/deuteranopia/tritanopia, above the 8 floor), identity also
-carried by direct labels so it is never colour-alone, and error bars that are the same parent-item
-bootstrap used in the analysis.
+*Where along the training pipeline does accuracy appear, and does it appear on seen items only?*
 
-## Every analysis file explained
+![F1 trajectory](docs/figures/f1_trajectory.png)
 
-Under `experiments/runs/fullscale-S250-v2/analysis/`:
+Accuracy climbs steeply from `stage1` to `stage2` on **both** arms (+58 points seen, +37 points
+unseen). If stage-2 data bought memorisation, the seen line would lift away from the unseen line.
+It does not — both rise together.
+
+### F2 — Difference-in-differences forest
+
+*How large is the memorisation component, with intervals?* **This is the headline figure.**
+
+![F2 DiD forest](docs/figures/f2_did_forest.png)
+
+Four checkpoints, four intervals, all crossing zero.
+
+### F3 — Perturbation slopes
+
+*Does accuracy survive numeric perturbation, per checkpoint?*
+
+![F3 perturbation slopes](docs/figures/f3_perturbation_slopes.png)
+
+A slope chart rather than grouped bars, because the quantity of interest is the *change* within a
+model and a slope encodes change as slope instead of as a difference between bar heights the eye
+has to subtract. Every checkpoint drops under perturbation — that is a real robustness finding —
+but seen and unseen drop *together*, which is why the DiD is flat.
+
+### F4 — Containment evidence
+
+*Is the seen/unseen treatment assignment actually verified?*
+
+![F4 containment](docs/figures/f4_containment.png)
+
+The two arms separate almost completely: train items concentrate near 1.0, test items at 0.0
+(median 0.000, p99 0.000). **This figure was unplottable in v1** — it drew containment values above
+1.0 on an axis that measures a fraction, which was the visual symptom of the id-collision bug.
+
+### F5 — Magnitude control
+
+*Is the perturbation effect just bigger arithmetic?*
+
+![F5 magnitude control](docs/figures/f5_magnitude_control.png)
+
+Median answer-magnitude ratio 1.057, inside the [0.8, 1.25] band. The perturbation changes the
+answer without making the arithmetic systematically harder, so the observed drop is not a
+magnitude effect.
+
+### F6 — Measurement validity
+
+*Are the models being scored on complete outputs?*
+
+![F6 measurement validity](docs/figures/f6_measurement_validity.png)
+
+Termination and marker rates per file. `stage1`'s lower bar is the documented mixed-token-budget
+issue above, not a formatting break.
+
+### F7 — Consistency decomposition
+
+*Is the inconsistency real perturbation sensitivity, or just decoding noise?*
+
+![F7 consistency decomposition](docs/figures/f7_consistency_decomposition.png)
+
+The decoding-noise bar is the null: identical prompts resampled at T=0.7. Without it, an observed
+inconsistency across variants has nothing to be compared against. Run for `stage2` (the treated
+base checkpoint) and `instruct` (the headline model) — the two whose consistency is actually
+interpreted.
+
+### F8 — Design power
+
+*Is the sample size adequate, given the measured ICC?*
+
+![F8 design power](docs/figures/f8_design_power.png)
+
+The honest limitation. At ICC ≈ 0.48 and 250 items per arm, the design resolves effects of roughly
+12–15pp. It does **not** resolve the 5pp end of the range claimed in the contamination literature.
+
+---
+
+## Analysis artifacts
+
+Under `experiments/runs/fullscale-S250-v2/analysis/` on Hugging Face:
 
 | file | contents |
 |---|---|
-| `memorization.json` | The headline DiD, cells, and cluster-robust intervals |
-| `memorization_purified.json` | DiD restricted to verified-verdict items. In v2 identical to the headline, which confirms every arm item carries a verified label |
+| `memorization.json` | Headline DiD, per-cell counts and accuracies, cluster-robust intervals, magnitude-matched re-estimate, cluster-robust logistic regression, trajectory and transition deltas |
+| `memorization_purified.json` | DiD restricted to verified-verdict items. Identical to the headline in v2, which confirms every arm item carries a verified label |
 | `containment_verified.json` | Corrected 13-gram containment for all 2,000 candidates, keyed `train::`/`test::` |
 | `containment.json` | Same evidence in the shape F4 consumes |
 | `detector_falsepositive.json` | Threshold sweep and false-positive rate against known negatives |
 | `extraction_tiers.json` | Which extraction tier produced each answer, per checkpoint and per DiD cell |
-| `termination.json` | Semantic-stop audit across every generation file |
+| `termination.json` | Semantic-stop audit across all 10 generation files |
 
-`atlas/` holds a per-checkpoint JSON + Markdown summary. `generations/` holds raw model text —
-kept deliberately, because a scoring bug found after the fact once destroyed a whole run when
-only scores had been saved.
-
----
+`atlas/` holds a per-checkpoint JSON + Markdown summary for all four checkpoints. `generations/`
+holds raw model text — kept deliberately, because a scoring bug found after the fact once
+destroyed a whole run when only scores had been saved.
 
 ## What is left
 

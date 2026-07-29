@@ -291,12 +291,22 @@ def plot_perturbation_slopes(records: list[EvaluationRecord], output_dir: str | 
     if plt is None or not records:
         return None
     by_model: dict[str, dict[str, list[int]]] = defaultdict(lambda: {ORIGINAL: [], PERTURBED: []})
+    # Two exclusions, both about the decoding-noise control leaking into the ORIGINAL end of
+    # the slope for the checkpoints that ran it — which would tilt those slopes for a reason
+    # unrelated to perturbation:
+    #   * its copies are `resample` and are not answer-changing;
+    #   * `make_resample_suite` also emits the cluster's *original*, which reuses the arms
+    #     block's benchmark_id while being generated at T>0, so the merged scores hold two
+    #     rows for that item. Keeping the first occurrence keeps the greedy arms row, because
+    #     the suite concatenates arms before resample.
+    seen_ids: set[tuple[str, str]] = set()
     for record in records:
-        # Same exclusion as the DiD: the resample control is not answer-changing, so it would
-        # be drawn into the ORIGINAL end of every slope for the checkpoints that ran it,
-        # tilting those slopes for a reason that has nothing to do with perturbation.
         if record.variant_type in DID_EXCLUDED_VARIANTS:
             continue
+        key = (record.model, record.benchmark_id)
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
         by_model[record.model][record_condition(record)].append(int(record.correct))
 
     models = _order_models(list(by_model))
