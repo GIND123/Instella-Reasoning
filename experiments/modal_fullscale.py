@@ -824,9 +824,17 @@ def purified_did(write: bool = False, push: bool = False) -> dict:
         return bool(entry) and entry["verdict"] == arm
 
     report: dict = {}
+    # Discovered from disk, not hardcoded: a checkpoint added outside the suite's tier loop
+    # (e.g. sft) must not be silently dropped from the trajectory it was generated for.
+    order = {"stage1": 0, "stage2": 1, "sft": 2, "instruct": 3, "math_sft": 4, "math": 5}
+    tags = sorted(
+        {p.name.replace("__arms.jsonl", "") for p in (out / "scores").glob("*__arms.jsonl")},
+        key=lambda t: (order.get(t, 99), t),
+    )
+    print(f"checkpoints: {', '.join(tags)}\n")
     print(f"{'checkpoint':10s} {'arm set':10s} {'seen n':>7s} {'unseen n':>9s} "
           f"{'DiD':>9s} {'CI95':>22s}  verdict")
-    for tag in ("stage1", "stage2", "instruct"):
+    for tag in tags:
         recs = load(tag)
         if not recs:
             continue

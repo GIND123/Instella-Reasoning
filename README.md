@@ -47,13 +47,14 @@ scale-up — both described under [What is left](#what-is-left), with costs.
 
 | | |
 |---|---|
-| Rows generated and scored | **9,051 / 9,051 (100%)** |
-| Generation blocks complete | **7 / 7 (100%)** |
-| Quality gates passed | **6 / 7** — `stage1/arms` sits at 84.9% against an 85% gate |
-| Rows needing optional rework | **304 / 9,051 (3.4%)** |
+| Rows generated and scored | **11,668 / 11,668 (100%)** |
+| Generation blocks complete | **9 / 9 (100%)** |
+| Checkpoints measured | **4** — `stage1`, `stage2`, `sft`, `instruct` |
+| Quality gates passed | **8 / 9** — `stage1/arms` sits at 84.9% against an 85% gate |
+| Rows needing optional rework | **304 / 11,668 (2.6%)** |
 | Analysis, atlas, and F1–F8 figures | Produced and pushed |
-| GPU time already spent on the corrected run | ~2.3 h (A100-40GB) |
-| GPU time required to finish everything outstanding | **~1.6 h** — fits a 3 h budget |
+| GPU time spent on the corrected run | ~4.2 h (A100-40GB) |
+| GPU time required to finish everything outstanding | **0 h** — nothing is required |
 
 The authoritative run is `experiments/runs/fullscale-S250-v2`. The earlier
 `experiments/runs/fullscale-S250` is kept, complete, and reproducible, but its arms were
@@ -118,9 +119,12 @@ observational comparison into something closer to a controlled intervention:
 |---|---|---|---|
 | `stage1` | `amd/Instella-3B-Stage1` | **No** | **Control** — the only checkpoint that never saw GSM8K |
 | `stage2` | `amd/Instella-3B` | **Yes** | **Treated** — stage-2 mix explicitly targets GSM8K |
+| `sft` | `amd/Instella-3B-SFT` | Yes | + supervised fine-tuning; separates SFT from DPO |
 | `instruct` | `amd/Instella-3B-Instruct` | Yes | + DPO; the headline general model |
 
 If memorisation drives GSM8K scores, `stage1` should show DiD ≈ 0 and `stage2` should not.
+`sft` and `instruct` then locate any post-training contribution: without `sft` the two
+post-training steps are confounded, and a change could not be attributed to either.
 
 **Item clusters.** Each of the 500 arm items expands to 5 rows — 1 original, 2
 answer-*preserving* rewrites (rephrasing, distractor text), and 2 answer-*changing* numeric
@@ -129,15 +133,18 @@ in separate terms: changing ones drive the DiD, preserving ones drive a consiste
 
 **Three blocks per checkpoint:**
 
-| block | rows | what it is for |
-|---|---|---|
-| `arms` | 2,017 | The headline DiD |
-| `gsmsym` | 800 | Apple's hand-written GSM-Symbolic templates — external validity |
-| `resample` | 600 | Same item generated 5× at temperature 0.7 — the **decoding-noise null** |
+| block | rows | run for | what it is for |
+|---|---|---|---|
+| `arms` | 2,017 | all 4 checkpoints | The headline DiD |
+| `gsmsym` | 800 | `stage1`, `stage2`, `instruct` | Apple's hand-written GSM-Symbolic templates — external validity |
+| `resample` | 600 | `stage2`, `instruct` | Same item generated 5× at temperature 0.7 — the **decoding-noise null** |
 
 The `resample` block matters more than its size suggests. At temperature 0 there is no sampling
-variance, so an observed inconsistency across variants has nothing to be compared against. This
-block supplies that baseline.
+variance, so an observed inconsistency across variants has nothing to be compared against — the
+consistency number is uninterpretable without it. It is run for the treated base checkpoint
+(`stage2`) and the headline model (`instruct`), which are the two whose consistency is actually
+interpreted. Running it on all four would cost ~1.5 GPU-hours on `stage1` alone and answer
+nothing extra.
 
 **Statistics.** Confidence intervals come from a bootstrap that resamples **parent items**, not
 individual rows. The five rows of one problem are not five independent observations — measured
@@ -211,16 +218,28 @@ Now pinned exactly to `transformers==4.56.0`, matching what stage1 was originall
 
 ## Results
 
-**Headline DiD, cluster-robust bootstrap over parent items.** All three arm constructions:
+**Headline result — the DiD is flat across the entire training pipeline.** Cluster-robust
+bootstrap over parent items, 250 seen / 250 unseen per checkpoint:
+
+| checkpoint | training stage | DiD | CI95 |
+|---|---|---|---|
+| `stage1` | never saw GSM8K | +0.0137 | [−0.037, +0.064] |
+| `stage2` | **GSM8K-derived data enters** | +0.0083 | [−0.103, +0.117] |
+| `sft` | + supervised fine-tuning | +0.0097 | [−0.098, +0.118] |
+| `instruct` | + DPO | +0.0396 | [−0.071, +0.149] |
+
+**Every interval spans zero, and the estimate does not move at the step where GSM8K enters
+training.** `stage1`→`stage2` is the closest thing to a controlled data intervention available
+in a public model — it is the release boundary at which GSM8K-targeted data is added — and the
+memorisation DiD is 0.014 before and 0.008 after. Neither post-training stage changes that.
+
+Robustness across three independent arm constructions, none of which alters the conclusion:
 
 | checkpoint | v1 full (194, 43% mislabelled) | v1 verified-only (111) | **v2 (250, all verified)** |
 |---|---|---|---|
 | `stage1` | +0.0128 [−0.047, +0.073] | +0.0066 [−0.061, +0.072] | **+0.0137 [−0.037, +0.064]** |
 | `stage2` | −0.0592 [−0.191, +0.067] | −0.0069 [−0.161, +0.153] | **+0.0083 [−0.103, +0.117]** |
 | `instruct` | −0.0735 [−0.198, +0.047] | −0.0192 [−0.175, +0.134] | **+0.0396 [−0.071, +0.149]** |
-
-**Every interval spans zero.** No checkpoint shows a memorisation advantage that survives
-numeric perturbation — including `stage2`, whose training data explicitly targets GSM8K.
 
 **What this supports.** Point estimates wander between −0.074 and +0.040 with no stable sign
 across three independent constructions. That is the signature of a true effect near zero, not of
@@ -263,7 +282,12 @@ when it is really a truncated measurement:
 |---|---|---|---|---|
 | `stage1` | **84.9%** | 84.9% | 196 | 19% |
 | `stage2` | 98.4% | 98.3% | 277 | 3% |
+| `sft` | 99.5% | 35.4% | 505 | — |
 | `instruct` | 99.8% | 33.6% | 700 | 3% |
+
+`sft` was added outside the preregistered Tier-1 scope, so its profile was checked against
+`instruct` before it was allowed into the headline figures rather than after. The two are
+near-identical; the shorter median is consistent with DPO not yet having been applied.
 
 `stage1`'s 19% is genuine model weakness, not a formatting break — a broken chat template or a
 `transformers` 5.x mismatch shows ~10% marker rate, not 85%. Those items score as incorrect,
@@ -317,7 +341,8 @@ only scores had been saved.
 
 ## What is left
 
-**Nothing is required.** Both remaining items are improvements, listed with honest costs.
+**Nothing is required.** All four checkpoints are generated, scored, analysed and plotted. The
+items below are improvements, listed with honest costs.
 
 ### 1. `stage1` truncated-row repair — ~1.6 h GPU, fits a 3 h budget
 
