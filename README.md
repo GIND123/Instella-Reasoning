@@ -1,231 +1,256 @@
-<h1 align="center">Instella Reasoning Atlas</h1>
+<h1 align="center">Remembering or Reasoning under Exactly Verified Contamination in the Instella 3B Training Trajectory</h1>
 
 <p align="center">
-  <b>Reasoning or Remembering?</b><br>
-  Diagnosing whether AMD Instella solves reasoning tasks by <i>generalizing</i>,
-  by <i>memorizing</i> training examples, or by relying on <i>fragile shortcuts</i>.
+  Exact 13-gram membership verification crossed with numeric perturbation across four
+  Instella-3B checkpoints, estimating the memorisation component of GSM8K accuracy by
+  difference in differences with cluster-robust inference over parent items.
 </p>
 
 <p align="center">
-  <a href="https://github.com/GIND123/Instella-Reasoning"><b>GitHub</b></a> ·
-  <a href="experiments/FULLSCALE.md"><b>Full-scale suite</b></a> ·
-  <a href="notebooks/fullscale_colab.ipynb">Colab</a> ·
-  <a href="https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning">HF results</a> ·
+  <a href="#abstract"><b>Abstract</b></a> ·
+  <a href="#results"><b>Results</b></a> ·
+  <a href="#figures"><b>Figures</b></a> ·
+  <a href="https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning">Artifacts</a> ·
+  <a href="docs/METHODOLOGY.md">Methodology</a> ·
   <a href="docs/AUDIT_2026-07-26.md">Audit</a> ·
-  <a href="docs/BUILD_PLAN.md">Design</a> ·
   <a href="#command-reference">Commands</a> ·
-  <a href="docs/COMPUTE.md">Compute</a> ·
-  <a href="docs/proposal/">Proposal</a>
+  <a href="docs/COMPUTE.md">Compute</a>
 </p>
 
 ---
 
-> **The current experiment is the seen/unseen memorisation suite** —
-> [`experiments/FULLSCALE.md`](experiments/FULLSCALE.md). It asks whether the model does
-> better on problems it *provably memorised*: GSM8K **train** items are verbatim in
-> Instella's stage-2 training data, GSM8K **test** items are not, and membership is
-> verified per item by exact 13-gram containment rather than inferred from an embedding
-> proxy. Crossed with numeric perturbation across the validated Instella-3B checkpoint
-> trajectory, the difference-in-differences isolates the memorisation component and cancels
-> the magnitude confound.
->
-> ```bash
-> python scripts/preflight_fullscale.py --smoke   # the gate — must print SAFE TO LAUNCH
-> bash experiments/run_fullscale_suite.sh
-> ```
+> **Scope.** The active experiment is the verified seen/unseen memorisation suite. GSM8K
+> **train** items are present verbatim in Instella's stage-2 training data and GSM8K **test**
+> items are not; membership is verified per item by exact 13-gram containment rather than
+> inferred from an embedding proxy. Crossed with numeric perturbation across the Instella-3B
+> checkpoint trajectory, the difference-in-differences isolates the memorisation component and
+> cancels the magnitude confound.
 >
 > The earlier `reliability-B*` runs under `experiments/runs/` are **superseded pilots**;
-> [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) explains why four of their five
-> headline findings are artifacts. Do not cite those numbers.
+> [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) documents why four of their five
+> headline findings are artifacts. Those numbers must not be cited.
 
-## Study status — read this first
+## Abstract
 
-**The experiment is finished.** All seven generation blocks across all three checkpoints are
-generated, scored, analysed, plotted, and mirrored to Hugging Face. Nothing is mid-flight and
-no GPU job is pending. What remains is one optional quality repair and one optional
-scale-up — both described under [What is left](#what-is-left), with costs.
+Benchmark contamination is routinely treated as grounds for discounting a reported score: if
+evaluation items appear in training data, accuracy is presumed to reflect recall rather than
+reasoning. The inference is rarely tested, because membership is normally inferred from an
+embedding or perplexity proxy rather than established.
+
+The present study establishes membership exactly and tests the inference directly. Instella-3B is
+released at successive training stages, and its stage-2 corpus (`amd/Instella-GSM8K-synthetic`) is
+derived from GSM8K **train** and not from GSM8K **test**. Membership of each benchmark item is
+therefore verified by exact 13-gram containment against that corpus rather than estimated, and
+items whose containment falls between the thresholds are excluded from both arms rather than
+forced into one. Crossing verified membership with numeric perturbation yields a
+difference-in-differences estimator that isolates the memorisation component and cancels the
+integer-magnitude confound identified in arXiv:2605.28700. Intervals are obtained from a bootstrap
+that resamples parent items, matching the measured intra-cluster correlation of approximately 0.48.
+
+Across four checkpoints spanning the full training pipeline — 12,468 scored generations, 250
+verified-seen and 250 verified-unseen items per checkpoint — the memorisation
+difference-in-differences is flat and every interval spans zero: +0.014 at `stage1`, +0.008 at
+`stage2`, +0.010 after supervised fine-tuning, and +0.040 after DPO. The estimate does not move at
+the release boundary where GSM8K-derived data enters training, although accuracy on seen items
+rises by 58 points across that same boundary.
+
+A second measurement excludes the most obvious rebuttal. Because the corpus derives from GSM8K
+train, every GSM8K test item is a known negative and the detector's false-positive rate is
+measurable rather than arguable. The standard any-n-gram rule flags 3 of 1,000 known negatives, a
+false-positive rate of 0.3 percent. Detection is therefore accurate, and the absence of a
+memorisation effect cannot be attributed to a noisy treatment label.
+
+---
+
+## Study status
+
+The experimental programme is complete. All generation blocks across all four checkpoints have
+been generated, scored, analysed and plotted, and all artifacts are mirrored to Hugging Face. No
+computation is pending.
 
 | | |
 |---|---|
 | Rows generated and scored | **12,468 / 12,468 (100%)** |
 | Generation blocks complete | **10 / 10 (100%)** |
 | Checkpoints measured | **4** — `stage1`, `stage2`, `sft`, `instruct` |
-| Quality gates passed | **9 / 10** — `stage1/arms` sits at 84.9% against an 85% gate |
-| Rows needing optional rework | **304 / 12,468 (2.4%)** |
-| Analysis, atlas, and F1–F8 figures | Produced, pushed, and reproduced in [`docs/figures/`](docs/figures/) |
+| Quality gates passed | **9 / 10** — `stage1/arms` reaches 84.9% against an 85% gate |
+| Rows eligible for optional rework | **304 / 12,468 (2.4%)** |
+| Figures | **12** — F1–F8 headline, S1–S4 supplementary, in [`docs/figures/`](docs/figures/) |
 | Test suite | 173 passed, 2 skipped |
-| GPU time spent on the v2 run | ~4.9 h (A100-40GB) |
-| GPU time required to finish everything outstanding | **0 h** — nothing is required |
+| GPU time consumed by the corrected run | ~4.9 h (A100-40GB) |
+| GPU time required to complete outstanding work | **0 h** |
 
-**Headline:** the memorisation difference-in-differences is **flat across the entire training
-pipeline** — +0.014 → +0.008 → +0.010 → +0.040, every interval spanning zero — and it does not
-move at the step where GSM8K-derived data enters training, even though accuracy on seen items
-rises 58 points across that same step. Full numbers in [Results](#results).
-
-The authoritative run is `experiments/runs/fullscale-S250-v2`. The earlier
-`experiments/runs/fullscale-S250` is kept, complete, and reproducible, but its arms were
-built on a corrupted measurement — see [Bugs found and fixed](#bugs-found-and-fixed). Do not
-quote v1 numbers as the headline.
+The authoritative run directory is `experiments/runs/fullscale-S250-v2`. The earlier
+`experiments/runs/fullscale-S250` remains complete and reproducible but its arms were constructed
+from a corrupted containment measurement, described under [Defects identified and
+corrected](#defects-identified-and-corrected). Figures and numbers from the earlier run must not be
+quoted as headline results.
 
 ---
 
-## What the study asks, for a reader with no context
+## Research question and design rationale
 
-Large language models are scored on public benchmarks. If a benchmark's questions were in a
-model's training data, the score may reflect **memorisation** rather than **reasoning** — the
-model recites an answer it has seen instead of working it out. This is called *contamination*,
-and reviewers routinely demand that results be discounted because of it.
+### The question that cannot be asked, and the one that can
 
-**The obvious version of the question is unanswerable here.** You would want to ask "are GSM8K
-*test* items in Instella's training data?" But the corpus we can inspect,
-`amd/Instella-GSM8K-synthetic`, is *derived from GSM8K train*. Scanning test items against it
-returns zero matches no matter how thresholds are set, so the contaminated group is empty and
-there is nothing to compare.
+The literal contamination question — whether GSM8K **test** items appear in Instella's training
+data — is unanswerable against the available corpus. `amd/Instella-GSM8K-synthetic` is derived from
+GSM8K train, so a scan of test items returns no matches at any threshold and the contaminated group
+is empty by construction.
 
-**The answerable version.** GSM8K ships a *train* split and a *test* split, written by the same
-annotators to the same spec, at the same difficulty. Instella's training data contains material
-derived from **train** and not from **test**. So:
+The answerable substitute exploits a property of the benchmark. GSM8K ships train and test splits
+written by the same annotators to the same specification at comparable difficulty. Instella's
+training data contains material derived from train and not from test. Two arms follow:
 
-- **"seen" arm** = GSM8K *train* items that are provably in the training corpus
-- **"unseen" arm** = GSM8K *test* items that are provably absent from it
+- **seen** — GSM8K train items verified as present in the training corpus
+- **unseen** — GSM8K test items verified as absent from it
 
-"Provably" is the important word. Membership is not guessed from a similarity score. For each
-item we compute **13-gram containment**: chop the question into every run of 13 consecutive
-words, then measure what fraction of those runs appear anywhere in the 1.45 GB training corpus.
-An item copied into training scores near 1.0; an unrelated item scores 0.0. Items landing in
-between are **excluded from both arms** rather than forced into one, because a treatment label
-you cannot defend is worse than a smaller sample.
+Verification is exact rather than semantic. Each item is decomposed into every run of 13
+consecutive normalised word tokens, and containment is the fraction of those n-grams occurring
+anywhere in the 1.45 GB corpus. A copied item scores near 1.0 and an unrelated item scores 0.0.
+Items falling between the thresholds of 0.10 and 0.80 are excluded from both arms, on the principle
+that an indefensible treatment label is more damaging than a smaller sample. The 13-gram window
+follows Brown et al. (2020) and matches the window used elsewhere in the repository, so the two
+stages agree.
 
-**Why perturbation is needed.** Suppose seen items score higher. That alone proves nothing —
-maybe train items are simply easier. So every item is also rewritten with **different numbers**
-(same structure, same reasoning steps, new arithmetic). A model that *memorised* an answer
-loses its advantage the moment the numbers change. A model that *reasons* keeps it.
+### Why perturbation is required
 
-**The measurement: difference-in-differences (DiD).** Take the seen-minus-unseen accuracy gap on
-original items, then subtract the same gap on perturbed items:
+A raw accuracy advantage on seen items establishes nothing, since train items may simply be easier.
+Each item is therefore also rewritten with different numeric values, preserving structure and
+reasoning depth while changing the arithmetic. Memorised answers lose their advantage once the
+numbers change; reasoned answers retain it.
+
+### The estimator
+
+The memorisation component is the double difference
 
 ```
 DiD = (seen − unseen | original) − (seen − unseen | perturbed)
 ```
 
-- **DiD > 0** → the seen advantage evaporates under perturbation → memorisation
-- **DiD ≈ 0** → whatever advantage exists survives new numbers → not memorisation
+A positive DiD indicates that the seen advantage evaporates under perturbation, which is the
+signature of memorisation. A DiD near zero indicates that whatever advantage exists survives new
+numbers, which is not. Differencing twice removes any factor affecting both arms equally, including
+the possibility that perturbed problems involve systematically larger arithmetic.
 
-Subtracting twice cancels anything affecting both arms equally — including the known confound
-that perturbed problems may just involve bigger arithmetic.
+### Checkpoints
+
+Instella-3B is published at successive training stages, which converts an observational comparison
+into an approximation of a controlled intervention:
+
+| tag | model | GSM8K-derived data | role |
+|---|---|---|---|
+| `stage1` | `amd/Instella-3B-Stage1` | **no** | **control** — the only checkpoint never exposed to GSM8K |
+| `stage2` | `amd/Instella-3B` | yes | **treated** — the stage-2 mix explicitly targets GSM8K |
+| `sft` | `amd/Instella-3B-SFT` | yes | isolates supervised fine-tuning from DPO |
+| `instruct` | `amd/Instella-3B-Instruct` | yes | post-DPO; the headline general model |
+
+Under the memorisation hypothesis the DiD should be approximately zero at `stage1` and positive at
+`stage2`. Including `sft` prevents the two post-training stages from being confounded, so that any
+change can be attributed to one of them rather than to post-training in aggregate.
+
+### Item clusters and blocks
+
+Each of the 500 arm items expands into a cluster of five rows: one original, two answer-preserving
+rewrites (rephrasing, distractor insertion) and two answer-changing numeric perturbations, giving
+2,017 rows per checkpoint. Answer-preserving and answer-changing variants are kept in separate
+terms, the former driving a consistency measure and the latter the difference-in-differences.
+
+| block | rows | checkpoints | purpose |
+|---|---|---|---|
+| `arms` | 2,017 | all four | the headline difference-in-differences |
+| `gsmsym` | 800 | all four | Apple's hand-written GSM-Symbolic templates, as external validity |
+| `resample` | 600 | `stage2`, `instruct` | identical prompts sampled five times at T = 0.7, as the decoding-noise null |
+
+The `resample` block carries more weight than its size suggests. At temperature 0 there is no
+sampling variance, so an observed inconsistency across variants has no null against which to be
+compared and the consistency statistic is uninterpretable without it. It is run for the treated base
+checkpoint and the headline model, the two whose consistency is actually interpreted; running it on
+`stage1` would consume approximately 1.5 GPU-hours and answer nothing further.
+
+### Inference
+
+Confidence intervals derive from a bootstrap resampling **parent items** rather than individual
+rows. The five rows of one problem are not five independent observations; the measured
+intra-cluster correlation is approximately 0.48. Resampling rows would contract intervals by
+roughly the design effect of 2.4 and yield confidently incorrect error bars.
 
 ---
 
-## The experimental design
-
-**Checkpoints.** Instella-3B is released at successive training stages, which turns an
-observational comparison into something closer to a controlled intervention:
-
-| tag | model | GSM8K-derived data? | role |
-|---|---|---|---|
-| `stage1` | `amd/Instella-3B-Stage1` | **No** | **Control** — the only checkpoint that never saw GSM8K |
-| `stage2` | `amd/Instella-3B` | **Yes** | **Treated** — stage-2 mix explicitly targets GSM8K |
-| `sft` | `amd/Instella-3B-SFT` | Yes | + supervised fine-tuning; separates SFT from DPO |
-| `instruct` | `amd/Instella-3B-Instruct` | Yes | + DPO; the headline general model |
-
-If memorisation drives GSM8K scores, `stage1` should show DiD ≈ 0 and `stage2` should not.
-`sft` and `instruct` then locate any post-training contribution: without `sft` the two
-post-training steps are confounded, and a change could not be attributed to either.
-
-**Item clusters.** Each of the 500 arm items expands to 5 rows — 1 original, 2
-answer-*preserving* rewrites (rephrasing, distractor text), and 2 answer-*changing* numeric
-perturbations. 500 × 5 ≈ 2,017 rows per checkpoint. Preserving and changing variants are kept
-in separate terms: changing ones drive the DiD, preserving ones drive a consistency measure.
-
-**Three blocks per checkpoint:**
-
-| block | rows | run for | what it is for |
-|---|---|---|---|
-| `arms` | 2,017 | all 4 checkpoints | The headline DiD |
-| `gsmsym` | 800 | `stage1`, `stage2`, `instruct` | Apple's hand-written GSM-Symbolic templates — external validity |
-| `resample` | 600 | `stage2`, `instruct` | Same item generated 5× at temperature 0.7 — the **decoding-noise null** |
-
-The `resample` block matters more than its size suggests. At temperature 0 there is no sampling
-variance, so an observed inconsistency across variants has nothing to be compared against — the
-consistency number is uninterpretable without it. It is run for the treated base checkpoint
-(`stage2`) and the headline model (`instruct`), which are the two whose consistency is actually
-interpreted. Running it on all four would cost ~1.5 GPU-hours on `stage1` alone and answer
-nothing extra.
-
-**Statistics.** Confidence intervals come from a bootstrap that resamples **parent items**, not
-individual rows. The five rows of one problem are not five independent observations — measured
-ICC on this data is ~0.48. Resampling rows instead would shrink intervals by roughly the design
-effect (~2.4×) and produce confidently wrong error bars.
-
----
-
-## What was actually run
+## Experimental record
 
 | | v1 — `fullscale-S250` | v2 — `fullscale-S250-v2` |
 |---|---|---|
 | Arms | 194 seen / 194 unseen | **250 seen / 250 unseen** |
-| Treatment labels | 43% of seen arm mislabelled | All verified |
-| Difficulty matching | Against wrong bins | Correct — 84/83/83 |
-| `containment.json` | Values up to 7.78 (impossible) | Corrected |
-| Status | Complete, superseded | **Complete, authoritative** |
+| Treatment labels | 43% of the seen arm mislabelled | all verified |
+| Difficulty matching | performed against incorrect bins | correct, 84/83/83 |
+| `containment.json` | values up to 7.78 | corrected |
+| Checkpoints | 3 | **4** |
+| Status | complete, superseded | **complete, authoritative** |
 
-Chronology: v1 ran across Colab (stage1) and Modal (stage2, instruct) and completed fully. An
-audit of its containment file then exposed the id-collision bug below, which invalidated the
-treatment assignment. v2 was staged into a fresh directory reusing 4,119 of v1's 6,051
-generations — possible because variants are seeded per `(item, type)`, so retained items keep
-byte-identical text — and regenerated only the 1,932 genuinely new rows.
+The first run executed across Colab (`stage1`) and Modal (`stage2`, `instruct`) and completed in
+full. A subsequent audit of its containment file exposed the identifier collision described below,
+which invalidated the treatment assignment. The second run was staged into a fresh directory
+reusing 4,119 of the 6,051 existing generations — possible because variants are seeded per
+`(item, type)` and retained items therefore keep byte-identical text — and regenerated only the
+1,932 genuinely new rows. Two further checkpoints and the `stage2` decoding-noise control were
+added subsequently.
 
 ---
 
-## Bugs found and fixed
+## Defects identified and corrected
 
-These are documented in detail because several are the kind a reviewer will ask about, and
-because finding one that invalidated 43% of our own treatment arm is part of the record.
+Several defects were material to the reported numbers, and two would have propagated into the
+published result had they not been found. They are recorded in full because the corrections are
+part of the evidence that the final numbers are trustworthy.
 
-**1. GSM8K train/test id collision — the serious one.** Both splits use the id scheme
-`gsm8k_NNNNN`, so loading 1,000 of each makes every id collide pairwise (1,000/1,000 collisions
-confirmed). `verify_containment` keys its gram index by `item.id`, so the test twin overwrote
-the train twin's gram set while the owner map retained both. The numerator then accumulated
-matches against grams absent from the denominator, and containment — a *fraction*, mathematically
-bounded by 1.0 — reached **7.78**. Re-measuring with `train::`/`test::` namespaced ids showed:
+**1. Identifier collision between GSM8K train and test.** Both splits use the scheme
+`gsm8k_NNNNN`, so loading 1,000 items from each produces pairwise collision across all 1,000.
+`verify_containment` keys its gram index by `item.id` while the owner map retains both twins, so
+the numerator accumulated matches against n-grams absent from the denominator. Containment, a
+fraction bounded above by 1.0, reached **7.78**. Re-measurement with `train::` and `test::`
+namespaced identifiers established that:
 
-- **83 of 194 v1 seen-arm items (43%) were never verifiably seen** — true containment 0.39–0.79,
-  below the 0.80 threshold the design requires.
-- Eligible pools are actually 303 seen and 998 unseen, supporting far larger arms than v1 used.
+- **83 of 194 seen-arm items in the first run (43%) were not verifiably seen**, with true
+  containment between 0.39 and 0.79, below the 0.80 threshold the design requires;
+- the eligible pools are in fact 303 seen and 998 unseen, supporting substantially larger arms.
 
-**2. Difficulty bins hit the same collision.** `assign_difficulty_bins` is also keyed by
-`item.id`, so every train item inherited its *test twin's* difficulty score. The v1 arms were
-therefore never actually difficulty-matched, despite the balance report saying they were. v2
-bins over namespaced ids.
+**2. Difficulty bins inherited the same collision.** `assign_difficulty_bins` is likewise keyed by
+`item.id`, so each train item inherited the difficulty of its test twin. The first run's arms were
+consequently never difficulty-matched despite the balance report reporting success. The second run
+bins over namespaced identifiers.
 
-**3. Answer-extraction drifts across checkpoints.** `extract_numeric` falls back in three tiers:
-the `#### N` marker, then an "answer is …" phrase, then the last number anywhere in the text.
-Marker rates differ enormously — `stage1` 86%, `stage2` 98%, `instruct` **34%** (the DPO model
-answers conversationally). Tier 3 means completely different things per checkpoint: it recovers
-the right answer 72.5% of the time for `instruct`, but only ~1% for `stage1`, where it fires on
-looping output. **This does not contaminate the DiD**: the tier-1 rate's *second difference* is
-≤0.032 everywhere, so the artifact cancels in the double difference. Verified rather than assumed.
+**3. Answer extraction drifts across checkpoints.** `extract_numeric` falls back through three
+tiers: the `#### N` marker, then an "answer is …" phrase, then the final number in the completion.
+Marker rates differ substantially — 84.9% at `stage1`, 98.3% at `stage2`, 35.4% at `sft`, 33.6% at
+`instruct`, the last two reflecting conversational post-training style. Tier 3 carries different
+meaning per checkpoint, recovering the correct answer 70.4% of the time at `sft` but approximately
+1% at `stage1`, where it fires on looping output. The effect on the estimator was measured rather
+than assumed: the second difference of the tier-1 rate is at most 0.058 and cancels in the double
+difference.
 
-**4. `.remote()` cancellation killed a 2-hour run.** `modal run --detach` keeps the *app* alive,
-but `Function.remote()` blocks the local client, and cancelling that local call propagates into
-the container. A run died at `instruct/resample`. Fixed by launching with `.spawn()`.
+**4. Blocking remote invocation propagated local cancellation.** `modal run --detach` preserves the
+application, but `Function.remote()` blocks the local client and cancellation of that call
+propagates into the container. A two-hour run terminated at `instruct/resample` as a result.
+Launching through `Function.spawn()` removes the long-lived local process entirely.
 
-**5. `_hf_pull` silently reverts local edits.** The suite starts with
-`snapshot_download(local_dir=".")`, which syncs local files *down* to match the remote. An
-in-place edit of a run directory is undone before generation starts — an entire corrected rebuild
-was wiped this way and reported "already scored". Fixed by staging corrections into a *new* run
-directory, which also leaves v1 intact.
+**5. Remote synchronisation silently reverted local edits.** The suite begins with
+`snapshot_download(local_dir=".")`, which synchronises local files downward to match the remote. An
+in-place edit of a run directory is therefore undone before generation begins; a complete corrected
+rebuild was overwritten in exactly this way and the subsequent run reported every block as already
+scored. Corrections are now staged into a new run directory, which additionally preserves the
+earlier run intact.
 
-**6. Floating `transformers` version.** `pyproject` pins `>=4.44,<5`, but a range puts different
-checkpoints on different minor versions, which enters the DiD as if it were a model difference.
-Now pinned exactly to `transformers==4.56.0`, matching what stage1 was originally generated under.
+**6. Unpinned library version.** `pyproject` specifies `>=4.44,<5`, but a range permits different
+checkpoints to run under different minor versions, which enters the estimator as though it were a
+model difference. The version is now pinned exactly to `transformers==4.56.0`, matching the version
+under which `stage1` was originally generated.
 
-**7. The decoding-noise control was being counted as DiD evidence — the second serious one.**
-Stage 7 is invoked with `--scores <run>/scores/*__ALL.jsonl`, which merges arms + gsmsym +
-resample. `make_resample_suite` emits, per item, the cluster's **original plus** N copies; that
-original reuses the arms block's `benchmark_id` while being generated at T=0.7, and the copies
-inherit the parent's `arm` label without being answer-changing. Every one of those 600 rows landed
-in the `seen|original` cell:
+**7. The decoding-noise control was counted as difference-in-differences evidence.** Stage 7 is
+invoked with `--scores <run>/scores/*__ALL.jsonl`, merging arms, gsmsym and resample.
+`make_resample_suite` emits, for each item, the cluster's original **in addition to** N copies;
+that original reuses the arms block's `benchmark_id` while being generated at T = 0.7, and the
+copies inherit the parent's `arm` label without being answer-changing. All 600 rows consequently
+entered the `seen|original` cell:
 
 ```
 stage2   seen|original  n=1345      (745 arms + 600 resample)
@@ -234,23 +259,22 @@ stage1   seen|original  n= 745      (no resample block)
 sft      seen|original  n= 745
 ```
 
-Three faults simultaneously: temperature-0.7 samples entered a temperature-0 contrast, the
-resampled items were weighted once per copy, and — because the control is only run for the
-checkpoints whose consistency is interpreted — the DiD shifted **for those checkpoints alone**.
-That last one is the dangerous part: it made a measurement difference look like a checkpoint
-difference in exactly the `stage1`→`stage2` comparison the study rests on. Fixed by excluding
-control variants at the shared entry points and computing the DiD from the arms block alone; F3
-needed a de-duplication because it reads records directly; F7 is untouched, since the resample
-block is legitimately its null. Recovery tests now inject a deliberately lopsided resample block
-and assert the DiD, cell counts and cluster counts do not move.
+Three faults occurred simultaneously. Temperature-0.7 samples entered a temperature-0 contrast; the
+resampled items were weighted once per copy; and, because the control is run only for the
+checkpoints whose consistency is interpreted, the estimator shifted for those checkpoints alone.
+The third is the most serious, since it renders a measurement difference indistinguishable from a
+checkpoint difference in precisely the `stage1` to `stage2` comparison on which the study depends.
+The correction excludes control variants at the shared entry points and computes the estimator from
+the arms block alone; F3 required an additional de-duplication because it reads records directly;
+F7 is unaffected, the resample block being legitimately its null. Recovery tests now inject a
+deliberately unbalanced resample block and assert that the estimate, the cell counts and the
+cluster counts remain unchanged.
 
-**8. A silent non-zero exit left a stale audit in place.** The finalize step ignored return codes,
-so a malformed `check-termination` invocation failed without complaint and left a
-`termination.json` describing seven files while the rest of the analysis had refreshed to ten.
-Return codes are now checked, with `check-termination` explicitly allowed to exit non-zero because
-there its non-zero is a *finding* (a block below the gate), not an error.
-
----
+**8. A suppressed non-zero exit preserved a stale audit.** The finalisation step ignored return
+codes, so a malformed `check-termination` invocation failed without notice and left a
+`termination.json` describing seven files alongside an analysis refreshed to ten. Return codes are
+now checked, with `check-termination` explicitly permitted to exit non-zero because in that command
+a non-zero status reports a finding — a block below the gate — rather than an error.
 
 ## Results
 
@@ -469,6 +493,51 @@ interpreted.
 The honest limitation. At ICC ≈ 0.48 and 250 items per arm, the design resolves effects of roughly
 12–15pp. It does **not** resolve the 5pp end of the range claimed in the contamination literature.
 
+### Supplementary figures
+
+Four further panels present evidence otherwise available only as tables. Each addresses an
+objection raised specifically against a null result: whether the treatment label is trustworthy
+(S1, S2), whether scoring is comparable across checkpoints (S3), and whether the absence of an
+effect is visible in the raw cells rather than only in a derived scalar (S4).
+
+#### S1 — Containment distribution by split
+
+![S1 containment distribution](docs/figures/s1_containment_distribution.png)
+
+The two splits separate almost completely on a logarithmic count axis. GSM8K train concentrates
+near containment 1.0; GSM8K test concentrates at 0.0, with median 0.000 and 99th percentile 0.000.
+The dashed lines mark the 0.80 and 0.10 thresholds, and the sparse region between them is the
+ambiguous band excluded from both arms.
+
+#### S2 — Detector false-positive rate against known negatives
+
+![S2 detector false positive rate](docs/figures/s2_detector_false_positive.png)
+
+Because the corpus derives from GSM8K train, every GSM8K test item is a known negative and the
+false-positive rate is measurable rather than argued. The orange series stays at or below 0.3
+percent across the entire threshold sweep while the blue series falls from 86.6 to 30.3 percent,
+establishing that exact detection separates the splits without flagging items that cannot be
+contaminated.
+
+#### S3 — Extraction-tier composition
+
+![S3 extraction tiers](docs/figures/s3_extraction_tiers.png)
+
+Marker emission differs sharply between the base checkpoints and the post-trained ones, which
+raises the question of whether the four checkpoints are scored comparably. The composition is shown
+directly; the corresponding second differences, reported under
+[Robustness](#robustness), establish that the difference is not correlated with the treatment and
+therefore cancels.
+
+#### S4 — Cell accuracies underlying each estimate
+
+![S4 DiD cells](docs/figures/s4_did_cells.png)
+
+The difference-in-differences is a contrast of contrasts, and a single scalar conceals the
+quantities producing it. Displaying all four cells per checkpoint permits the null to be verified
+against the raw accuracies: the seen bars exceed the unseen bars at `stage2` and `instruct`, and
+the gap persists rather than closing when the numbers change.
+
 ---
 
 ## Analysis artifacts
@@ -526,8 +595,8 @@ verified-seen items, with arms then capped by the test split at ~1,300 per arm.
 That is √(1300/250) ≈ 2.3× narrower intervals — **CI ≈ ±0.048**, which genuinely excludes 5pp
 effects and would let you write the strong version of the claim. The cost is ~19,500 generations,
 and `stage1` runs at 9.3 s/item, so budget 15–20 h. **This is the single highest-value remaining
-experiment, and it is the only thing standing between "no evidence of an effect" and "we exclude
-the effects others report."**
+experiment, and the only work separating a statement of no evidence from a statement that the
+effect sizes reported elsewhere are excluded.**
 
 ### 3. Known limitations to state in the paper, not fix
 
@@ -860,7 +929,7 @@ When a language model answers a reasoning problem correctly, **accuracy alone ca
 tell you whether it reasoned or remembered.** Instella is one of the very few
 competitive model families that is *fully open* — weights, code, data recipe, **and
 the training data itself**. That makes the question empirically testable: for every
-benchmark problem we can search the actual training corpus for near-duplicates, then
+benchmark problem the actual training corpus can be searched for near-duplicates, then
 measure whether correct answers survive semantically-equivalent rewrites, then trace
 which training documents drove them.
 
