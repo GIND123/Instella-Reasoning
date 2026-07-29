@@ -1105,6 +1105,192 @@ def judge_run(tag: str = "instruct", mode: str = "reference_free",
     return {"graded": n_written + len(done), "hours": elapsed}
 
 
+@app.function(cpu=4.0, memory=8192, timeout=1800, volumes=VOLUMES, secrets=SECRETS)
+def consistency_by_arm(run: str = "fullscale-S250-v2", n_bootstrap: int = 4000,
+                       seed: int = 6198, write: bool = False, push: bool = False) -> dict:
+    """Paraphrase consistency split by verified membership — a probe the DiD cannot make.
+
+    The difference-in-differences uses *numeric* perturbation, which changes the arithmetic
+    while preserving problem structure. It therefore detects a model that memorised an
+    **answer** but is blind to one that memorised a **solution procedure**: a recalled
+    template still executes correctly on new numbers, producing exactly the flat DiD observed.
+    That is the main study's most serious open gap.
+
+    Answer-*preserving* variants attack it from the other side. Rephrasing and distractor
+    insertion leave the gold answer and the required procedure intact but change the surface
+    form. A model reciting a memorised item should be *more* stable across those rewrites than
+    one solving from scratch, so elevated consistency on verified-seen items is a memorisation
+    signature that survives numeric perturbation.
+
+    The resample block supplies the null. At temperature 0 there is no sampling variance, so
+    raw consistency has no baseline; where a checkpoint has the control, consistency is
+    reported against its own decoding-noise floor.
+    """
+    import glob
+    import json
+    import random
+    from collections import defaultdict
+
+    from instella_reasoning.metrics import cluster_consistency, decoding_noise_consistency
+    from instella_reasoning.records import EvaluationRecord, read_jsonl
+
+    os.chdir(REPO_REMOTE)
+    runs_vol.reload()
+    out = pathlib.Path("experiments/runs") / run
+    fields = {f.name for f in __import__("dataclasses").fields(EvaluationRecord)}
+
+    def load(path: pathlib.Path) -> list[EvaluationRecord]:
+        if not path.exists():
+            return []
+        rows = []
+        for r in read_jsonl(path):
+            try:
+                rows.append(EvaluationRecord(**{k: v for k, v in r.items() if k in fields}))
+            except TypeError:
+                continue
+        return rows
+
+    order = {"stage1": 0, "stage2": 1, "sft": 2, "instruct": 3}
+    tags = sorted({pathlib.Path(p).name.replace("__arms.jsonl", "")
+                   for p in glob.glob(f"{out}/scores/*__arms.jsonl")},
+                  key=lambda t: (order.get(t, 99), t))
+
+    report: dict = {}
+    print("Modal-answer agreement over answer-preserving variants, by verified membership.")
+    print("Elevated consistency on seen items indicates recall of a solution procedure,")
+    print("which numeric perturbation cannot detect.\n")
+    print(f"{'ckpt':9s} {'n_seen':>6s} {'n_unseen':>8s} {'C_seen':>7s} {'C_unseen':>9s} "
+          f"{'delta':>8s} {'CI95':>20s} {'noise floor':>12s}")
+
+    for tag in tags:
+        recs = load(out / f"scores/{tag}__arms.jsonl")
+        if not recs:
+            continue
+        by_parent: dict[str, list[EvaluationRecord]] = defaultdict(list)
+        for r in recs:
+            by_parent[r.parent_id].append(r)
+
+        arm_of, cons = {}, {}
+        for pid, rows in by_parent.items():
+            arms = {(r.metadata or {}).get("arm") for r in rows}
+            arm = next((a for a in arms if a in ("seen", "unseen")), None)
+            if arm is None:
+                continue
+            # A cluster needs at least two answer-preserving rows for agreement to exist.
+            preserving = [r for r in rows if r.variant_type in
+                          ("original", "rephrasing", "irrelevant_context", "entity_substitution")]
+            if len(preserving) < 2:
+                continue
+            arm_of[pid] = arm
+            cons[pid] = cluster_consistency(preserving)
+
+        seen = [cons[p] for p in cons if arm_of[p] == "seen"]
+        unseen = [cons[p] for p in cons if arm_of[p] == "unseen"]
+        if not seen or not unseen:
+            continue
+        c_seen = sum(seen) / len(seen)
+        c_unseen = sum(unseen) / len(unseen)
+        delta = c_seen - c_unseen
+
+        # Bootstrap over parent items, matching the main analysis.
+        keys = list(cons)
+        rng = random.Random(seed)
+        draws = []
+        for _ in range(n_bootstrap):
+            s, u = [], []
+            for _ in range(len(keys)):
+                p = keys[rng.randrange(len(keys))]
+                (s if arm_of[p] == "seen" else u).append(cons[p])
+            if s and u:
+                draws.append(sum(s) / len(s) - sum(u) / len(u))
+        draws.sort()
+        ci = [draws[int(0.025 * len(draws))], draws[int(0.975 * len(draws))]] if draws else [None, None]
+
+        # Decoding-noise floor from the resample control, where the checkpoint has one.
+        floor = None
+        rs = load(out / f"scores/{tag}__resample.jsonl")
+        if rs:
+            grouped: dict[str, list[EvaluationRecord]] = defaultdict(list)
+            for r in rs:
+                grouped[r.parent_id].append(r)
+            vals = [v for v, n in (decoding_noise_consistency(g) for g in grouped.values()) if v >= 0]
+            floor = sum(vals) / len(vals) if vals else None
+
+        excl = bool(ci[0] is not None and (ci[0] > 0 or ci[1] < 0))
+        print(f"{tag:9s} {len(seen):6d} {len(unseen):8d} {c_seen:7.4f} {c_unseen:9.4f} "
+              f"{delta:+8.4f} [{ci[0]:+.4f},{ci[1]:+.4f}] "
+              f"{'n/a' if floor is None else format(floor, '.4f'):>12s}"
+              f"{'  *' if excl else ''}")
+
+        # Accuracy is the confound. Seen items are solved more often (0.655 vs 0.455 at
+        # stage2), and a model that is more often right is mechanically more self-consistent,
+        # so an unstratified gap can be produced by accuracy alone with no recall involved.
+        # Stratifying on whether the cluster's original was answered correctly holds that
+        # constant: a gap surviving inside BOTH strata is not an accuracy artifact.
+        correct_of = {}
+        for pid, rows in by_parent.items():
+            origs = [r for r in rows if r.variant_type == "original"]
+            if origs:
+                correct_of[pid] = bool(origs[0].correct)
+        strata = {}
+        for label, want in (("original_correct", True), ("original_wrong", False)):
+            s = [cons[p] for p in cons if arm_of[p] == "seen" and correct_of.get(p) is want]
+            u = [cons[p] for p in cons if arm_of[p] == "unseen" and correct_of.get(p) is want]
+            if len(s) < 10 or len(u) < 10:
+                strata[label] = {"n_seen": len(s), "n_unseen": len(u), "delta": None,
+                                 "ci95": [None, None], "note": "too few clusters"}
+                continue
+            ks = list(cons)
+            rng2 = random.Random(seed + 1)
+            d2 = []
+            for _ in range(n_bootstrap):
+                ss, uu = [], []
+                for _ in range(len(ks)):
+                    p = ks[rng2.randrange(len(ks))]
+                    if correct_of.get(p) is not want:
+                        continue
+                    (ss if arm_of[p] == "seen" else uu).append(cons[p])
+                if ss and uu:
+                    d2.append(sum(ss) / len(ss) - sum(uu) / len(uu))
+            d2.sort()
+            c2 = [d2[int(0.025 * len(d2))], d2[int(0.975 * len(d2))]] if d2 else [None, None]
+            dd = sum(s) / len(s) - sum(u) / len(u)
+            e2 = bool(c2[0] is not None and (c2[0] > 0 or c2[1] < 0))
+            strata[label] = {"n_seen": len(s), "n_unseen": len(u),
+                             "consistency_seen": sum(s) / len(s),
+                             "consistency_unseen": sum(u) / len(u),
+                             "delta": dd, "ci95": c2, "excludes_zero": e2}
+            print(f"    {label:17s} n={len(s):3d}/{len(u):3d}  Δ={dd:+.4f} "
+                  f"[{c2[0]:+.4f},{c2[1]:+.4f}]{'  *' if e2 else ''}")
+
+        report[tag] = {
+            "n_seen": len(seen), "n_unseen": len(unseen),
+            "consistency_seen": c_seen, "consistency_unseen": c_unseen,
+            "delta_seen_minus_unseen": delta, "delta_ci95": ci, "excludes_zero": excl,
+            "decoding_noise_floor": floor,
+            "accuracy_stratified": strata,
+        }
+
+    print("\nA positive delta excluding zero would be evidence of procedure-level recall on")
+    print("verified-seen items, and would qualify the main result. A null strengthens it: the")
+    print("seen advantage survives both numeric perturbation and surface rewriting.")
+
+    if write:
+        dest = out / "analysis/consistency_by_arm.json"
+        dest.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        runs_vol.commit()
+        print(f"\nwrote {dest}")
+        if push:
+            subprocess.call(
+                [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+                 os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+                 "--path", str(out), "--message", "paraphrase consistency by verified arm"]
+            )
+    else:
+        print("\n(read-only: pass write=True to persist)")
+    return report
+
+
 def _balanced_accuracy(pairs: list[tuple[bool, bool]]) -> tuple[float, float, float] | None:
     """Sensitivity, specificity, and their mean, from (judge_verdict, ground_truth) pairs.
 
