@@ -147,13 +147,35 @@ def _key(arm: str, condition: str) -> str:
     return f"{arm}|{condition}"
 
 
+#: Variant types that are *controls*, not DiD conditions, and must never enter a cell.
+#:
+#: The resample block is the decoding-noise null: one prompt sampled N times at T>0. It
+#: inherits its parent's ``arm`` label, and ``resample`` is not answer-changing, so without
+#: this it lands in the **original** cell. Three things then go wrong at once: T>0 samples
+#: are mixed into a T=0 contrast, the resampled items are weighted N times, and — because the
+#: block is only run for the checkpoints whose consistency is interpreted — the trajectory
+#: becomes asymmetric, with some checkpoints carrying 600 extra "original" rows and others
+#: none. That last one is the dangerous part: it makes a *measurement* difference look like a
+#: checkpoint difference in exactly the comparison the study rests on.
+DID_EXCLUDED_VARIANTS = frozenset({"resample"})
+
+
+def did_eligible(records: list[EvaluationRecord]) -> list[EvaluationRecord]:
+    """Records admissible to the DiD: arm-labelled, and not a control block."""
+    return [
+        r
+        for r in records
+        if record_arm(r) is not None and r.variant_type not in DID_EXCLUDED_VARIANTS
+    ]
+
+
 def build_cells(records: list[EvaluationRecord]) -> dict[str, Cell]:
     cells: dict[str, Cell] = {
         _key(a, c): Cell(a, c, 0, 0) for a in (SEEN, UNSEEN) for c in (ORIGINAL, PERTURBED)
     }
     for record in records:
         arm = record_arm(record)
-        if arm is None:
+        if arm is None or record.variant_type in DID_EXCLUDED_VARIANTS:
             continue
         cell = cells[_key(arm, record_condition(record))]
         cell.n += 1
@@ -186,7 +208,7 @@ def difference_in_differences(
     and shrink the interval by roughly the design effect (measured ~2.4x on this data),
     producing a confidently wrong CI.
     """
-    subset = [r for r in records if record_arm(r) is not None]
+    subset = did_eligible(records)
     if model is not None:
         subset = [r for r in subset if r.model == model]
     label = model or (subset[0].model if subset else "unknown")
@@ -271,7 +293,7 @@ def memorization_regression(
     exactly this shift removed the statistical significance of about half the perturbation
     effects in the original GSM-Symbolic analysis.
     """
-    subset = [r for r in records if record_arm(r) is not None]
+    subset = did_eligible(records)
     if model is not None:
         subset = [r for r in subset if r.model == model]
     if not subset:

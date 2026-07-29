@@ -280,13 +280,23 @@ def plot_perturbation_slopes(records: list[EvaluationRecord], output_dir: str | 
     within a model, and a slope encodes change as slope rather than as the difference
     between two bar heights the eye has to subtract.
     """
-    from instella_reasoning.analysis.memorization import ORIGINAL, PERTURBED, record_condition
+    from instella_reasoning.analysis.memorization import (
+        DID_EXCLUDED_VARIANTS,
+        ORIGINAL,
+        PERTURBED,
+        record_condition,
+    )
 
     plt = _mpl()
     if plt is None or not records:
         return None
     by_model: dict[str, dict[str, list[int]]] = defaultdict(lambda: {ORIGINAL: [], PERTURBED: []})
     for record in records:
+        # Same exclusion as the DiD: the resample control is not answer-changing, so it would
+        # be drawn into the ORIGINAL end of every slope for the checkpoints that ran it,
+        # tilting those slopes for a reason that has nothing to do with perturbation.
+        if record.variant_type in DID_EXCLUDED_VARIANTS:
+            continue
         by_model[record.model][record_condition(record)].append(int(record.correct))
 
     models = _order_models(list(by_model))
