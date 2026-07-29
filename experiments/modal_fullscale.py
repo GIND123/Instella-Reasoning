@@ -959,6 +959,160 @@ def run_extra(tag: str, block: str = "arms", temperature: float = 0.0,
             "termination_rate": rep.termination_rate, "passes": rep.passes}
 
 
+@app.function(cpu=4.0, memory=8192, timeout=1800, volumes=VOLUMES, secrets=SECRETS)
+def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
+    """Four supplementary panels the F1-F8 set does not cover.
+
+    Each carries evidence that is currently only available as a table, and each answers a
+    question a reviewer raises against a null result specifically: is the treatment label
+    trustworthy (S1, S2), is the scoring comparable across checkpoints (S3), and is the
+    absence of an effect visible in the raw cells rather than only in a derived statistic
+    (S4). Styling follows the main set so the two are readable as one document.
+    """
+    import json
+
+    from instella_reasoning.analysis.figures import (
+        GRID,
+        INK,
+        INK_SECONDARY,
+        SERIES,
+        _mpl,
+        _save,
+    )
+
+    plt = _mpl()
+    if plt is None:
+        raise SystemExit("matplotlib unavailable")
+
+    os.chdir(REPO_REMOTE)
+    runs_vol.reload()
+    out = pathlib.Path("experiments/runs") / run
+    figs = out / "figures"
+    a = out / "analysis"
+    verified = json.loads((a / "containment_verified.json").read_text())["containment"]
+    det = json.loads((a / "detector_falsepositive.json").read_text())
+    tiers = json.loads((a / "extraction_tiers.json").read_text())
+    memo = json.loads((a / "memorization.json").read_text())
+
+    NAMES = {"amd/Instella-3B-Stage1": "stage1", "amd/Instella-3B": "stage2",
+             "amd/Instella-3B-SFT": "sft", "amd/Instella-3B-Instruct": "instruct"}
+    ORDER = ["stage1", "stage2", "sft", "instruct"]
+    written: list[str] = []
+
+    def _clean(ax) -> None:
+        ax.set_facecolor("none")
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(GRID)
+        ax.tick_params(colors=INK_SECONDARY, labelsize=9)
+
+    # S1 -- containment distribution. The treatment label rests on these two distributions
+    # being separable; a histogram shows separability that a threshold table asserts.
+    train = [v["containment"] for k, v in verified.items() if k.startswith("train::")]
+    test = [v["containment"] for k, v in verified.items() if k.startswith("test::")]
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    bins = [i / 20 for i in range(21)]
+    ax.hist(train, bins=bins, color=SERIES[0], alpha=0.85, label=f"GSM8K train (n={len(train)})")
+    ax.hist(test, bins=bins, color=SERIES[1], alpha=0.85, label=f"GSM8K test (n={len(test)})")
+    ax.axvline(0.80, color=INK, lw=1.2, ls="--")
+    ax.axvline(0.10, color=INK, lw=1.2, ls="--")
+    ax.text(0.80, ax.get_ylim()[1] * 0.94, " seen threshold", fontsize=8, color=INK)
+    ax.text(0.10, ax.get_ylim()[1] * 0.86, " unseen threshold", fontsize=8, color=INK)
+    ax.set_yscale("log")
+    ax.set_xlabel("13-gram containment against the training corpus", color=INK, fontsize=10)
+    ax.set_ylabel("items (log scale)", color=INK, fontsize=10)
+    ax.set_title("S1  Treatment assignment is verified, not inferred", color=INK,
+                 fontsize=11, loc="left")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY)
+    _clean(ax)
+    written.append(_save(fig, figs / "s1_containment_distribution.png", plt))
+
+    # S2 -- detector error against known negatives. The corpus derives from GSM8K train, so
+    # every test item is a negative by construction and the false-positive rate is measurable.
+    rules = det["rules"]
+    labels = list(rules)
+    thr = [rules[k]["threshold"] for k in labels]
+    fpr = [rules[k]["false_positive_rate"] * 100 for k in labels]
+    tpr = [rules[k]["train_flagged"] / det["n_train"] * 100 for k in labels]
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    ax.plot(thr, tpr, marker="o", color=SERIES[0], lw=2, label="GSM8K train flagged")
+    ax.plot(thr, fpr, marker="s", color=SERIES[1], lw=2, label="GSM8K test flagged (false positives)")
+    for x, y in zip(thr, fpr):
+        ax.annotate(f"{y:.1f}%", (x, y), textcoords="offset points", xytext=(0, 8),
+                    fontsize=8, color=INK_SECONDARY, ha="center")
+    ax.set_xlabel("containment threshold for a contamination flag", color=INK, fontsize=10)
+    ax.set_ylabel("percent of split flagged", color=INK, fontsize=10)
+    ax.set_title("S2  Exact detection is accurate on items that cannot be contaminated",
+                 color=INK, fontsize=11, loc="left")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY)
+    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    _clean(ax)
+    written.append(_save(fig, figs / "s2_detector_false_positive.png", plt))
+
+    # S3 -- extraction provenance. The marker rate collapses between checkpoints, so the
+    # question is whether scoring is comparable; the composition makes the answer inspectable.
+    keys = [f"{t}__arms" for t in ORDER if f"{t}__arms" in tiers]
+    t1 = [tiers[k]["tiers"].get("1_marker", 0) / tiers[k]["n"] * 100 for k in keys]
+    t2 = [tiers[k]["tiers"].get("2_phrase", 0) / tiers[k]["n"] * 100 for k in keys]
+    t3 = [tiers[k]["tiers"].get("3_last_number", 0) / tiers[k]["n"] * 100 for k in keys]
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    xs = range(len(keys))
+    ax.bar(xs, t1, color=SERIES[0], label="tier 1  #### marker")
+    ax.bar(xs, t2, bottom=t1, color=SERIES[2], label="tier 2  answer-is phrase")
+    ax.bar(xs, t3, bottom=[a + b for a, b in zip(t1, t2)], color=SERIES[3],
+           label="tier 3  last number")
+    for i, v in enumerate(t1):
+        ax.text(i, v / 2, f"{v:.0f}%", ha="center", va="center", fontsize=9, color="white")
+    ax.set_xticks(list(xs))
+    ax.set_xticklabels([k.replace("__arms", "") for k in keys], color=INK, fontsize=10)
+    ax.set_ylabel("percent of completions", color=INK, fontsize=10)
+    ax.set_title("S3  Answer extraction differs by checkpoint but cancels in the double difference",
+                 color=INK, fontsize=11, loc="left")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY, ncol=3, loc="upper center",
+              bbox_to_anchor=(0.5, -0.12))
+    _clean(ax)
+    written.append(_save(fig, figs / "s3_extraction_tiers.png", plt))
+
+    # S4 -- the four cells per checkpoint. The DiD is a contrast of contrasts; showing the
+    # cells lets a reader verify the null in the raw accuracies instead of trusting a scalar.
+    by = {NAMES[k]: v["did"] for k, v in memo["per_model"].items() if k in NAMES}
+    fig, ax = plt.subplots(figsize=(7.6, 4.4))
+    width = 0.2
+    cellnames = ["seen|original", "unseen|original", "seen|perturbed", "unseen|perturbed"]
+    pretty = ["seen orig", "unseen orig", "seen pert", "unseen pert"]
+    for j, cell in enumerate(cellnames):
+        vals = [by[t]["cells"][cell]["accuracy"] for t in ORDER if t in by]
+        ax.bar([i + (j - 1.5) * width for i in range(len(vals))], vals, width,
+               color=SERIES[j % len(SERIES)], label=pretty[j])
+    for i, t in enumerate([t for t in ORDER if t in by]):
+        d = by[t]["difference_in_differences"]
+        ax.annotate(f"DiD {d:+.3f}", (i, 0.95), ha="center", fontsize=8.5, color=INK)
+    ax.set_xticks(range(len([t for t in ORDER if t in by])))
+    ax.set_xticklabels([t for t in ORDER if t in by], color=INK, fontsize=10)
+    ax.set_ylim(0, 1.02)
+    ax.set_ylabel("accuracy", color=INK, fontsize=10)
+    ax.set_title("S4  The seen advantage does not shrink under perturbation at any checkpoint",
+                 color=INK, fontsize=11, loc="left")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY, ncol=4, loc="upper center",
+              bbox_to_anchor=(0.5, -0.10))
+    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    _clean(ax)
+    written.append(_save(fig, figs / "s4_did_cells.png", plt))
+
+    runs_vol.commit()
+    subprocess.call(
+        [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+         os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+         "--path", str(out), "--message", "supplementary figures S1-S4"]
+    )
+    for w in written:
+        print(w)
+    return written
+
+
 @app.function(cpu=4.0, timeout=1800)
 def run_tests(path: str = "tests/") -> int:
     """Run the repo test suite in the container.
