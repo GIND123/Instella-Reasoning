@@ -959,6 +959,345 @@ def run_extra(tag: str, block: str = "arms", temperature: float = 0.0,
             "termination_rate": rep.termination_rate, "passes": rep.passes}
 
 
+JUDGE_MODES = ("reference_free", "reference_based")
+
+
+def _judge_prompt(question: str, completion: str, gold: str | None, mode: str) -> str:
+    """Pointwise correctness grading, in the reference-based and reference-free settings.
+
+    Reference-based supplies the gold answer, reducing the task to a comparison; it is the
+    control, and should sit near ceiling regardless of membership. Reference-free withholds
+    it, so the judge must evaluate the reasoning itself — which is the only setting where
+    having memorised the problem could plausibly help, and therefore the only setting where a
+    membership effect is interpretable.
+    """
+    # The final answer lives at the end of a chain of thought, so the tail is kept rather
+    # than the head when a completion has to be truncated.
+    tail = completion.strip()[-1200:]
+    ref = f"\nReference answer: {gold}\n" if mode == "reference_based" and gold else ""
+    return (
+        "You are grading a solution to a grade-school math problem.\n\n"
+        f"Problem:\n{question.strip()}\n"
+        f"{ref}\n"
+        f"Proposed solution:\n{tail}\n\n"
+        "Is the final answer of the proposed solution correct? "
+        "Reply with exactly one word: CORRECT or INCORRECT."
+    )
+
+
+@app.function(gpu=GPU, timeout=3 * 3600, volumes=VOLUMES, secrets=SECRETS)
+def judge_run(tag: str = "instruct", mode: str = "reference_free",
+              run: str = "fullscale-S250-v2", judge: str = "instruct",
+              batch_size: int = 8, max_new_tokens: int = 24) -> dict:
+    """Grade one checkpoint's arms generations with an Instella judge.
+
+    Uses the same model family as the system under evaluation on purpose. Membership of each
+    graded item in the *judge's* own training corpus is exactly verified, which is what makes
+    the seen/unseen contrast interpretable; with an external judge that membership would be
+    unknown and the contrast would mean nothing.
+
+    Resumes on benchmark id, flushing per batch, so an interrupted run continues.
+    """
+    import json
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    from instella_reasoning.checkpoints import resolve
+    from instella_reasoning.records import read_jsonl
+
+    if mode not in JUDGE_MODES:
+        raise SystemExit(f"mode must be one of {JUDGE_MODES}")
+    os.chdir(REPO_REMOTE)
+    runs_vol.reload()
+    out = pathlib.Path("experiments/runs") / run
+    dest = out / f"analysis/judge_{tag}_{mode}.jsonl"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    items = {str(r["id"]): r for r in read_jsonl(out / "variants/arms_variants.jsonl")}
+    gens = {str(r["benchmark_id"]): r for r in read_jsonl(out / f"generations/{tag}__arms.jsonl")}
+    truth = {str(r["benchmark_id"]): bool(r["correct"])
+             for r in read_jsonl(out / f"scores/{tag}__arms.jsonl")}
+
+    done: set[str] = set()
+    if dest.exists():
+        for r in read_jsonl(dest):
+            done.add(str(r["benchmark_id"]))
+    pending = [b for b in gens if b in items and b in truth and b not in done]
+    print(f"judge={judge} target={tag}/arms mode={mode}")
+    print(f"{len(done)} already graded, {len(pending)} pending", flush=True)
+    if not pending:
+        return {"graded": len(done), "pending": 0}
+
+    ckpt = resolve(judge)
+    tok = AutoTokenizer.from_pretrained(ckpt.load_path, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        ckpt.load_path, dtype=torch.bfloat16, device_map="cuda", trust_remote_code=True
+    )
+    model.eval()
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    tok.padding_side = "left"
+
+    def render(bid: str) -> str:
+        item, gen = items[bid], gens[bid]
+        text = _judge_prompt(item.get("prompt", ""), gen.get("completion", ""),
+                             item.get("answer"), mode)
+        return tok.apply_chat_template([{"role": "user", "content": text}],
+                                       tokenize=False, add_generation_prompt=True)
+
+    def parse(raw: str) -> bool | None:
+        """None when the judge does not commit — an abstention, not a wrong answer."""
+        upper = raw.upper()
+        has_incorrect = "INCORRECT" in upper
+        # "INCORRECT" contains "CORRECT", so the negative must be tested first.
+        has_correct = "CORRECT" in upper.replace("INCORRECT", "")
+        if has_incorrect and not has_correct:
+            return False
+        if has_correct and not has_incorrect:
+            return True
+        return None
+
+    stop = threading.Event()
+    _start_watchers(stop)
+    started = time.time()
+    n_written = 0
+    try:
+        for i in range(0, len(pending), batch_size):
+            chunk = pending[i : i + batch_size]
+            enc = tok([render(b) for b in chunk], return_tensors="pt",
+                      padding=True, truncation=True, max_length=2048).to("cuda")
+            with torch.no_grad():
+                ids = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
+                                     pad_token_id=tok.pad_token_id)
+            rows = []
+            for bid, seq in zip(chunk, ids):
+                raw = tok.decode(seq[enc["input_ids"].shape[1]:], skip_special_tokens=True)
+                item = items[bid]
+                rows.append({
+                    "benchmark_id": bid,
+                    "parent_id": item.get("parent_id") or bid,
+                    "arm": (item.get("metadata") or {}).get("arm"),
+                    "variant_type": item.get("variant_type") or "original",
+                    "judge_verdict": parse(raw),
+                    "ground_truth": truth[bid],
+                    "raw": raw.strip()[:120],
+                })
+            with dest.open("a", encoding="utf-8") as fh:
+                for r in rows:
+                    fh.write(json.dumps(r, sort_keys=True) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            n_written += len(rows)
+            if (i // batch_size) % 20 == 0:
+                el = time.time() - started
+                rate = n_written / el if el else 0
+                print(f"  {n_written}/{len(pending)}  {rate:.2f} item/s  "
+                      f"eta {(len(pending) - n_written) / max(rate, 1e-6) / 60:.0f} min",
+                      flush=True)
+                runs_vol.commit()
+    finally:
+        stop.set()
+        runs_vol.commit()
+
+    elapsed = (time.time() - started) / 3600
+    print(f"\ngraded {n_written} in {elapsed:.2f}h")
+    return {"graded": n_written + len(done), "hours": elapsed}
+
+
+def _balanced_accuracy(pairs: list[tuple[bool, bool]]) -> tuple[float, float, float] | None:
+    """Sensitivity, specificity, and their mean, from (judge_verdict, ground_truth) pairs.
+
+    Cohen's kappa cannot be compared across the two arms here. Kappa is a function of the
+    marginals as well as the agreement, and the arms have very different ground-truth base
+    rates -- instruct is correct on 81% of seen originals against 56% of unseen ones. An arm
+    whose base rate sits near 0.5 has far more kappa headroom than a skewed one, so a kappa
+    gap between arms is produced by the skew itself. That is the kappa paradox, and it would
+    masquerade as a judge defect.
+
+    Sensitivity and specificity are conditioned on the true class, so neither depends on the
+    base rate, and their unweighted mean is comparable across arms by construction.
+    """
+    pos = [j for j, t in pairs if t]
+    neg = [j for j, t in pairs if not t]
+    if not pos or not neg:
+        return None  # one true class absent: no base-rate-free comparison is possible
+    sens = sum(1 for j in pos if j) / len(pos)
+    spec = sum(1 for j in neg if not j) / len(neg)
+    return sens, spec, (sens + spec) / 2
+
+
+def _cohen_kappa(pairs: list[tuple[bool, bool]]) -> float | None:
+    """Chance-corrected agreement between judge verdict and exact-match ground truth.
+
+    Raw agreement is not usable here: the arms are unbalanced in correctness (instruct is
+    right on ~81% of originals), so a judge that always answered CORRECT would post high
+    agreement while carrying no information. Kappa removes exactly that.
+    """
+    n = len(pairs)
+    if n == 0:
+        return None
+    po = sum(1 for a, b in pairs if a == b) / n
+    pj_true = sum(1 for a, _ in pairs if a) / n
+    pt_true = sum(1 for _, b in pairs if b) / n
+    pe = pj_true * pt_true + (1 - pj_true) * (1 - pt_true)
+    if abs(1 - pe) < 1e-12:
+        return None  # degenerate: one class absent, kappa undefined rather than perfect
+    return (po - pe) / (1 - pe)
+
+
+@app.function(cpu=4.0, memory=8192, timeout=1800, volumes=VOLUMES, secrets=SECRETS)
+def judge_analysis(run: str = "fullscale-S250-v2", n_bootstrap: int = 4000,
+                   seed: int = 6198, write: bool = False, push: bool = False) -> dict:
+    """Judge reliability split by verified training-set membership.
+
+    The question is whether an LLM judge grades more accurately on problems that are
+    verifiably in its own training corpus. A gap is a construct-validity failure in the
+    *instrument* rather than in the model under test, which is what makes it reportable
+    independently of the memorisation result.
+
+    Reference-based grading is the control. Supplying the gold answer reduces the task to a
+    comparison, so a membership effect there would indicate something other than memorisation
+    (formatting familiarity, for instance). The effect is only interpretable as memorisation if
+    it appears in the reference-free condition and not in the control.
+
+    Intervals come from a bootstrap over parent items, matching the main analysis: the five
+    rows of one problem are not independent observations.
+    """
+    import glob
+    import json
+    import random
+    from collections import defaultdict
+
+    from instella_reasoning.metrics import ANSWER_CHANGING_VARIANTS
+
+    os.chdir(REPO_REMOTE)
+    runs_vol.reload()
+    out = pathlib.Path("experiments/runs") / run
+    files = sorted(glob.glob(f"{out}/analysis/judge_*_*.jsonl"))
+    if not files:
+        raise SystemExit("no judge verdict files; run judge_run first")
+
+    report: dict = {}
+    print("balanced accuracy = mean(sensitivity, specificity); base-rate independent, so")
+    print("comparable across arms in a way Cohen's kappa is not.\n")
+    print(f"{'target':9s} {'mode':16s} {'n':>5s} {'abst':>6s} {'base_s':>6s} {'base_u':>8s} "
+          f"{'BA_seen':>8s} {'BA_unseen':>9s} {'delta':>8s} {'CI95':>20s}")
+    for path in files:
+        stem = pathlib.Path(path).stem.replace("judge_", "")
+        tag, mode = stem.split("_", 1)
+        rows = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+        n_total = len(rows)
+        usable = [r for r in rows if r["judge_verdict"] is not None and r["arm"] in ("seen", "unseen")]
+        abstain = 1 - len(usable) / n_total if n_total else 0.0
+
+        by_arm: dict[str, list] = defaultdict(list)
+        by_cond: dict[str, list] = defaultdict(list)
+        clusters: dict[str, list] = defaultdict(list)
+        for r in usable:
+            pair = (bool(r["judge_verdict"]), bool(r["ground_truth"]))
+            by_arm[r["arm"]].append(pair)
+            cond = "perturbed" if r["variant_type"] in ANSWER_CHANGING_VARIANTS else "original"
+            by_cond[f"{r['arm']}|{cond}"].append(pair)
+            clusters[r["parent_id"]].append((r["arm"], pair))
+
+        k_seen = _cohen_kappa(by_arm.get("seen", []))
+        k_unseen = _cohen_kappa(by_arm.get("unseen", []))
+        ba_seen = _balanced_accuracy(by_arm.get("seen", []))
+        ba_unseen = _balanced_accuracy(by_arm.get("unseen", []))
+        # Base rates are reported because they are the whole reason kappa is not comparable.
+        base_seen = (sum(1 for _, t in by_arm.get("seen", []) if t)
+                     / max(1, len(by_arm.get("seen", []))))
+        base_unseen = (sum(1 for _, t in by_arm.get("unseen", []) if t)
+                       / max(1, len(by_arm.get("unseen", []))))
+
+        delta_k = (k_seen - k_unseen) if (k_seen is not None and k_unseen is not None) else None
+        delta_ba = (ba_seen[2] - ba_unseen[2]) if (ba_seen and ba_unseen) else None
+
+        # Resample parent items, not rows. Balanced accuracy is the headline; kappa is carried
+        # only so the base-rate artifact remains visible next to the corrected number.
+        def boot(metric) -> list:
+            keys = list(clusters)
+            rng = random.Random(seed)
+            draws = []
+            for _ in range(n_bootstrap):
+                s, u = [], []
+                for _ in range(len(keys)):
+                    for arm, pair in clusters[keys[rng.randrange(len(keys))]]:
+                        (s if arm == "seen" else u).append(pair)
+                a, b = metric(s), metric(u)
+                if a is not None and b is not None:
+                    av = a[2] if isinstance(a, tuple) else a
+                    bv = b[2] if isinstance(b, tuple) else b
+                    draws.append(av - bv)
+            if not draws:
+                return [None, None]
+            draws.sort()
+            return [draws[int(0.025 * len(draws))], draws[int(0.975 * len(draws))]]
+
+        ci_ba = boot(_balanced_accuracy) if delta_ba is not None else [None, None]
+        ci_k = boot(_cohen_kappa) if delta_k is not None else [None, None]
+
+        fmt = lambda v: " n/a  " if v is None else f"{v:+.4f}"  # noqa: E731
+        cis = "n/a" if ci_ba[0] is None else f"[{ci_ba[0]:+.4f}, {ci_ba[1]:+.4f}]"
+        print(f"{tag:9s} {mode:16s} {len(usable):5d} {abstain:5.1%} "
+              f"{base_seen:6.3f} {base_unseen:8.3f} "
+              f"{fmt(ba_seen[2] if ba_seen else None):>8s} "
+              f"{fmt(ba_unseen[2] if ba_unseen else None):>9s} "
+              f"{fmt(delta_ba):>8s} {cis:>20s}")
+
+        report[stem] = {
+            "target": tag, "mode": mode, "n_total": n_total, "n_usable": len(usable),
+            "abstention_rate": abstain,
+            "ground_truth_base_rate": {"seen": base_seen, "unseen": base_unseen},
+            "balanced_accuracy": {
+                "seen": None if not ba_seen else
+                        {"sensitivity": ba_seen[0], "specificity": ba_seen[1], "balanced": ba_seen[2]},
+                "unseen": None if not ba_unseen else
+                          {"sensitivity": ba_unseen[0], "specificity": ba_unseen[1], "balanced": ba_unseen[2]},
+                "delta_seen_minus_unseen": delta_ba,
+                "delta_ci95": ci_ba,
+                "excludes_zero": bool(ci_ba[0] is not None and (ci_ba[0] > 0 or ci_ba[1] < 0)),
+            },
+            # Retained deliberately: the kappa gap is an artifact of the differing base rates
+            # above, and keeping both numbers side by side documents why it was discarded.
+            "kappa_confounded": {
+                "seen": k_seen, "unseen": k_unseen,
+                "delta_seen_minus_unseen": delta_k, "delta_ci95": ci_k,
+                "note": "not comparable across arms; base rates differ, see kappa paradox",
+            },
+            "cells": {
+                k: {"n": len(v),
+                    "balanced_accuracy": (_balanced_accuracy(v) or (None, None, None))[2]}
+                for k, v in sorted(by_cond.items())
+            },
+            "accuracy_vs_truth": (
+                sum(1 for v in by_arm.values() for a, b in v if a == b)
+                / max(1, sum(len(v) for v in by_arm.values()))
+            ),
+        }
+
+    print("\nReading: a delta whose interval excludes zero means judge reliability depends on")
+    print("whether the graded item is in the judge's own training data. If that appears in")
+    print("reference_free but not reference_based, memorisation is the parsimonious account.")
+
+    if write:
+        dest = out / "analysis/judge_reliability.json"
+        dest.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        runs_vol.commit()
+        print(f"\nwrote {dest}")
+        if push:
+            subprocess.call(
+                [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+                 os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+                 "--path", str(out), "--message",
+                 "judge reliability by verified membership"]
+            )
+    else:
+        print("\n(read-only: pass write=True to persist)")
+    return report
+
+
 @app.function(cpu=4.0, memory=8192, timeout=1800, volumes=VOLUMES, secrets=SECRETS)
 def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
     """Four supplementary panels the F1-F8 set does not cover.
@@ -1102,11 +1441,103 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
     _clean(ax)
     written.append(_save(fig, figs / "s4_did_cells.png", plt))
 
+    # --- J1-J3: judge reliability, rendered only once verdicts exist ---------------------
+    judge_path = a / "judge_reliability.json"
+    if judge_path.exists():
+        jr = json.loads(judge_path.read_text())
+        modes = ["reference_free", "reference_based"]
+        tags = [t for t in ORDER if any(v["target"] == t for v in jr.values())]
+
+        # J1 -- the primary contrast: kappa by arm, per mode, with the bootstrap interval on
+        # the difference. Reference-based is the control panel.
+        fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.4), sharey=True)
+        for ax, mode in zip(axes, modes):
+            present = [t for t in tags if f"{t}_{mode}" in jr]
+            xs = range(len(present))
+            ba = [jr[f"{t}_{mode}"]["balanced_accuracy"] for t in present]
+            ks = [(e["seen"] or {}).get("balanced", 0.0) for e in ba]
+            ku = [(e["unseen"] or {}).get("balanced", 0.0) for e in ba]
+            ax.bar([x - 0.18 for x in xs], ks, 0.36, color=SERIES[0], label="verified seen")
+            ax.bar([x + 0.18 for x in xs], ku, 0.36, color=SERIES[1], label="verified unseen")
+            # 0.5 is chance for a base-rate-independent binary metric. Without the line a
+            # reader cannot see that most of these bars sit essentially on it.
+            ax.axhline(0.5, color=INK, lw=1.2, ls="--")
+            ax.text(len(present) - 0.45, 0.505, "chance", fontsize=8, color=INK, ha="right")
+            for i, e in enumerate(ba):
+                d, ci = e["delta_seen_minus_unseen"], e["delta_ci95"]
+                if d is not None and ci[0] is not None:
+                    mark = "*" if e["excludes_zero"] else ""
+                    ax.annotate(f"Δ{d:+.3f}{mark}", (i, max(ks[i], ku[i]) + 0.012),
+                                ha="center", fontsize=8, color=INK)
+            ax.set_xticks(list(xs))
+            ax.set_xticklabels(present, color=INK, fontsize=9.5)
+            ax.set_ylim(0.45, 0.72)
+            ax.set_title(mode.replace("_", " "), color=INK, fontsize=10.5, loc="left")
+            ax.grid(axis="y", color=GRID, lw=0.8)
+            ax.set_axisbelow(True)
+            _clean(ax)
+        axes[0].set_ylabel("balanced accuracy vs exact-match truth", color=INK, fontsize=10)
+        axes[0].legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY, loc="upper left")
+        fig.suptitle("J1  A 3B judge is close to chance, and the seen gap survives the "
+                     "reference-based control", color=INK, fontsize=11, x=0.02, ha="left")
+        written.append(_save(fig, figs / "j1_judge_balanced_accuracy.png", plt))
+
+        # J2 -- abstention and headline agreement. A judge that declines to commit is not a
+        # judge that disagrees, and conflating the two would inflate apparent reliability.
+        fig, ax = plt.subplots(figsize=(7.2, 4.2))
+        keys = [f"{t}_{m}" for m in modes for t in tags if f"{t}_{m}" in jr]
+        xs = range(len(keys))
+        ax.bar(xs, [jr[k]["abstention_rate"] * 100 for k in keys], color=SERIES[4],
+               label="abstention rate")
+        ax.plot(list(xs), [jr[k]["accuracy_vs_truth"] * 100 for k in keys], marker="o",
+                color=SERIES[0], lw=2, label="raw agreement with ground truth")
+        ax.set_xticks(list(xs))
+        ax.set_xticklabels([k.replace("_reference", "\nref") for k in keys],
+                           color=INK, fontsize=8.5)
+        ax.set_ylabel("percent", color=INK, fontsize=10)
+        ax.set_title("J2  Abstention and raw agreement, reported separately",
+                     color=INK, fontsize=11, loc="left")
+        ax.legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY)
+        ax.grid(axis="y", color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+        _clean(ax)
+        written.append(_save(fig, figs / "j2_judge_abstention.png", plt))
+
+        # J3 -- kappa across the four cells. Paraphrase robustness is a listed workshop topic,
+        # and answer-preserving rewrites leave the gold answer intact, so any movement between
+        # original and perturbed within an arm is judge fragility rather than task difficulty.
+        cellnames = ["seen|original", "unseen|original", "seen|perturbed", "unseen|perturbed"]
+        fig, ax = plt.subplots(figsize=(7.6, 4.2))
+        width = 0.2
+        for j, cell in enumerate(cellnames):
+            vals = []
+            for t in tags:
+                e = jr.get(f"{t}_reference_free")
+                v = (e or {}).get("cells", {}).get(cell, {}).get("balanced_accuracy")
+                vals.append(v if v is not None else 0.5)
+            ax.bar([i + (j - 1.5) * width for i in range(len(vals))], vals, width,
+                   color=SERIES[j % len(SERIES)], label=cell)
+        ax.axhline(0.5, color=INK, lw=1.2, ls="--")
+        ax.set_ylim(0.45, 0.72)
+        ax.set_xticks(range(len(tags)))
+        ax.set_xticklabels(tags, color=INK, fontsize=9.5)
+        ax.set_ylabel("balanced accuracy", color=INK, fontsize=10)
+        ax.set_title("J3  Judge reliability per cell, reference-free grading "
+                     "(dashed line is chance)", color=INK, fontsize=11, loc="left")
+        ax.legend(frameon=False, fontsize=8.5, labelcolor=INK_SECONDARY, ncol=4,
+                  loc="upper center", bbox_to_anchor=(0.5, -0.10))
+        ax.grid(axis="y", color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+        _clean(ax)
+        written.append(_save(fig, figs / "j3_judge_cells.png", plt))
+    else:
+        print("(no judge_reliability.json yet — J1-J3 skipped)")
+
     runs_vol.commit()
     subprocess.call(
         [sys.executable, "experiments/hf_sync.py", "push", "--repo",
          os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
-         "--path", str(out), "--message", "supplementary figures S1-S4"]
+         "--path", str(out), "--message", "supplementary and judge figures"]
     )
     for w in written:
         print(w)
