@@ -61,33 +61,84 @@ the HF checkpoint and skips scored blocks.
 - **Final artifacts:** the suite runs the termination audit, memorization statistics, atlas,
   and publication plots only after all requested Tier-1 GPU blocks finish.
 
-### Current HF snapshot (2026-07-28)
+### Current HF snapshot (2026-07-29)
 
-This is a recoverable progress checkpoint, not a finished experiment.
+Two run directories exist on HF, and both are kept. `fullscale-S250` is complete;
+`fullscale-S250-v2` is the corrected rebuild that supersedes it for the headline claim.
 
-| Area | Validated contents |
-|---|---|
-| `markers/` | Preflight probe plus `stage1_corpus`, `stage2_splits`, `stage3_variants`, and `stage4_aux` |
-| `analysis/` | Preflight and exact-containment reports |
-| `contamination/` | Approximately 1.45 GB synthetic corpus used for treatment verification |
-| `arms/`, `variants/`, `review/` | Verified arms, perturbations, corrected official GSM-Symbolic inputs, noise control, and review CSV |
-| `generations/stage1__arms.jsonl` | 1,553 repaired generation rows |
-| `scores/stage1__arms.jsonl` | 1,553 scored rows; authoritative completion marker |
-| `generations/stage1__gsmsym.jsonl` | 800 rows remapped to 800 unique `main`/`p1` IDs |
-| `scores/stage1__gsmsym.jsonl` | 800 scored rows after passing the 85% termination gate |
-| Stage 2 and Instruct | Pending |
-| Final analysis, atlas, and figures | Pending until all Tier-1 score blocks exist |
+| Run | Arms | Status |
+|---|---|---|
+| `experiments/runs/fullscale-S250` | 194 seen / 194 unseen | **Complete** — all Tier-1 blocks scored, analysis, atlas, F1–F8 |
+| `experiments/runs/fullscale-S250-v2` | 250 seen / 250 unseen | Regenerating `*/arms`; other blocks carried over |
 
-Completed and scored: **2,353 / 7,659 rows (30.7%)**. Remaining: **5,306 rows**.
-The next expected block is `stage2/arms`.
+**Why v2 exists — the treatment assignment in v1 is wrong.** GSM8K train and test share the
+id scheme `gsm8k_NNNNN`, so loading 1,000 of each makes every id collide pairwise.
+`verify_containment` keys `item_grams` by `item.id` while `gram_owners` retains both twins'
+grams, so the numerator accumulates hits against grams absent from the denominator and
+containment can exceed 1.0 (observed max 7.78). Re-measuring with `train::`/`test::`
+namespaced ids showed:
 
-The Stage-1 arms repair retained 1,292 valid rows, regenerated 261 truncated rows at 2,048
-tokens, then scored and pushed the complete block. GSM-Symbolic exposed a separate
-measurement bug: Apple's `main` and `p1` configs reused IDs. Commit `bd5074b` namespaces
-those IDs and adds a regression test. The untouched 800-row backup was remapped safely;
-654 rows were salvaged, the 2,048-token pass reached 678/800 (84.8%), and the 3,072-token
-pass reached 689/800 (86.1%). The corrected generation and score files are now on HF.
-Pre-fix duplicate-ID GSM-Symbolic artifacts must not be analyzed.
+- **83 of 194 v1 seen-arm items (43%) were not verifiably seen** — true containment 0.39–0.79,
+  under the 0.80 threshold the design requires.
+- **Difficulty matching was against the wrong bins.** `assign_difficulty_bins` is keyed by
+  `item.id` too, so every train item inherited its test twin's difficulty; the arms were
+  never actually matched. v2 bins over namespaced ids and matches 84/83/83.
+- **F4 was unplottable** — it drew containment values above 1.0 on a "fraction of n-grams
+  matched" axis.
+
+v2 selects only verdict-matching items, excludes ids already taken by the seen arm (with
+corrected verdicts a train item can be seen while its test twin is unseen), and reuses 4,119
+of 6,051 generations because variants are per-`(item, type)` seeded and therefore stable.
+
+**Headline DiD, v1 arms (cluster-robust bootstrap over parent items):**
+
+| checkpoint | full arm (194) | verified-only subset (111) |
+|---|---|---|
+| stage1 | +0.0128 [−0.047, +0.073] | +0.0066 [−0.061, +0.072] |
+| stage2 | −0.0592 [−0.191, +0.067] | −0.0069 [−0.161, +0.153] |
+| instruct | −0.0735 [−0.198, +0.047] | −0.0192 [−0.175, +0.134] |
+
+Every interval spans zero. Purifying the seen arm moves each estimate *toward* zero, so the
+negative DiD in the full arms was driven by the ambiguous items, not by verifiably
+memorised ones. v2 exists to raise power on this contrast, not to change its sign.
+
+**Extraction-tier validity.** `extract_numeric` falls back in three tiers (`#### N` marker →
+"answer is …" phrase → last number anywhere). The marker rate collapses across checkpoints —
+stage1 86%, stage2 98%, instruct 34% — because the DPO model answers conversationally. Tier-3
+recovers the right answer 72.5% of the time for `instruct` but only ~1% for `stage1`, where it
+fires on looping outputs. This does **not** contaminate the DiD: the tier-1 second difference
+is ≤0.032 everywhere, so the artifact cancels in the double difference. See
+`analysis/extraction_tiers.json`.
+
+Earlier repairs, retained for provenance: the Stage-1 arms repair kept 1,292 valid rows and
+regenerated 261 truncated ones at 2,048 tokens. GSM-Symbolic exposed a separate ID-reuse bug
+between Apple's `main` and `p1` configs, fixed in `bd5074b`. Pre-fix duplicate-ID
+GSM-Symbolic artifacts must not be analyzed.
+
+### Running on Modal (current method)
+
+Colab sessions were reclaimed mid-run with no signal and no way to reattach. The suite now
+runs as a Modal app driven from a local terminal — see `experiments/modal_fullscale.py`.
+
+```bash
+modal secret create instella-hf HF_TOKEN=hf_...          # once
+modal run experiments/modal_fullscale.py::probe          # GPU health, ~3 min
+modal run experiments/modal_fullscale.py::status         # inventory, no GPU
+modal run --detach experiments/modal_fullscale.py        # full suite
+modal app list                                           # find the app id
+modal app logs <app-id>                                  # reattach to logs
+```
+
+Three points that were learned the expensive way:
+
+- **Launch with `.spawn()`, not `.remote()`.** `--detach` keeps the *app* alive, but
+  `.remote()` blocks the local client and a cancellation of that call propagates into the
+  container. A 2h run died at `instruct/resample` this way.
+- **`_hf_pull` overwrites local edits.** `snapshot_download(local_dir=".")` syncs local files
+  *down* to match the remote at suite start. Editing a run directory in place is silently
+  reverted; stage corrected artifacts into a *new* run directory instead.
+- **Pin `transformers==4.56.0` exactly.** A floating `<5` range puts different checkpoints on
+  different minor versions, which enters the DiD as if it were a model difference.
 
 ### Cell 1 - clone or update `main`
 
