@@ -38,107 +38,369 @@
 > [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) explains why four of their five
 > headline findings are artifacts. Do not cite those numbers.
 
-## Current validated full-scale workflow
+## Study status — read this first
 
-**This is the authoritative handoff for agents and Colab operators.** Repository:
-[github.com/GIND123/Instella-Reasoning](https://github.com/GIND123/Instella-Reasoning).
-Results:
-[GOVINDFROM/Instella-Reasoning](https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning)
-under `experiments/runs/fullscale-S250/`. Use the three cells below in order on a fresh
-Colab GPU runtime. In a replacement runtime, run all three again; the third cell restores
-the HF checkpoint and skips scored blocks.
+**The experiment is finished.** All seven generation blocks across all three checkpoints are
+generated, scored, analysed, plotted, and mirrored to Hugging Face. Nothing is mid-flight and
+no GPU job is pending. What remains is one optional quality repair and one optional
+scale-up — both described under [What is left](#what-is-left), with costs.
 
-- **Headline scope:** `SUITE_TIER=1` runs `stage1`, `stage2`, and `instruct`, preserving the
-  controlled Stage-1 → Stage-2 intervention where GSM8K-derived data enters.
-- **Math is diagnostic-only:** `math` remains in Tier 2 after failing semantic-completion
-  smoke tests at 3,072 tokens. Never lower or bypass the 85% gate to force it into a result.
-- **Completion semantics:** EOS, the `####` final-answer marker, or entering the next
-  few-shot exemplar counts as a semantic stop.
-- **Checkpoints:** the suite pushes after each completed preparation stage and scored GPU
-  block. Cell 3 also pushes partial local work if the suite exits nonzero.
-- **Progress visibility:** Cell 3 prints the newest generation row count and GPU utilization
-  every minute even when subprocess `tqdm` rendering is hidden by Colab.
-- **Final artifacts:** the suite runs the termination audit, memorization statistics, atlas,
-  and publication plots only after all requested Tier-1 GPU blocks finish.
+| | |
+|---|---|
+| Rows generated and scored | **9,051 / 9,051 (100%)** |
+| Generation blocks complete | **7 / 7 (100%)** |
+| Quality gates passed | **6 / 7** — `stage1/arms` sits at 84.9% against an 85% gate |
+| Rows needing optional rework | **304 / 9,051 (3.4%)** |
+| Analysis, atlas, and F1–F8 figures | Produced and pushed |
+| GPU time already spent on the corrected run | ~2.3 h (A100-40GB) |
+| GPU time required to finish everything outstanding | **~1.6 h** — fits a 3 h budget |
 
-### Current HF snapshot (2026-07-29)
+The authoritative run is `experiments/runs/fullscale-S250-v2`. The earlier
+`experiments/runs/fullscale-S250` is kept, complete, and reproducible, but its arms were
+built on a corrupted measurement — see [Bugs found and fixed](#bugs-found-and-fixed). Do not
+quote v1 numbers as the headline.
 
-Two run directories exist on HF, and both are kept. `fullscale-S250` is complete;
-`fullscale-S250-v2` is the corrected rebuild that supersedes it for the headline claim.
+---
 
-| Run | Arms | Status |
+## What the study asks, for a reader with no context
+
+Large language models are scored on public benchmarks. If a benchmark's questions were in a
+model's training data, the score may reflect **memorisation** rather than **reasoning** — the
+model recites an answer it has seen instead of working it out. This is called *contamination*,
+and reviewers routinely demand that results be discounted because of it.
+
+**The obvious version of the question is unanswerable here.** You would want to ask "are GSM8K
+*test* items in Instella's training data?" But the corpus we can inspect,
+`amd/Instella-GSM8K-synthetic`, is *derived from GSM8K train*. Scanning test items against it
+returns zero matches no matter how thresholds are set, so the contaminated group is empty and
+there is nothing to compare.
+
+**The answerable version.** GSM8K ships a *train* split and a *test* split, written by the same
+annotators to the same spec, at the same difficulty. Instella's training data contains material
+derived from **train** and not from **test**. So:
+
+- **"seen" arm** = GSM8K *train* items that are provably in the training corpus
+- **"unseen" arm** = GSM8K *test* items that are provably absent from it
+
+"Provably" is the important word. Membership is not guessed from a similarity score. For each
+item we compute **13-gram containment**: chop the question into every run of 13 consecutive
+words, then measure what fraction of those runs appear anywhere in the 1.45 GB training corpus.
+An item copied into training scores near 1.0; an unrelated item scores 0.0. Items landing in
+between are **excluded from both arms** rather than forced into one, because a treatment label
+you cannot defend is worse than a smaller sample.
+
+**Why perturbation is needed.** Suppose seen items score higher. That alone proves nothing —
+maybe train items are simply easier. So every item is also rewritten with **different numbers**
+(same structure, same reasoning steps, new arithmetic). A model that *memorised* an answer
+loses its advantage the moment the numbers change. A model that *reasons* keeps it.
+
+**The measurement: difference-in-differences (DiD).** Take the seen-minus-unseen accuracy gap on
+original items, then subtract the same gap on perturbed items:
+
+```
+DiD = (seen − unseen | original) − (seen − unseen | perturbed)
+```
+
+- **DiD > 0** → the seen advantage evaporates under perturbation → memorisation
+- **DiD ≈ 0** → whatever advantage exists survives new numbers → not memorisation
+
+Subtracting twice cancels anything affecting both arms equally — including the known confound
+that perturbed problems may just involve bigger arithmetic.
+
+---
+
+## The experimental design
+
+**Checkpoints.** Instella-3B is released at successive training stages, which turns an
+observational comparison into something closer to a controlled intervention:
+
+| tag | model | GSM8K-derived data? | role |
+|---|---|---|---|
+| `stage1` | `amd/Instella-3B-Stage1` | **No** | **Control** — the only checkpoint that never saw GSM8K |
+| `stage2` | `amd/Instella-3B` | **Yes** | **Treated** — stage-2 mix explicitly targets GSM8K |
+| `instruct` | `amd/Instella-3B-Instruct` | Yes | + DPO; the headline general model |
+
+If memorisation drives GSM8K scores, `stage1` should show DiD ≈ 0 and `stage2` should not.
+
+**Item clusters.** Each of the 500 arm items expands to 5 rows — 1 original, 2
+answer-*preserving* rewrites (rephrasing, distractor text), and 2 answer-*changing* numeric
+perturbations. 500 × 5 ≈ 2,017 rows per checkpoint. Preserving and changing variants are kept
+in separate terms: changing ones drive the DiD, preserving ones drive a consistency measure.
+
+**Three blocks per checkpoint:**
+
+| block | rows | what it is for |
 |---|---|---|
-| `experiments/runs/fullscale-S250` | 194 seen / 194 unseen | **Complete** — all Tier-1 blocks scored, analysis, atlas, F1–F8 |
-| `experiments/runs/fullscale-S250-v2` | 250 seen / 250 unseen | Regenerating `*/arms`; other blocks carried over |
+| `arms` | 2,017 | The headline DiD |
+| `gsmsym` | 800 | Apple's hand-written GSM-Symbolic templates — external validity |
+| `resample` | 600 | Same item generated 5× at temperature 0.7 — the **decoding-noise null** |
 
-**Why v2 exists — the treatment assignment in v1 is wrong.** GSM8K train and test share the
-id scheme `gsm8k_NNNNN`, so loading 1,000 of each makes every id collide pairwise.
-`verify_containment` keys `item_grams` by `item.id` while `gram_owners` retains both twins'
-grams, so the numerator accumulates hits against grams absent from the denominator and
-containment can exceed 1.0 (observed max 7.78). Re-measuring with `train::`/`test::`
-namespaced ids showed:
+The `resample` block matters more than its size suggests. At temperature 0 there is no sampling
+variance, so an observed inconsistency across variants has nothing to be compared against. This
+block supplies that baseline.
 
-- **83 of 194 v1 seen-arm items (43%) were not verifiably seen** — true containment 0.39–0.79,
-  under the 0.80 threshold the design requires.
-- **Difficulty matching was against the wrong bins.** `assign_difficulty_bins` is keyed by
-  `item.id` too, so every train item inherited its test twin's difficulty; the arms were
-  never actually matched. v2 bins over namespaced ids and matches 84/83/83.
-- **F4 was unplottable** — it drew containment values above 1.0 on a "fraction of n-grams
-  matched" axis.
+**Statistics.** Confidence intervals come from a bootstrap that resamples **parent items**, not
+individual rows. The five rows of one problem are not five independent observations — measured
+ICC on this data is ~0.48. Resampling rows instead would shrink intervals by roughly the design
+effect (~2.4×) and produce confidently wrong error bars.
 
-v2 selects only verdict-matching items, excludes ids already taken by the seen arm (with
-corrected verdicts a train item can be seen while its test twin is unseen), and reuses 4,119
-of 6,051 generations because variants are per-`(item, type)` seeded and therefore stable.
+---
 
-**Headline DiD, v1 arms (cluster-robust bootstrap over parent items):**
+## What was actually run
 
-| checkpoint | full arm (194) | verified-only subset (111) |
+| | v1 — `fullscale-S250` | v2 — `fullscale-S250-v2` |
 |---|---|---|
-| stage1 | +0.0128 [−0.047, +0.073] | +0.0066 [−0.061, +0.072] |
-| stage2 | −0.0592 [−0.191, +0.067] | −0.0069 [−0.161, +0.153] |
-| instruct | −0.0735 [−0.198, +0.047] | −0.0192 [−0.175, +0.134] |
+| Arms | 194 seen / 194 unseen | **250 seen / 250 unseen** |
+| Treatment labels | 43% of seen arm mislabelled | All verified |
+| Difficulty matching | Against wrong bins | Correct — 84/83/83 |
+| `containment.json` | Values up to 7.78 (impossible) | Corrected |
+| Status | Complete, superseded | **Complete, authoritative** |
 
-Every interval spans zero. Purifying the seen arm moves each estimate *toward* zero, so the
-negative DiD in the full arms was driven by the ambiguous items, not by verifiably
-memorised ones. v2 exists to raise power on this contrast, not to change its sign.
+Chronology: v1 ran across Colab (stage1) and Modal (stage2, instruct) and completed fully. An
+audit of its containment file then exposed the id-collision bug below, which invalidated the
+treatment assignment. v2 was staged into a fresh directory reusing 4,119 of v1's 6,051
+generations — possible because variants are seeded per `(item, type)`, so retained items keep
+byte-identical text — and regenerated only the 1,932 genuinely new rows.
 
-**Extraction-tier validity.** `extract_numeric` falls back in three tiers (`#### N` marker →
-"answer is …" phrase → last number anywhere). The marker rate collapses across checkpoints —
-stage1 86%, stage2 98%, instruct 34% — because the DPO model answers conversationally. Tier-3
-recovers the right answer 72.5% of the time for `instruct` but only ~1% for `stage1`, where it
-fires on looping outputs. This does **not** contaminate the DiD: the tier-1 second difference
-is ≤0.032 everywhere, so the artifact cancels in the double difference. See
-`analysis/extraction_tiers.json`.
+---
 
-Earlier repairs, retained for provenance: the Stage-1 arms repair kept 1,292 valid rows and
-regenerated 261 truncated ones at 2,048 tokens. GSM-Symbolic exposed a separate ID-reuse bug
-between Apple's `main` and `p1` configs, fixed in `bd5074b`. Pre-fix duplicate-ID
-GSM-Symbolic artifacts must not be analyzed.
+## Bugs found and fixed
 
-### Running on Modal (current method)
+These are documented in detail because several are the kind a reviewer will ask about, and
+because finding one that invalidated 43% of our own treatment arm is part of the record.
 
-Colab sessions were reclaimed mid-run with no signal and no way to reattach. The suite now
-runs as a Modal app driven from a local terminal — see `experiments/modal_fullscale.py`.
+**1. GSM8K train/test id collision — the serious one.** Both splits use the id scheme
+`gsm8k_NNNNN`, so loading 1,000 of each makes every id collide pairwise (1,000/1,000 collisions
+confirmed). `verify_containment` keys its gram index by `item.id`, so the test twin overwrote
+the train twin's gram set while the owner map retained both. The numerator then accumulated
+matches against grams absent from the denominator, and containment — a *fraction*, mathematically
+bounded by 1.0 — reached **7.78**. Re-measuring with `train::`/`test::` namespaced ids showed:
+
+- **83 of 194 v1 seen-arm items (43%) were never verifiably seen** — true containment 0.39–0.79,
+  below the 0.80 threshold the design requires.
+- Eligible pools are actually 303 seen and 998 unseen, supporting far larger arms than v1 used.
+
+**2. Difficulty bins hit the same collision.** `assign_difficulty_bins` is also keyed by
+`item.id`, so every train item inherited its *test twin's* difficulty score. The v1 arms were
+therefore never actually difficulty-matched, despite the balance report saying they were. v2
+bins over namespaced ids.
+
+**3. Answer-extraction drifts across checkpoints.** `extract_numeric` falls back in three tiers:
+the `#### N` marker, then an "answer is …" phrase, then the last number anywhere in the text.
+Marker rates differ enormously — `stage1` 86%, `stage2` 98%, `instruct` **34%** (the DPO model
+answers conversationally). Tier 3 means completely different things per checkpoint: it recovers
+the right answer 72.5% of the time for `instruct`, but only ~1% for `stage1`, where it fires on
+looping output. **This does not contaminate the DiD**: the tier-1 rate's *second difference* is
+≤0.032 everywhere, so the artifact cancels in the double difference. Verified rather than assumed.
+
+**4. `.remote()` cancellation killed a 2-hour run.** `modal run --detach` keeps the *app* alive,
+but `Function.remote()` blocks the local client, and cancelling that local call propagates into
+the container. A run died at `instruct/resample`. Fixed by launching with `.spawn()`.
+
+**5. `_hf_pull` silently reverts local edits.** The suite starts with
+`snapshot_download(local_dir=".")`, which syncs local files *down* to match the remote. An
+in-place edit of a run directory is undone before generation starts — an entire corrected rebuild
+was wiped this way and reported "already scored". Fixed by staging corrections into a *new* run
+directory, which also leaves v1 intact.
+
+**6. Floating `transformers` version.** `pyproject` pins `>=4.44,<5`, but a range puts different
+checkpoints on different minor versions, which enters the DiD as if it were a model difference.
+Now pinned exactly to `transformers==4.56.0`, matching what stage1 was originally generated under.
+
+---
+
+## Results
+
+**Headline DiD, cluster-robust bootstrap over parent items.** All three arm constructions:
+
+| checkpoint | v1 full (194, 43% mislabelled) | v1 verified-only (111) | **v2 (250, all verified)** |
+|---|---|---|---|
+| `stage1` | +0.0128 [−0.047, +0.073] | +0.0066 [−0.061, +0.072] | **+0.0137 [−0.037, +0.064]** |
+| `stage2` | −0.0592 [−0.191, +0.067] | −0.0069 [−0.161, +0.153] | **+0.0083 [−0.103, +0.117]** |
+| `instruct` | −0.0735 [−0.198, +0.047] | −0.0192 [−0.175, +0.134] | **+0.0396 [−0.071, +0.149]** |
+
+**Every interval spans zero.** No checkpoint shows a memorisation advantage that survives
+numeric perturbation — including `stage2`, whose training data explicitly targets GSM8K.
+
+**What this supports.** Point estimates wander between −0.074 and +0.040 with no stable sign
+across three independent constructions. That is the signature of a true effect near zero, not of
+an effect being missed. Paired with the detector result below — membership is being identified
+correctly — the claim is: *detection is accurate, membership is verified, and the accuracy
+advantage still is not there.*
+
+**What this does NOT support.** The upper confidence bounds are +0.064 (`stage1`), +0.117
+(`stage2`), +0.149 (`instruct`). Contamination effects claimed in the literature are typically
+5–15pp, so this design **excludes the top of that range but not the middle**. Do not write "we
+rule out contamination effects of the size others report" — the data does not carry it. The
+honest claim is "no evidence of a memorisation advantage; effects above ~12–15pp are excluded."
+
+### Supporting analyses
+
+**Contamination-detector false-positive rate.** The corpus derives from GSM8K *train*, so every
+*test* item is a **known negative** — it cannot be contaminated. That makes the standard
+detector's error rate measurable rather than arguable:
+
+| rule | train flagged | test flagged | false-positive rate |
+|---|---|---|---|
+| any 13-gram match (Brown et al., 2020) | 866 (86.6%) | 3 (0.3%) | **0.3%** |
+| containment ≥ 0.50 | 584 (58.4%) | 1 (0.1%) | 0.1% |
+| containment ≥ 0.80 (this study) | 303 (30.3%) | 0 (0.0%) | **0.0%** |
+
+Test-item containment: median 0.000, p99 0.000, max 0.538. **The detector works.** This was run
+expecting the opposite — that shared GSM8K templates would produce many false positives — and it
+did not. The finding is more useful than the one predicted: it removes "your detector is noisy"
+as an explanation for the null.
+
+Note also that **86.6% of train items have *some* overlap but only 30.3% reach ≥0.80**. The
+synthetic corpus mostly *derives from* GSM8K train rather than copying it, which is exactly why a
+binary contaminated/clean label is the wrong instrument and a continuous measure with an explicit
+ambiguous band is the right one.
+
+**Measurement validity (termination).** A model cut off at the token limit scores as a weak model
+when it is really a truncated measurement:
+
+| checkpoint | reached a semantic stop | `####` marker | median chars | flagged degenerate |
+|---|---|---|---|---|
+| `stage1` | **84.9%** | 84.9% | 196 | 19% |
+| `stage2` | 98.4% | 98.3% | 277 | 3% |
+| `instruct` | 99.8% | 33.6% | 700 | 3% |
+
+`stage1`'s 19% is genuine model weakness, not a formatting break — a broken chat template or a
+`transformers` 5.x mismatch shows ~10% marker rate, not 85%. Those items score as incorrect,
+which is conservative. `instruct`'s low marker rate is DPO conversational style, already shown
+above not to affect the DiD.
+
+---
+
+## Every figure explained
+
+Rendered to `experiments/runs/fullscale-S250-v2/figures/`. Each answers one question a reviewer
+will actually ask.
+
+| figure | question it answers |
+|---|---|
+| **F1** `f1_trajectory` | Where along the training pipeline does accuracy appear, and does it appear on seen items only? |
+| **F2** `f2_did_forest` | How large is the memorisation component, with intervals? *This is the headline figure.* |
+| **F3** `f3_perturbation_slopes` | Does accuracy survive numeric perturbation, per checkpoint? |
+| **F4** `f4_containment` | Is the seen/unseen treatment assignment actually verified? *Was unplottable in v1 — it drew containment above 1.0 on a "fraction" axis. Fixed in v2.* |
+| **F5** `f5_magnitude_control` | Is the perturbation effect just bigger arithmetic? |
+| **F6** `f6_measurement_validity` | Are the models being scored on complete outputs? |
+| **F7** `f7_consistency_decomposition` | Is the inconsistency real perturbation sensitivity, or just decoding noise? |
+| **F8** `f8_design_power` | Is the sample size adequate, given the measured ICC? |
+
+Design rules are enforced in code, not left to taste: one y-axis per panel (a dual-scale chart
+lets the author pick the visual conclusion), fixed categorical colours so a checkpoint keeps its
+hue when a filter changes the series count, colours validated CVD-safe (worst adjacent separation
+dE 9.4 under simulated protanopia/deuteranopia/tritanopia, above the 8 floor), identity also
+carried by direct labels so it is never colour-alone, and error bars that are the same parent-item
+bootstrap used in the analysis.
+
+## Every analysis file explained
+
+Under `experiments/runs/fullscale-S250-v2/analysis/`:
+
+| file | contents |
+|---|---|
+| `memorization.json` | The headline DiD, cells, and cluster-robust intervals |
+| `memorization_purified.json` | DiD restricted to verified-verdict items. In v2 identical to the headline, which confirms every arm item carries a verified label |
+| `containment_verified.json` | Corrected 13-gram containment for all 2,000 candidates, keyed `train::`/`test::` |
+| `containment.json` | Same evidence in the shape F4 consumes |
+| `detector_falsepositive.json` | Threshold sweep and false-positive rate against known negatives |
+| `extraction_tiers.json` | Which extraction tier produced each answer, per checkpoint and per DiD cell |
+| `termination.json` | Semantic-stop audit across every generation file |
+
+`atlas/` holds a per-checkpoint JSON + Markdown summary. `generations/` holds raw model text —
+kept deliberately, because a scoring bug found after the fact once destroyed a whole run when
+only scores had been saved.
+
+---
+
+## What is left
+
+**Nothing is required.** Both remaining items are improvements, listed with honest costs.
+
+### 1. `stage1` truncated-row repair — ~1.6 h GPU, fits a 3 h budget
+
+`stage1/arms` reached 84.9% semantic-stop against an 85% gate. The cause is fully diagnosed and
+is *not* model collapse: v1 repaired 261 truncated rows at 2,048 tokens, and v2's 644 new rows
+never got that treatment.
+
+```
+reused (v1, some at 2048 tokens)   1373   85.6%
+new    (1024 tokens)                644   83.5%
+                                          ---- block average 84.9%
+```
+
+Critically, the truncation is **balanced across the DiD cells** — its second difference is
+−0.013, well inside ±0.05 — so it attenuates every cell alike rather than biasing the contrast.
+`stage1` is also the control arm, whose DiD is ~0 in all three constructions. Repairing it makes
+the block internally consistent and clears the gate; it will not change the conclusion.
+
+```bash
+modal run experiments/modal_fullscale.py::repair_truncated --write
+```
+
+Then delete `scores/stage1__arms.jsonl` and re-run the suite to re-score and refresh the figures.
+
+### 2. Scale-up for real statistical power — ~15–20 h GPU, does NOT fit a 3 h budget
+
+The current arms cap at 250 because only 30.3% of train candidates clear the 0.80 threshold and
+the suite loads just 1,000 of GSM8K train's 7,473 items. Loading all of them would yield ~2,200
+verified-seen items, with arms then capped by the test split at ~1,300 per arm.
+
+That is √(1300/250) ≈ 2.3× narrower intervals — **CI ≈ ±0.048**, which genuinely excludes 5pp
+effects and would let you write the strong version of the claim. The cost is ~19,500 generations,
+and `stage1` runs at 9.3 s/item, so budget 15–20 h. **This is the single highest-value remaining
+experiment, and it is the only thing standing between "no evidence of an effect" and "we exclude
+the effects others report."**
+
+### 3. Known limitations to state in the paper, not fix
+
+- **One model family.** Every result is Instella-3B. Nothing here generalises to other models.
+- **One benchmark.** GSM8K only, in a study about benchmark construct validity.
+- **`stage1`→`stage2` is not a clean intervention.** Stage 2 adds Dolmino *and* Tulu-3 *and*
+  GSM8K-synthetic simultaneously; the change cannot be attributed to GSM8K data alone.
+- **seen/unseen is train-vs-test.** `splits.py` is explicit that the literal contamination
+  question is unanswerable here. A reviewer may argue this measures a train/test generalisation
+  gap. Worth pre-empting directly.
+
+---
+
+## Running on Modal
+
+Colab sessions were reclaimed mid-run with no signal and no way to reattach. The suite now runs
+as a detached Modal app driven from a local terminal — `experiments/modal_fullscale.py`. The
+local working tree is baked into the image, so the private repo needs no token and the code that
+runs cannot drift from the code on disk.
 
 ```bash
 modal secret create instella-hf HF_TOKEN=hf_...          # once
-modal run experiments/modal_fullscale.py::probe          # GPU health, ~3 min
+modal run experiments/modal_fullscale.py::probe          # GPU health + throughput, ~3 min
 modal run experiments/modal_fullscale.py::status         # inventory, no GPU
-modal run --detach experiments/modal_fullscale.py        # full suite
+modal run --detach experiments/modal_fullscale.py --out experiments/runs/fullscale-S250-v2
 modal app list                                           # find the app id
 modal app logs <app-id>                                  # reattach to logs
 ```
 
-Three points that were learned the expensive way:
+Analysis entry points, all CPU-only and safe to run any time:
 
-- **Launch with `.spawn()`, not `.remote()`.** `--detach` keeps the *app* alive, but
-  `.remote()` blocks the local client and a cancellation of that call propagates into the
-  container. A 2h run died at `instruct/resample` this way.
-- **`_hf_pull` overwrites local edits.** `snapshot_download(local_dir=".")` syncs local files
-  *down* to match the remote at suite start. Editing a run directory in place is silently
-  reverted; stage corrected artifacts into a *new* run directory instead.
-- **Pin `transformers==4.56.0` exactly.** A floating `<5` range puts different checkpoints on
-  different minor versions, which enters the DiD as if it were a model difference.
+| function | what it does |
+|---|---|
+| `status` | Per-block progress against exact input row counts |
+| `containment_repair` | Re-measures containment with namespaced ids; audits the built arms |
+| `purified_did` | DiD restricted to verified-verdict items |
+| `extraction_audit` | Extraction-tier provenance, including per DiD cell |
+| `termination_by_cell` | Termination split by DiD cell and by row origin |
+| `detector_falsepositive` | Detector error rate against known negatives |
+| `stage_v2` | Stages a corrected run directory, reusing prior generations |
+| `repair_truncated` | GPU — regenerates only truncated rows at a larger budget |
+
+Durability has three independent layers: per-batch `fsync` with id-keyed resume, a Modal Volume
+committed every 5 minutes, and an HF push after each scored block.
+
+> **The Colab cells below are superseded** by the Modal workflow above. They are retained because
+> they document the earlier runs, and because the preflight and quality-gate logic they describe
+> still governs the suite.
 
 ### Cell 1 - clone or update `main`
 
