@@ -213,3 +213,80 @@ def test_cluster_robust_se_is_calibrated_on_an_independent_fit() -> None:
     assert fit.converged
     assert abs(fit.term("intercept").std_error - analytic) < 0.02
     assert abs(fit.term("intercept").estimate - math.log(p / (1 - p))) < 0.25
+
+
+def _resample_rows(
+    accuracy: float,
+    n_items: int = 40,
+    n_copies: int = 5,
+    seed: int = 11,
+    model: str = "amd/Instella-3B",
+) -> list[EvaluationRecord]:
+    """The decoding-noise control: one prompt sampled repeatedly at T>0.
+
+    Carries the parent's ``arm`` label, exactly as the real block does — that inheritance is
+    what lets it leak into a DiD cell.
+    """
+    rng = random.Random(seed)
+    return [
+        EvaluationRecord(
+            benchmark_id=f"seen_{i:04d}__resample_{c:02d}",
+            parent_id=f"seen_{i:04d}",
+            variant_type="resample",
+            expected="1",
+            predicted="1",
+            normalized_expected="1",
+            normalized_predicted="1",
+            correct=rng.random() < accuracy,
+            model=model,
+            metadata={"arm": "seen", "benchmark": "gsm8k"},
+        )
+        for i in range(n_items)
+        for c in range(n_copies)
+    ]
+
+
+def test_resample_control_never_enters_a_did_cell() -> None:
+    """The decoding-noise block must not be counted as `original` evidence.
+
+    `resample` inherits its parent's arm and is not answer-changing, so without an explicit
+    exclusion it lands in the seen|original cell. That mixes T>0 samples into a T=0 contrast,
+    weights the resampled items once per copy, and — because the block is only run for the
+    checkpoints whose consistency is interpreted — shifts the DiD for those checkpoints only,
+    which reads as a trajectory effect rather than the measurement artifact it is.
+    """
+    base = _synthesise(
+        {
+            ("seen", "original"): 0.60,
+            ("seen", "perturbed"): 0.50,
+            ("unseen", "original"): 0.40,
+            ("unseen", "perturbed"): 0.30,
+        },
+        n_items=120,
+        seed=5,
+    )
+    clean = difference_in_differences(base, n_bootstrap=200)
+    # Deliberately lopsided accuracy: if these rows were counted, the seen|original cell
+    # would move hard and the DiD with it.
+    contaminated = difference_in_differences(base + _resample_rows(0.99), n_bootstrap=200)
+
+    assert contaminated.did == clean.did
+    assert contaminated.cells["seen|original"].n == clean.cells["seen|original"].n
+    assert contaminated.n_clusters_seen == clean.n_clusters_seen
+
+
+def test_build_cells_excludes_the_resample_control() -> None:
+    cells = build_cells(
+        _synthesise(
+            {
+                ("seen", "original"): 0.5,
+                ("seen", "perturbed"): 0.5,
+                ("unseen", "original"): 0.5,
+                ("unseen", "perturbed"): 0.5,
+            },
+            n_items=20,
+            seed=7,
+        )
+        + _resample_rows(1.0, n_items=20)
+    )
+    assert cells["seen|original"].n == 20

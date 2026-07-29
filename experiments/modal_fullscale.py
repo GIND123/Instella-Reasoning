@@ -955,6 +955,21 @@ def run_extra(tag: str, block: str = "arms", temperature: float = 0.0,
             "termination_rate": rep.termination_rate, "passes": rep.passes}
 
 
+@app.function(cpu=4.0, timeout=1800)
+def run_tests(path: str = "tests/") -> int:
+    """Run the repo test suite in the container.
+
+    The local interpreter on the operator's machine is 3.9 and the package requires 3.10+
+    (`dataclass(slots=True)`), so shared-code changes cannot be verified locally. The image
+    is 3.11, which makes this the only place the tests actually execute.
+    """
+    os.chdir(REPO_REMOTE)
+    subprocess.call([sys.executable, "-m", "pip", "install", "-q", "pytest"])
+    rc = subprocess.call([sys.executable, "-m", "pytest", path, "-q"])
+    print(f"\npytest exit={rc}")
+    return rc
+
+
 @app.function(cpu=4.0, memory=8192, timeout=3600, volumes=VOLUMES, secrets=SECRETS)
 def finalize(run: str = "fullscale-S250-v2", n_items: int = 250) -> None:
     """Re-run the audit, DiD, atlas and figures on CPU once all generation is done.
