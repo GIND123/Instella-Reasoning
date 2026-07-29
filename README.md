@@ -75,7 +75,7 @@ computation is pending.
 | Checkpoints measured | **4** — `stage1`, `stage2`, `sft`, `instruct` |
 | Quality gates passed | **9 / 10** — `stage1/arms` reaches 84.9% against an 85% gate |
 | Rows eligible for optional rework | **304 / 12,468 (2.4%)** |
-| Figures | **12** — F1–F8 headline, S1–S4 supplementary, in [`docs/figures/`](docs/figures/) |
+| Figures | **15** — F1–F8 headline, S1–S4 supplementary, J1–J3 judge, in [`docs/figures/`](docs/figures/) |
 | Test suite | 173 passed, 2 skipped |
 | GPU time consumed by the corrected run | ~4.9 h (A100-40GB) |
 | GPU time required to complete outstanding work | **0 h** |
@@ -538,7 +538,163 @@ quantities producing it. Displaying all four cells per checkpoint permits the nu
 against the raw accuracies: the seen bars exceed the unseen bars at `stage2` and `instruct`, and
 the gap persists rather than closing when the numbers change.
 
+### Judge figures
+
+#### J1 — Judge balanced accuracy by verified membership
+
+![J1 judge balanced accuracy](docs/figures/j1_judge_balanced_accuracy.png)
+
+Both panels carry an explicit chance line, because the headline observation is how close the
+bars sit to it rather than how far apart they sit from each other. The right panel is the
+reference-based control: the membership gap persists there at comparable magnitude, which is
+what rules memorisation out as its cause.
+
+#### J2 — Abstention and raw agreement, reported separately
+
+![J2 judge abstention](docs/figures/j2_judge_abstention.png)
+
+A judge declining to commit is not a judge disagreeing. Collapsing the two would inflate
+apparent reliability, so abstention is plotted as its own series. Rates stay between 0.0 and
+1.6 percent, so the balanced-accuracy figures are not an artifact of selective abstention.
+
+#### J3 — Judge reliability per cell
+
+![J3 judge cells](docs/figures/j3_judge_cells.png)
+
+Answer-preserving rewrites leave the gold answer intact, so movement between original and
+perturbed within an arm is judge fragility rather than task difficulty. This is the panel that
+addresses paraphrase robustness directly.
+
 ---
+
+---
+
+## Artifacts that manufacture memorisation effects
+
+Three separate analyses each produced an apparently significant memorisation effect that
+dissolved under a control. All three are recorded with the discarded numbers intact, because
+each is a trap any study of this design can fall into and none is signposted in the
+literature the design draws on.
+
+### A1 — Cohen's kappa is not comparable across arms with unequal base rates
+
+Judge reliability was first measured as chance-corrected agreement with exact-match ground
+truth. The seen-minus-unseen gap was large and excluded zero at every checkpoint:
+
+| target | mode | κ seen | κ unseen | Δκ | CI95 |
+|---|---|---|---|---|---|
+| `instruct` | reference-free | +0.005 | +0.173 | −0.168 | [−0.228, −0.113] |
+| `stage2` | reference-free | +0.011 | +0.303 | −0.292 | [−0.356, −0.228] |
+
+Read naively, judge reliability collapses on memorised items. It is the **kappa paradox**.
+Kappa depends on the marginals as well as on the agreement, and the arms have very different
+ground-truth base rates — `instruct` is correct on 77% of seen rows against 53% of unseen.
+An arm near 0.5 has far more kappa headroom than a skewed one, so the skew alone produces the
+gap. Replaced by **balanced accuracy**, the unweighted mean of sensitivity and specificity,
+which conditions on the true class and is therefore base-rate independent.
+
+### A2 — A control block silently entered the estimator
+
+Stage 7 is invoked over `scores/*__ALL.jsonl`, which merges arms, gsmsym and resample.
+`make_resample_suite` emits, per item, the cluster's original **in addition to** N copies; that
+original reuses the arms block's `benchmark_id` while being generated at T = 0.7, and the
+copies inherit the parent's `arm` label without being answer-changing. All 600 rows landed in
+the `seen|original` cell, for the two checkpoints that run the control and not the two that
+do not:
+
+```
+stage2   seen|original  n=1345      (745 arms + 600 resample)
+instruct seen|original  n=1345
+stage1   seen|original  n= 745      (no resample block)
+sft      seen|original  n= 745
+```
+
+Temperature-0.7 samples entered a temperature-0 contrast, the resampled items were weighted
+once per copy, and the estimator moved **for two checkpoints only** — making a measurement
+difference indistinguishable from a checkpoint difference in exactly the `stage1` to `stage2`
+comparison the study rests on.
+
+### A3 — Pooled consistency confounds membership with accuracy
+
+Numeric perturbation changes arithmetic while preserving problem structure, so the
+difference-in-differences detects recall of an *answer* but is blind to recall of a *solution
+procedure*: a memorised template still executes correctly on new numbers and yields exactly
+the flat estimate observed. Answer-preserving variants attack that gap from the other side,
+since rephrasing and distractor insertion leave the gold answer and the required procedure
+intact while changing surface form.
+
+Pooled, the probe fired, and fired in the right place — absent at the control checkpoint,
+present at every checkpoint after GSM8K enters training:
+
+| checkpoint | C seen | C unseen | Δ | CI95 |
+|---|---|---|---|---|
+| `stage1` (never saw GSM8K) | 0.6833 | 0.6587 | +0.0247 | [−0.016, +0.067] |
+| `stage2` (**GSM8K enters**) | 0.8893 | 0.8473 | +0.0420 | [+0.004, +0.080] |
+| `sft` | 0.9233 | 0.8860 | +0.0373 | [+0.004, +0.071] |
+| `instruct` | 0.9160 | 0.8780 | +0.0380 | [+0.003, +0.072] |
+
+Stratifying on whether the cluster's original was answered correctly removes it entirely:
+
+| checkpoint | stratum | n seen / unseen | Δ | CI95 |
+|---|---|---|---|---|
+| `stage2` | original correct | 176 / 116 | +0.0063 | [−0.028, +0.044] |
+| `stage2` | original wrong | 74 / 134 | −0.0172 | [−0.084, +0.052] |
+| `instruct` | original correct | 210 / 134 | +0.0145 | [−0.012, +0.043] |
+| `instruct` | original wrong | 40 / 116 | **−0.1651** | [−0.244, −0.086] |
+
+Accuracy and self-consistency are mechanically linked, and the seen arm holds far more correct
+clusters (176 of 250 against 116 at `stage2`). Pooling let that composition masquerade as a
+membership effect — **Simpson's paradox**. Inside both strata every interval spans zero, and
+`instruct`'s incorrect stratum runs the opposite way.
+
+### What survives
+
+Two independent instruments — numeric perturbation and paraphrase consistency — agree that no
+memorisation effect is detectable once the confound in each is held constant. The null is
+therefore better supported than a single-instrument result would be, and the three controls
+above are the reason it can be believed.
+
+---
+
+## Judge reliability under verified membership
+
+An LLM judge grading a benchmark it may itself have memorised is an instrument whose
+calibration depends on the thing it is measuring. Because the corpus is public, membership of
+each graded item in the **judge's own** training data is verifiable, which no study using a
+closed-weight judge can establish. Instella grades Instella for exactly that reason.
+
+Two conditions. **Reference-free** withholds the gold answer, so the judge must evaluate the
+reasoning, and is the only setting where memorisation could plausibly help. **Reference-based**
+supplies it and serves as the control: an effect appearing there cannot be memorisation of the
+solution, since the solution is given.
+
+16,126 verdicts, four target checkpoints, two conditions, judge held at temperature 0
+(same-verdict rates fall from above 95% to roughly 70% between T = 0 and T = 1, so a sampled
+judge would confound the contrast with its own noise):
+
+| target | mode | base rate seen / unseen | BA seen | BA unseen | Δ | CI95 |
+|---|---|---|---|---|---|---|
+| `stage1` | reference-free | 0.073 / 0.087 | 0.5296 | 0.6224 | −0.0928 | [−0.120, −0.066] |
+| `stage2` | reference-free | 0.635 / 0.436 | 0.5042 | 0.6661 | −0.1619 | [−0.195, −0.130] |
+| `sft` | reference-free | 0.751 / 0.690 | 0.5081 | 0.5118 | −0.0037 | [−0.017, +0.009] |
+| `instruct` | reference-free | 0.773 / 0.530 | 0.5016 | 0.5825 | −0.0809 | [−0.109, −0.054] |
+| `stage2` | reference-based | 0.635 / 0.436 | 0.5181 | 0.6400 | −0.1219 | [−0.155, −0.089] |
+| `instruct` | reference-based | 0.773 / 0.526 | 0.5137 | 0.5678 | −0.0541 | [−0.083, −0.026] |
+
+Two findings, and the second is not the one the design was built to test.
+
+**A 3B judge is close to chance on verified-seen items.** Balanced accuracy sits between 0.50
+and 0.54 on the seen arm in every configuration, and reaches only 0.514 for `instruct` **even
+when handed the reference answer**. Given the gold answer, the judge still cannot reliably
+determine whether a solution is correct. That bears directly on whether small open-weight
+models are fit for the evaluator role they are increasingly assigned.
+
+**The membership gap is not memorisation.** It appears at comparable magnitude in the
+reference-based control (`stage1` −0.091 against −0.093; `instruct` −0.054 against −0.081),
+where memorisation of the solution cannot operate because the solution is supplied. The
+parsimonious account is the train-versus-test distributional difference — the same confound
+that bounds the main study. A design testing only the reference-free condition would have
+reported a memorisation effect on the instrument.
 
 ## Analysis artifacts
 
@@ -553,6 +709,8 @@ Under `experiments/runs/fullscale-S250-v2/analysis/` on Hugging Face:
 | `detector_falsepositive.json` | Threshold sweep and false-positive rate against known negatives |
 | `extraction_tiers.json` | Which extraction tier produced each answer, per checkpoint and per DiD cell |
 | `termination.json` | Semantic-stop audit across all 10 generation files |
+| `judge_reliability.json` | Judge balanced accuracy and abstention by verified membership, both conditions; the discarded kappa figures retained alongside |
+| `consistency_by_arm.json` | Paraphrase consistency by arm, pooled and stratified on original-item correctness |
 
 `atlas/` holds a per-checkpoint JSON + Markdown summary for all four checkpoints. `generations/`
 holds raw model text — kept deliberately, because a scoring bug found after the fact once
