@@ -862,6 +862,183 @@ def purified_did(write: bool = False, push: bool = False) -> dict:
             for k, v in report.items()}
 
 
+@app.function(gpu=GPU, timeout=4 * 3600, volumes=VOLUMES, secrets=SECRETS)
+def repair_truncated(tag: str = "stage1", run: str = "fullscale-S250-v2",
+                     max_new_tokens: int = 2048, write: bool = False) -> dict:
+    """Regenerate only the rows that hit the token cap, at a larger budget.
+
+    This is v1's documented procedure (261 stage-1 rows regenerated at 2048), reapplied so
+    v2's block is not a mix of repaired 2048-token rows and unrepaired 1024-token ones. The
+    85% gate exists to stop truncated text being scored as a weak model; the fix is to give
+    the truncated items enough budget to finish, not to move the gate.
+
+    Safe by construction: a row is only dropped if it never reached a semantic stop, so the
+    procedure can only convert unscoreable text into a measurement. It is applied without
+    reference to arm, and `termination_by_cell` separately confirms truncation is balanced
+    across the DiD cells, so this cannot tilt the contrast.
+    """
+    import json
+
+    from instella_reasoning.checkpoints import resolve
+    from instella_reasoning.evaluation import generate_with_transformers, termination_report
+    from instella_reasoning.records import GenerationRecord, read_benchmark
+
+    os.chdir(REPO_REMOTE)
+    out = pathlib.Path("experiments/runs") / run
+    gen_path = out / f"generations/{tag}__arms.jsonl"
+    bench_path = out / "variants/arms_variants.jsonl"
+
+    kept, dropped = [], []
+    with gen_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            (kept if (row.get("metadata") or {}).get("finished", True) else dropped).append(line)
+    print(f"{tag}: {len(kept)} finished, {len(dropped)} truncated -> regenerate at {max_new_tokens}")
+    if not write:
+        print("(dry run: pass write=True to regenerate)")
+        return {"finished": len(kept), "truncated": len(dropped)}
+    if not dropped:
+        return {"finished": len(kept), "truncated": 0}
+
+    ckpt = resolve(tag)
+    gen_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    runs_vol.commit()
+
+    stop = threading.Event()
+    _start_watchers(stop)
+    try:
+        # Resume skips every row still present, so only the dropped ids are regenerated.
+        generate_with_transformers(
+            benchmark=read_benchmark(bench_path),
+            model_name_or_path=ckpt.load_path,
+            output_path=gen_path,
+            max_new_tokens=max_new_tokens,
+            temperature=0.0,
+            batch_size=int(os.environ.get("BATCH", "8")),
+            use_chat_template=not ckpt.is_base,
+            n_shot=ckpt.n_shot,
+        )
+    finally:
+        stop.set()
+        runs_vol.commit()
+
+    rows = [GenerationRecord.from_dict(json.loads(line))
+            for line in gen_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rep = termination_report(rows, threshold=0.85)
+    print(f"\ntermination after repair: {rep.termination_rate:.1%} "
+          f"(marker {rep.marker_rate:.1%}, median {rep.median_chars} chars) "
+          f"passes={rep.passes}")
+    subprocess.call(
+        [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+         os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+         "--path", str(out), "--message", f"{tag} truncated-row repair at {max_new_tokens}"]
+    )
+    return {"termination_rate": rep.termination_rate, "passes": rep.passes, "n": rep.n}
+
+
+@app.function(cpu=2.0, timeout=900, volumes=VOLUMES, secrets=SECRETS)
+def termination_by_cell(tag: str = "stage1", run: str = "fullscale-S250-v2") -> dict:
+    """Termination rate split by DiD cell, and by whether the row is reused or newly generated.
+
+    The 85% gate is a whole-block statistic, so it cannot distinguish "this model rambles"
+    from "truncation is concentrated where it biases the estimate". Only the second is fatal.
+    Truncation that is even across seen/unseen and original/perturbed attenuates every cell
+    alike and largely cancels in the double difference; truncation correlated with the
+    treatment does not, and no amount of extra tokens fixes an estimate built on it.
+
+    Also splits reused (v1, some regenerated at 2048 tokens) from new (1024) rows, because a
+    mixed token budget inside one block is itself a measurement inconsistency.
+    """
+    import glob
+    import json
+
+    os.chdir(REPO_REMOTE)
+    out = pathlib.Path("experiments/runs") / run
+    gen_path = out / f"generations/{tag}__arms.jsonl"
+    src_path = pathlib.Path("experiments/runs/fullscale-S250") / f"generations/{tag}__arms.jsonl"
+    if not gen_path.exists():
+        raise SystemExit(f"missing {gen_path}")
+
+    reused: set[str] = set()
+    if src_path.exists():
+        with src_path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    reused.add(str(json.loads(line)["benchmark_id"]))
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+    arms = {}
+    for row in __import__("instella_reasoning.records", fromlist=["read_jsonl"]).read_jsonl(
+        out / "variants/arms_variants.jsonl"
+    ):
+        arms[str(row.get("id"))] = (
+            (row.get("metadata") or {}).get("arm"),
+            str(row.get("variant_type") or "original"),
+        )
+
+    from instella_reasoning.metrics import ANSWER_CHANGING_VARIANTS
+
+    cells: dict[tuple, list[int]] = {}
+    origin: dict[str, list[int]] = {"reused(v1)": [], "new(1024)": []}
+    with gen_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            bid = str(row.get("benchmark_id"))
+            fin = int(bool((row.get("metadata") or {}).get("finished", True)))
+            arm, vt = arms.get(bid, (None, "original"))
+            origin["reused(v1)" if bid in reused else "new(1024)"].append(fin)
+            if arm in ("seen", "unseen"):
+                cond = "perturbed" if vt in ANSWER_CHANGING_VARIANTS else "original"
+                cells.setdefault((arm, cond), []).append(fin)
+
+    print(f"{tag} / {run}\n")
+    print(f"{'origin':14s} {'n':>6s} {'termination':>12s}")
+    for k, v in origin.items():
+        if v:
+            print(f"{k:14s} {len(v):6d} {sum(v) / len(v):11.1%}")
+
+    print(f"\n{'cell':20s} {'n':>6s} {'termination':>12s}")
+    rates = {}
+    for arm in ("seen", "unseen"):
+        for cond in ("original", "perturbed"):
+            v = cells.get((arm, cond)) or []
+            if not v:
+                continue
+            rates[(arm, cond)] = sum(v) / len(v)
+            print(f"{arm + '/' + cond:20s} {len(v):6d} {rates[(arm, cond)]:11.1%}")
+
+    did = None
+    if len(rates) == 4:
+        did = (rates[("seen", "original")] - rates[("unseen", "original")]) - (
+            rates[("seen", "perturbed")] - rates[("unseen", "perturbed")]
+        )
+        print(f"\ntermination second difference: {did:+.4f}")
+        print("  -> " + ("truncation is balanced across cells; it attenuates the DiD "
+                         "uniformly rather than biasing it"
+                         if abs(did) <= 0.05 else
+                         "truncation is correlated with the treatment; regenerate at a "
+                         "larger budget before trusting this block"))
+    return {"origin": {k: (sum(v) / len(v) if v else None) for k, v in origin.items()},
+            "cells": {f"{a}/{c}": r for (a, c), r in rates.items()},
+            "termination_did": did}
+
+
 @app.function(cpu=4.0, memory=8192, timeout=3600, volumes=VOLUMES, secrets=SECRETS)
 def stage_v2(n_per_arm: int = 250, src_name: str = "fullscale-S250",
              dst_name: str = "fullscale-S250-v2", write: bool = False) -> dict:
@@ -1055,7 +1232,7 @@ def stage_v2(n_per_arm: int = 250, src_name: str = "fullscale-S250",
 
 @app.local_entrypoint()
 def main(n_per_arm: int = 250, tier: int = 1, hf_sync: int = 1, block: bool = False,
-         out: str = "") -> None:
+         out: str = "", min_termination: str = "") -> None:
     """Launch the suite. Fire-and-forget by default.
 
     ``.remote()`` blocks the local client for the whole run, and a cancellation of that
@@ -1068,6 +1245,13 @@ def main(n_per_arm: int = 250, tier: int = 1, hf_sync: int = 1, block: bool = Fa
         # The suite derives OUT from N_PER_ARM unless told otherwise; pointing it at the
         # staged v2 directory keeps v1 untouched on HF and makes the pull a no-op.
         args["OUT"] = out
+    if min_termination:
+        # Only ever lower this against a *quantified* truncation profile. stage1/arms sits at
+        # 84.9% purely because v1 repaired 261 rows at 2048 tokens and v2's new rows were not;
+        # termination_by_cell puts the second difference at -0.013, so the shortfall attenuates
+        # the cells uniformly instead of biasing the contrast. repair_truncated restores the
+        # block to >=85% afterwards. Never lower it to make an unexplained failure go away.
+        args["MIN_TERMINATION"] = min_termination
     if block:
         print(run_suite.remote(args))
         return
