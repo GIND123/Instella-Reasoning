@@ -476,7 +476,11 @@ def extraction_audit(write: bool = False) -> dict:
     print("\n" + "=" * 78)
     print("TIER MIX BY DiD CELL  — these four rows must look alike for the DiD to cancel")
     print("=" * 78)
-    for tag in ("stage1", "stage2", "instruct"):
+    _order = {"stage1": 0, "stage2": 1, "sft": 2, "instruct": 3}
+    for tag in sorted(
+        {p.name.replace("__arms.jsonl", "") for p in (out / "scores").glob("*__arms.jsonl")},
+        key=lambda t: (_order.get(t, 99), t),
+    ):
         score_path = out / "scores" / f"{tag}__arms.jsonl"
         gen_path = out / "generations" / f"{tag}__arms.jsonl"
         if not (score_path.exists() and gen_path.exists()):
@@ -982,13 +986,32 @@ def finalize(run: str = "fullscale-S250-v2", n_items: int = 250) -> None:
     os.chdir(REPO_REMOTE)
     out = pathlib.Path("experiments/runs") / run
 
-    def sh(*cmd: str) -> None:
-        print(f"\n$ {' '.join(cmd[:4])} ...", flush=True)
-        subprocess.call(list(cmd))
+    # Another container wrote the newest blocks; without this the mount can still show the
+    # state it had at container start, and the analysis would quietly run on stale inputs.
+    runs_vol.reload()
 
-    sh("instella-reasoning", "check-termination", *glob.glob(f"{out}/generations/*.jsonl"),
-       "--output", f"{out}/analysis/termination.json", "--min-rate", "0.85")
-    sh("instella-reasoning", "memorization", "--scores", *glob.glob(f"{out}/scores/*__ALL.jsonl"),
+    def sh(*cmd: str, allow_fail: bool = False) -> None:
+        print(f"\n$ {' '.join(cmd[:4])} ...", flush=True)
+        rc = subprocess.call(list(cmd))
+        # A silent non-zero once left a stale termination.json in place while the rest of the
+        # analysis refreshed, so the audit described a different run than the numbers did.
+        # `check-termination` is the one command whose non-zero is a *finding* rather than an
+        # error -- it reports a block below the gate, and the suite likewise lets it through.
+        if rc != 0 and not allow_fail:
+            raise SystemExit(f"FAILED (rc={rc}): {' '.join(cmd[:3])}")
+        if rc != 0:
+            print(f"  (rc={rc}: a block is below the termination gate — see termination.json)")
+
+    gens = sorted(glob.glob(f"{out}/generations/*.jsonl"))
+    print(f"auditing {len(gens)} generation files")
+    sh("instella-reasoning", "check-termination", "--generations", *gens,
+       "--output", f"{out}/analysis/termination.json", "--min-rate", "0.85", allow_fail=True)
+    # The DiD is defined on the arms block alone. `make_resample_suite` emits, per item, the
+    # original *plus* N copies -- and that original carries the same benchmark_id as the arms
+    # block's original while being generated at T>0. Feeding the merged __ALL file in gives
+    # those items two rows apiece and mixes sampled decoding into a greedy contrast, for only
+    # the checkpoints that ran the control.
+    sh("instella-reasoning", "memorization", "--scores", *glob.glob(f"{out}/scores/*__arms.jsonl"),
        "--output", f"{out}/analysis/memorization.json")
 
     contam = out / "contamination/gsm8k_contam.jsonl"
