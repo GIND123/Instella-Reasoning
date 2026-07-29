@@ -863,6 +863,206 @@ def purified_did(write: bool = False, push: bool = False) -> dict:
 
 
 @app.function(gpu=GPU, timeout=4 * 3600, volumes=VOLUMES, secrets=SECRETS)
+def run_extra(tag: str, block: str = "arms", temperature: float = 0.0,
+              run: str = "fullscale-S250-v2") -> dict:
+    """Generate + score one (checkpoint, block) outside the suite's tier loop.
+
+    The suite runs whatever ``tier(SUITE_TIER)`` returns, so reaching a single Tier-2
+    checkpoint would drag in `math_sft` and `math` too -- and `math` is deliberately excluded
+    for failing its completion gate. This runs exactly one block, writes the merged
+    ``scores/<tag>__ALL.jsonl`` the analysis stage globs for, and pushes.
+
+    Generation settings come from the checkpoint registry, not from arguments, so an added
+    checkpoint is measured on the same terms as the existing three. Anything else would make
+    a trajectory difference indistinguishable from a configuration difference.
+    """
+    import json
+
+    from instella_reasoning.checkpoints import resolve
+    from instella_reasoning.evaluation import (
+        generate_with_transformers,
+        score_generations,
+        termination_report,
+    )
+    from instella_reasoning.records import GenerationRecord, read_benchmark, read_jsonl
+
+    os.chdir(REPO_REMOTE)
+    out = pathlib.Path("experiments/runs") / run
+    bench = {
+        "arms": out / "variants/arms_variants.jsonl",
+        "gsmsym": out / "variants/gsm_symbolic_official.jsonl",
+        "resample": out / "variants/resample_control.jsonl",
+    }[block]
+    gen_path = out / f"generations/{tag}__{block}.jsonl"
+    score_path = out / f"scores/{tag}__{block}.jsonl"
+    ckpt = resolve(tag)
+
+    items = read_benchmark(bench)
+    print("=" * 70)
+    print(f" {tag}/{block}  model={ckpt.load_path}")
+    print(f" items={len(items)} tokens={ckpt.max_new_tokens} shot={ckpt.n_shot} T={temperature}")
+    print(f" {_gpu_line()}")
+    print("=" * 70, flush=True)
+
+    stop = threading.Event()
+    _start_watchers(stop)
+    started = time.time()
+    try:
+        generate_with_transformers(
+            benchmark=items,
+            model_name_or_path=ckpt.load_path,
+            output_path=gen_path,
+            max_new_tokens=ckpt.max_new_tokens,
+            temperature=temperature,
+            batch_size=int(os.environ.get("BATCH", "8")),
+            use_chat_template=not ckpt.is_base,
+            n_shot=ckpt.n_shot,
+        )
+    finally:
+        stop.set()
+        runs_vol.commit()
+
+    gens = [GenerationRecord.from_dict(r) for r in read_jsonl(gen_path)]
+    rep = termination_report(gens, threshold=0.85)
+    print(f"\ntermination {rep.termination_rate:.1%} · marker {rep.marker_rate:.1%} · "
+          f"median {rep.median_chars} chars · passes={rep.passes}")
+    score_generations(items, gens, score_path)
+
+    merged = out / f"scores/{tag}__ALL.jsonl"
+    parts = []
+    for b in ("arms", "gsmsym", "resample"):
+        p = out / f"scores/{tag}__{b}.jsonl"
+        if p.exists():
+            parts.append(p.read_text(encoding="utf-8").rstrip("\n"))
+    merged.write_text("\n".join(x for x in parts if x) + "\n", encoding="utf-8")
+    runs_vol.commit()
+
+    subprocess.call(
+        [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+         os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+         "--path", str(out), "--message", f"{tag}/{block}"]
+    )
+    print(f"\n{tag}/{block} done in {(time.time() - started) / 3600:.2f}h")
+    return {"tag": tag, "block": block, "n": len(gens),
+            "termination_rate": rep.termination_rate, "passes": rep.passes}
+
+
+@app.function(cpu=4.0, memory=8192, timeout=3600, volumes=VOLUMES, secrets=SECRETS)
+def finalize(run: str = "fullscale-S250-v2", n_items: int = 250) -> None:
+    """Re-run the audit, DiD, atlas and figures on CPU once all generation is done.
+
+    Stages 6-8 of the suite are pure analysis. Running them through `run_suite` would hold an
+    A100 idle for several minutes of matplotlib, so they get their own CPU container.
+    """
+    import glob
+
+    os.chdir(REPO_REMOTE)
+    out = pathlib.Path("experiments/runs") / run
+
+    def sh(*cmd: str) -> None:
+        print(f"\n$ {' '.join(cmd[:4])} ...", flush=True)
+        subprocess.call(list(cmd))
+
+    sh("instella-reasoning", "check-termination", *glob.glob(f"{out}/generations/*.jsonl"),
+       "--output", f"{out}/analysis/termination.json", "--min-rate", "0.85")
+    sh("instella-reasoning", "memorization", "--scores", *glob.glob(f"{out}/scores/*__ALL.jsonl"),
+       "--output", f"{out}/analysis/memorization.json")
+
+    contam = out / "contamination/gsm8k_contam.jsonl"
+    contam.parent.mkdir(parents=True, exist_ok=True)
+    if not contam.exists():
+        contam.write_text("", encoding="utf-8")
+    for merged in sorted(glob.glob(f"{out}/scores/*__ALL.jsonl")):
+        tag = pathlib.Path(merged).name.replace("__ALL.jsonl", "")
+        sh("instella-reasoning", "atlas", "--scores", merged, "--contamination", str(contam),
+           "--output", f"{out}/atlas/{tag}_atlas.json", "--markdown", f"{out}/atlas/{tag}_atlas.md")
+
+    sh("instella-reasoning", "figures", "--scores", *glob.glob(f"{out}/scores/*__ALL.jsonl"),
+       "--analysis", f"{out}/analysis/memorization.json", "--output-dir", f"{out}/figures",
+       "--containment", f"{out}/analysis/containment.json",
+       "--termination", f"{out}/analysis/termination.json", "--n-items", str(n_items))
+
+    runs_vol.commit()
+    subprocess.call(
+        [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+         os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+         "--path", str(out), "--message", "final: analysis + atlas + figures"]
+    )
+    print("\nfinalize complete")
+
+
+@app.function(cpu=2.0, timeout=900, volumes=VOLUMES, secrets=SECRETS)
+def detector_falsepositive(run: str = "fullscale-S250", write: bool = False, push: bool = False) -> dict:
+    """What a standard n-gram contamination heuristic would claim, against known ground truth.
+
+    The corpus is `amd/Instella-GSM8K-synthetic`, derived from GSM8K **train**. GSM8K **test**
+    is therefore absent from it by construction -- every test item is a known negative. That
+    makes this a rare setting where a contamination detector's false-positive rate can be
+    measured rather than argued about.
+
+    The widely used rule (Brown et al., 2020 and descendants) flags an item when *any* n-gram
+    of it appears in the corpus. This reports what that rule, and a sweep of stricter
+    thresholds, would claim about items that cannot be contaminated. Overlap on a known
+    negative is not memorisation -- GSM8K train and test share annotators and templates, so
+    they share phrasing ("how many ... does ... have in total"). That conflation of template
+    similarity with membership is the construct-validity failure this study is about.
+    """
+    import json
+    from statistics import median
+
+    os.chdir(REPO_REMOTE)
+    out = pathlib.Path("experiments/runs") / run
+    verified = json.loads((out / "analysis/containment_verified.json").read_text())["containment"]
+
+    train = sorted(v["containment"] for k, v in verified.items() if k.startswith("train::"))
+    test = sorted(v["containment"] for k, v in verified.items() if k.startswith("test::"))
+
+    def pct(xs: list[float], p: float) -> float:
+        return xs[min(len(xs) - 1, int(p * len(xs)))] if xs else 0.0
+
+    print(f"containment distribution   (n_train={len(train)}, n_test={len(test)})")
+    print(f"{'':10s} {'p50':>8s} {'p90':>8s} {'p99':>8s} {'max':>8s}")
+    for name, xs in (("train", train), ("test", test)):
+        print(f"{name:10s} {median(xs):8.3f} {pct(xs, 0.90):8.3f} {pct(xs, 0.99):8.3f} {max(xs):8.3f}")
+
+    print(f"\n{'rule':28s} {'train flagged':>14s} {'test flagged':>13s} {'FPR':>8s}")
+    rules = [("any n-gram match (Brown et al.)", 1e-9), ("containment >= 0.05", 0.05),
+             ("containment >= 0.10", 0.10), ("containment >= 0.25", 0.25),
+             ("containment >= 0.50", 0.50), ("containment >= 0.80 (this study)", 0.80)]
+    report: dict = {"n_train": len(train), "n_test": len(test), "rules": {}}
+    for label, thr in rules:
+        n_tr = sum(1 for c in train if c >= thr)
+        n_te = sum(1 for c in test if c >= thr)
+        fpr = n_te / len(test) if test else 0.0
+        print(f"{label:28s} {n_tr:6d} ({n_tr / len(train):5.1%}) {n_te:5d} ({fpr:5.1%}) {fpr:8.1%}")
+        report["rules"][label] = {"threshold": thr, "train_flagged": n_tr,
+                                  "test_flagged": n_te, "false_positive_rate": fpr}
+
+    worst = sorted(((v["containment"], k) for k, v in verified.items() if k.startswith("test::")),
+                   reverse=True)[:5]
+    print("\nhighest-containment known negatives (test items, provably absent from the corpus):")
+    for c, k in worst:
+        print(f"   {k}: {c:.3f}")
+    print("\nThese are template/phrasing overlap between GSM8K train and test, not membership.")
+    print("A rule that flags them reports contamination where none can exist.")
+
+    if write:
+        dest = out / "analysis/detector_falsepositive.json"
+        dest.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        runs_vol.commit()
+        print(f"\nwrote {dest}")
+        if push:
+            subprocess.call(
+                [sys.executable, "experiments/hf_sync.py", "push", "--repo",
+                 os.environ.get("HF_RESULTS_REPO", "GOVINDFROM/Instella-Reasoning"),
+                 "--path", str(out), "--message", "detector false-positive rate on known negatives"]
+            )
+    else:
+        print("\n(read-only: pass write=True to persist)")
+    return report
+
+
+@app.function(gpu=GPU, timeout=4 * 3600, volumes=VOLUMES, secrets=SECRETS)
 def repair_truncated(tag: str = "stage1", run: str = "fullscale-S250-v2",
                      max_new_tokens: int = 2048, write: bool = False) -> dict:
     """Regenerate only the rows that hit the token cap, at a larger budget.
