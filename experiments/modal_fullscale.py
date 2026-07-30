@@ -988,6 +988,7 @@ def _judge_prompt(question: str, completion: str, gold: str | None, mode: str) -
 @app.function(gpu=GPU, timeout=3 * 3600, volumes=VOLUMES, secrets=SECRETS)
 def judge_run(tag: str = "instruct", mode: str = "reference_free",
               run: str = "fullscale-S250-v2", judge: str = "instruct",
+              judge_model: str = "", judge_label: str = "",
               batch_size: int = 8, max_new_tokens: int = 24) -> dict:
     """Grade one checkpoint's arms generations with an Instella judge.
 
@@ -1011,7 +1012,14 @@ def judge_run(tag: str = "instruct", mode: str = "reference_free",
     os.chdir(REPO_REMOTE)
     runs_vol.reload()
     out = pathlib.Path("experiments/runs") / run
-    dest = out / f"analysis/judge_{tag}_{mode}.jsonl"
+    # An external judge writes under a label so a ladder of judge sizes coexists. The
+    # in-family runs keep their original single-underscore names, and judge_analysis reads
+    # both patterns, so earlier verdicts stay valid rather than needing regeneration.
+    if judge_model:
+        label = judge_label or judge_model.split("/")[-1].lower()
+        dest = out / f"analysis/judge_{label}__{tag}__{mode}.jsonl"
+    else:
+        dest = out / f"analysis/judge_{tag}_{mode}.jsonl"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     items = {str(r["id"]): r for r in read_jsonl(out / "variants/arms_variants.jsonl")}
@@ -1024,15 +1032,16 @@ def judge_run(tag: str = "instruct", mode: str = "reference_free",
         for r in read_jsonl(dest):
             done.add(str(r["benchmark_id"]))
     pending = [b for b in gens if b in items and b in truth and b not in done]
-    print(f"judge={judge} target={tag}/arms mode={mode}")
+    print(f"judge={judge_model or judge} target={tag}/arms mode={mode}")
     print(f"{len(done)} already graded, {len(pending)} pending", flush=True)
     if not pending:
         return {"graded": len(done), "pending": 0}
 
-    ckpt = resolve(judge)
-    tok = AutoTokenizer.from_pretrained(ckpt.load_path, trust_remote_code=True)
+    judge_path = judge_model or resolve(judge).load_path
+    print(f"loading judge {judge_path}", flush=True)
+    tok = AutoTokenizer.from_pretrained(judge_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
-        ckpt.load_path, dtype=torch.bfloat16, device_map="cuda", trust_remote_code=True
+        judge_path, dtype=torch.bfloat16, device_map="cuda", trust_remote_code=True
     )
     model.eval()
     if tok.pad_token is None:
@@ -1367,11 +1376,17 @@ def judge_analysis(run: str = "fullscale-S250-v2", n_bootstrap: int = 4000,
     report: dict = {}
     print("balanced accuracy = mean(sensitivity, specificity); base-rate independent, so")
     print("comparable across arms in a way Cohen's kappa is not.\n")
-    print(f"{'target':9s} {'mode':16s} {'n':>5s} {'abst':>6s} {'base_s':>6s} {'base_u':>8s} "
+    print(f"{'judge':22s} {'target':9s} {'mode':16s} {'n':>5s} {'abst':>6s} "
           f"{'BA_seen':>8s} {'BA_unseen':>9s} {'delta':>8s} {'CI95':>20s}")
     for path in files:
-        stem = pathlib.Path(path).stem.replace("judge_", "")
-        tag, mode = stem.split("_", 1)
+        stem = pathlib.Path(path).stem.replace("judge_", "", 1)
+        if "__" in stem:
+            jlabel, tag, mode = stem.split("__")
+        else:
+            # Original in-family runs, before the judge ladder existed.
+            jlabel = "instella-3b-instruct"
+            tag, mode = stem.split("_", 1)
+        stem = f"{jlabel}__{tag}__{mode}"
         rows = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
         n_total = len(rows)
         usable = [r for r in rows if r["judge_verdict"] is not None and r["arm"] in ("seen", "unseen")]
@@ -1426,13 +1441,14 @@ def judge_analysis(run: str = "fullscale-S250-v2", n_bootstrap: int = 4000,
 
         fmt = lambda v: " n/a  " if v is None else f"{v:+.4f}"  # noqa: E731
         cis = "n/a" if ci_ba[0] is None else f"[{ci_ba[0]:+.4f}, {ci_ba[1]:+.4f}]"
-        print(f"{tag:9s} {mode:16s} {len(usable):5d} {abstain:5.1%} "
-              f"{base_seen:6.3f} {base_unseen:8.3f} "
+        excl_mark = "*" if (ci_ba[0] is not None and (ci_ba[0] > 0 or ci_ba[1] < 0)) else " "
+        print(f"{jlabel[:22]:22s} {tag:9s} {mode:16s} {len(usable):5d} {abstain:5.1%} "
               f"{fmt(ba_seen[2] if ba_seen else None):>8s} "
               f"{fmt(ba_unseen[2] if ba_unseen else None):>9s} "
-              f"{fmt(delta_ba):>8s} {cis:>20s}")
+              f"{fmt(delta_ba):>8s} {cis:>20s} {excl_mark}")
 
         report[stem] = {
+            "judge": jlabel,
             "target": tag, "mode": mode, "n_total": n_total, "n_usable": len(usable),
             "abstention_rate": abstain,
             "ground_truth_base_rate": {"seen": base_seen, "unseen": base_unseen},
@@ -1636,11 +1652,83 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
 
         # J1 -- the primary contrast: kappa by arm, per mode, with the bootstrap interval on
         # the difference. Reference-based is the control panel.
+        # Judge ladder, ordered by capability. Keys are judge__target__mode.
+        LADDER = ["instella-3b-instruct", "qwen2.5-7b-instruct", "qwen2.5-14b-instruct"]
+        SHORT = {"instella-3b-instruct": "Instella 3B", "qwen2.5-7b-instruct": "Qwen2.5 7B",
+                 "qwen2.5-14b-instruct": "Qwen2.5 14B"}
+        judges = [j for j in LADDER if any(v.get("judge") == j for v in jr.values())]
+
+        def entry(j: str, t: str, m: str) -> dict | None:
+            return jr.get(f"{j}__{t}__{m}")
+
+        # J4 -- the dissociation. Supplying the reference answer removes the membership gap
+        # once the judge is competent, while withholding it does not, and the reference-free
+        # effect does not shrink as the judge scales. A single-condition design would report
+        # the gap as a property of the judge; the control is what makes it interpretable.
+        if judges:
+            fig, axes4 = plt.subplots(1, 2, figsize=(9.8, 4.3), sharey=True)
+            for ax, target in zip(axes4, ["stage2", "instruct"]):
+                xs = list(range(len(judges)))
+                for k, mode in enumerate(modes):
+                    ys, los, his = [], [], []
+                    for j in judges:
+                        e = entry(j, target, mode)
+                        ba = (e or {}).get("balanced_accuracy") or {}
+                        d, ci = ba.get("delta_seen_minus_unseen"), ba.get("delta_ci95") or [None, None]
+                        ys.append(d if d is not None else float("nan"))
+                        los.append((d - ci[0]) if (d is not None and ci[0] is not None) else 0.0)
+                        his.append((ci[1] - d) if (d is not None and ci[1] is not None) else 0.0)
+                    ax.errorbar([x + (k - 0.5) * 0.08 for x in xs], ys, yerr=[los, his],
+                                marker="o" if mode == "reference_free" else "s",
+                                color=SERIES[0] if mode == "reference_free" else SERIES[1],
+                                lw=2, capsize=3, label=mode.replace("_", " "))
+                ax.axhline(0.0, color=INK, lw=1.2, ls="--")
+                ax.set_xticks(xs)
+                ax.set_xticklabels([SHORT.get(j, j) for j in judges], color=INK, fontsize=9.5)
+                ax.set_title(f"grading {target} outputs", color=INK, fontsize=10.5, loc="left")
+                ax.grid(axis="y", color=GRID, lw=0.8)
+                ax.set_axisbelow(True)
+                _clean(ax)
+            axes4[0].set_ylabel("balanced accuracy, seen minus unseen", color=INK, fontsize=10)
+            axes4[0].legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY, loc="lower left")
+            fig.suptitle("J4  Withholding the reference answer opens a membership gap that "
+                         "judge scale does not close", color=INK, fontsize=11, x=0.02, ha="left")
+            written.append(_save(fig, figs / "j4_judge_dissociation.png", plt))
+
+            # J5 -- absolute reliability up the ladder, so the dissociation is read against
+            # judges that are actually competent rather than against noise.
+            fig, axes5 = plt.subplots(1, 2, figsize=(9.8, 4.3), sharey=True)
+            for ax, mode in zip(axes5, modes):
+                xs = list(range(len(judges)))
+                for k, arm in enumerate(["seen", "unseen"]):
+                    ys = []
+                    for j in judges:
+                        e = entry(j, "instruct", mode)
+                        ba = ((e or {}).get("balanced_accuracy") or {}).get(arm) or {}
+                        ys.append(ba.get("balanced", float("nan")))
+                    ax.bar([x + (k - 0.5) * 0.34 for x in xs], ys, 0.34,
+                           color=SERIES[k], label=f"verified {arm}")
+                ax.axhline(0.5, color=INK, lw=1.2, ls="--")
+                ax.text(len(judges) - 0.45, 0.515, "chance", fontsize=8, color=INK, ha="right")
+                ax.set_xticks(xs)
+                ax.set_xticklabels([SHORT.get(j, j) for j in judges], color=INK, fontsize=9.5)
+                ax.set_ylim(0.45, 1.02)
+                ax.set_title(mode.replace("_", " "), color=INK, fontsize=10.5, loc="left")
+                ax.grid(axis="y", color=GRID, lw=0.8)
+                ax.set_axisbelow(True)
+                _clean(ax)
+            axes5[0].set_ylabel("balanced accuracy, grading instruct", color=INK, fontsize=10)
+            axes5[0].legend(frameon=False, fontsize=9, labelcolor=INK_SECONDARY, loc="lower right")
+            fig.suptitle("J5  Judge competence up the ladder, by verified membership",
+                         color=INK, fontsize=11, x=0.02, ha="left")
+            written.append(_save(fig, figs / "j5_judge_ladder.png", plt))
+
+        # J1 keeps the original per-target view, for the in-family judge only.
         fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.4), sharey=True)
         for ax, mode in zip(axes, modes):
-            present = [t for t in tags if f"{t}_{mode}" in jr]
+            present = [t for t in tags if f"instella-3b-instruct__{t}__{mode}" in jr]
             xs = range(len(present))
-            ba = [jr[f"{t}_{mode}"]["balanced_accuracy"] for t in present]
+            ba = [jr[f"instella-3b-instruct__{t}__{mode}"]["balanced_accuracy"] for t in present]
             ks = [(e["seen"] or {}).get("balanced", 0.0) for e in ba]
             ku = [(e["unseen"] or {}).get("balanced", 0.0) for e in ba]
             ax.bar([x - 0.18 for x in xs], ks, 0.36, color=SERIES[0], label="verified seen")
@@ -1671,14 +1759,15 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
         # J2 -- abstention and headline agreement. A judge that declines to commit is not a
         # judge that disagrees, and conflating the two would inflate apparent reliability.
         fig, ax = plt.subplots(figsize=(7.2, 4.2))
-        keys = [f"{t}_{m}" for m in modes for t in tags if f"{t}_{m}" in jr]
+        keys = [f"instella-3b-instruct__{t}__{m}" for m in modes for t in tags
+                if f"instella-3b-instruct__{t}__{m}" in jr]
         xs = range(len(keys))
         ax.bar(xs, [jr[k]["abstention_rate"] * 100 for k in keys], color=SERIES[4],
                label="abstention rate")
         ax.plot(list(xs), [jr[k]["accuracy_vs_truth"] * 100 for k in keys], marker="o",
                 color=SERIES[0], lw=2, label="raw agreement with ground truth")
         ax.set_xticks(list(xs))
-        ax.set_xticklabels([k.replace("_reference", "\nref") for k in keys],
+        ax.set_xticklabels([k.split("__")[1] + "\n" + k.split("__")[2][:9] for k in keys],
                            color=INK, fontsize=8.5)
         ax.set_ylabel("percent", color=INK, fontsize=10)
         ax.set_title("J2  Abstention and raw agreement, reported separately",
@@ -1698,7 +1787,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
         for j, cell in enumerate(cellnames):
             vals = []
             for t in tags:
-                e = jr.get(f"{t}_reference_free")
+                e = jr.get(f"instella-3b-instruct__{t}__reference_free")
                 v = (e or {}).get("cells", {}).get(cell, {}).get("balanced_accuracy")
                 vals.append(v if v is not None else 0.5)
             ax.bar([i + (j - 1.5) * width for i in range(len(vals))], vals, width,

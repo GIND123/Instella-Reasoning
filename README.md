@@ -75,7 +75,7 @@ computation is pending.
 | Checkpoints measured | **4** — `stage1`, `stage2`, `sft`, `instruct` |
 | Quality gates passed | **9 / 10** — `stage1/arms` reaches 84.9% against an 85% gate |
 | Rows eligible for optional rework | **304 / 12,468 (2.4%)** |
-| Figures | **15** — F1–F8 headline, S1–S4 supplementary, J1–J3 judge, in [`docs/figures/`](docs/figures/) |
+| Figures | **17** — F1–F8 headline, S1–S4 supplementary, J1–J5 judge, in [`docs/figures/`](docs/figures/) |
 | Test suite | 173 passed, 2 skipped |
 | GPU time consumed by the corrected run | ~4.9 h (A100-40GB) |
 | GPU time required to complete outstanding work | **0 h** |
@@ -681,20 +681,65 @@ judge would confound the contrast with its own noise):
 | `stage2` | reference-based | 0.635 / 0.436 | 0.5181 | 0.6400 | −0.1219 | [−0.155, −0.089] |
 | `instruct` | reference-based | 0.773 / 0.526 | 0.5137 | 0.5678 | −0.0541 | [−0.083, −0.026] |
 
-Two findings, and the second is not the one the design was built to test.
+Three judges of increasing capability were used, because a single weak judge cannot
+distinguish an instrument defect from its own noise floor.
 
-**A 3B judge is close to chance on verified-seen items.** Balanced accuracy sits between 0.50
-and 0.54 on the seen arm in every configuration, and reaches only 0.514 for `instruct` **even
-when handed the reference answer**. Given the gold answer, the judge still cannot reliably
-determine whether a solution is correct. That bears directly on whether small open-weight
-models are fit for the evaluator role they are increasingly assigned.
+| judge | mode | BA seen | BA unseen | Δ | CI95 |
+|---|---|---|---|---|---|
+| Instella 3B | reference-based | 0.5137 | 0.5678 | −0.0541 | [−0.083, −0.026] |
+| Qwen2.5 7B | reference-based | 0.9370 | 0.9728 | −0.0359 | [−0.068, −0.008] |
+| Qwen2.5 14B | reference-based | 0.9459 | 0.9689 | −0.0230 | [−0.057, +0.006] |
+| Instella 3B | reference-free | 0.5016 | 0.5825 | −0.0809 | [−0.109, −0.054] |
+| Qwen2.5 7B | reference-free | 0.5998 | 0.7998 | **−0.2000** | [−0.248, −0.149] |
+| Qwen2.5 14B | reference-free | 0.6362 | 0.8202 | **−0.1840** | [−0.231, −0.133] |
 
-**The membership gap is not memorisation.** It appears at comparable magnitude in the
-reference-based control (`stage1` −0.091 against −0.093; `instruct` −0.054 against −0.081),
-where memorisation of the solution cannot operate because the solution is supplied. The
-parsimonious account is the train-versus-test distributional difference — the same confound
-that bounds the main study. A design testing only the reference-free condition would have
-reported a memorisation effect on the instrument.
+*Grading `instruct` outputs. Equivalent tables for the other three targets are in
+`analysis/judge_reliability.json`.*
+
+**A competent judge grades verifiably memorised problems substantially less accurately, and
+only when no reference answer is supplied.** Three observations establish it.
+
+First, capability is real, not assumed. Given the reference answer, the 7B and 14B judges reach
+balanced accuracy between 0.90 and 0.98, against 0.51 for the 3B judge. Conclusions about the
+instrument are therefore drawn from instruments that work.
+
+Second, the control behaves as a control should. As capability rises, the reference-based
+membership gap converges toward zero — −0.122 to −0.002 to +0.008 across the ladder when
+grading `stage2`. Supplying the correct answer for the specific variant removes the effect.
+
+Third, withholding it does not, and scale does not rescue it. The reference-free gap on
+`instruct` runs −0.081, −0.200, −0.184 across the ladder: it grows once the judge is competent
+enough to exhibit it and then holds. A small-model artifact would shrink.
+
+The mechanism this implies is substitution of recall for verification. Asked to grade a problem
+present in its own training data without being told the answer, the judge appears to compare
+the candidate solution against the answer it remembers rather than checking the reasoning
+presented. Numerically perturbed variants have different correct answers, so a remembered
+answer marks correct solutions wrong. Supplying the answer for the variant at hand removes the
+reliance on recall, and with it the effect.
+
+Two qualifications. The 3B judge sits within 0.04 of chance on the seen arm in every
+configuration, so its numbers describe a noise floor rather than a judge. And the effect is
+concentrated on `stage2` and `instruct` outputs; `stage1` outputs are wrong almost everywhere
+(7% accuracy) and therefore trivially gradeable, while `sft` shows no gap in either condition,
+which the present data cannot explain.
+
+A design testing only the reference-free condition would have reported this as a property of
+the judge. A design testing only a 3B judge would have found a gap in both conditions and
+concluded the opposite. The control and the ladder are jointly load-bearing.
+
+#### J4 — The dissociation
+
+![J4 judge dissociation](docs/figures/j4_judge_dissociation.png)
+
+Reference-based converges to zero as the judge scales; reference-free does not.
+
+#### J5 — Judge competence up the ladder
+
+![J5 judge ladder](docs/figures/j5_judge_ladder.png)
+
+Included so the dissociation is read against judges demonstrably above chance. The dashed line
+is chance for a base-rate-independent binary metric.
 
 ## Analysis artifacts
 
