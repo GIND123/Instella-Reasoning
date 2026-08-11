@@ -45,3 +45,7 @@ mlruns/
 experiments/runs/*/generations/
 # Contamination corpus snapshot is ~1.5 GB and re-downloadable from HF
 experiments/runs/*/contamination/synthetic_corpus.jsonl
+
+# Local Instella JUDGE manuscript bundle
+/Instella_JUDGE.zip
+/Instella_JUDGE/
