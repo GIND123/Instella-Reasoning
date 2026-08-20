@@ -1,0 +1,7 @@
+[push] queue finished
+[push] moved dose0 out of run dir
+[push] moved dose64 out of run dir
+101M	experiments/runs/ckpt-axis-v1
+filler.jsonl:   0%|          | 0.00/48.1M [00:00<?, ?B/s]filler.jsonl:   1%|          | 246k/48.1M [00:00<00:21, 2.23MB/s]filler.jsonl:  15%|█▍        | 7.19M/48.1M [00:00<00:01, 39.6MB/s]filler.jsonl:  33%|███▎      | 16.0M/48.1M [00:00<00:01, 31.2MB/s]filler.jsonl:  55%|█████▍    | 26.4M/48.1M [00:00<00:00, 48.7MB/s]filler.jsonl:  68%|██████▊   | 32.5M/48.1M [00:00<00:00, 35.2MB/s]filler.jsonl:  94%|█████████▎| 45.1M/48.1M [00:01<00:00, 52.0MB/s]filler.jsonl: 100%|██████████| 48.1M/48.1M [00:01<00:00, 35.2MB/s]
+[hf_sync] pushed ./experiments/runs/ckpt-axis-v1 -> GOVINDFROM/Instella-Reasoning:experiments/runs/ckpt-axis-v1 (with generations) — ckpt-axis-v1: phase0/1/2 deletion probe
+[push] done rc=0

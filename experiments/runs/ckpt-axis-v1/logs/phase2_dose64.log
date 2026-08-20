@@ -1,0 +1,71 @@
+{
+  "dose": 64,
+  "injected_docs": 200,
+  "tokens_per_repetition": 33806,
+  "injected_tokens": 2163584,
+  "injected_share": 0.257919,
+  "filler_docs_used": 16023,
+  "total_tokens": 8388608,
+  "seq_len": 2048,
+  "n_blocks": 4096,
+  "tokens_per_step": 65536,
+  "n_steps": 128,
+  "lr": 1e-05,
+  "seed": 6198
+}
+[inject] loading amd/Instella-3B in fp32 (bf16 autocast forward)
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  2.04it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  3.69it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  3.29it/s]
+[control] PRE  injected_loss=1.2646 heldout_loss=1.3201 verbatim=0.136
+/home/ubuntu/instella-reasoning/experiments/inject_pretrain.py:245: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
+  step_loss += float(outputs.loss)
+[train] step 1/128 loss=1.2834 lr=1.67e-06 tok=65,536 9,519 tok/s peak_mem=63.4GB
+[train] step 11/128 loss=1.1757 lr=9.97e-06 tok=720,896 9,704 tok/s peak_mem=63.4GB
+[train] step 21/128 loss=1.0032 lr=9.68e-06 tok=1,376,256 9,716 tok/s peak_mem=63.4GB
+[train] step 31/128 loss=0.8973 lr=9.08e-06 tok=2,031,616 9,720 tok/s peak_mem=63.4GB
+[train] step 41/128 loss=0.9640 lr=8.20e-06 tok=2,686,976 9,722 tok/s peak_mem=63.4GB
+[train] step 51/128 loss=0.8593 lr=7.12e-06 tok=3,342,336 9,724 tok/s peak_mem=63.4GB
+[train] step 61/128 loss=0.8803 lr=5.90e-06 tok=3,997,696 9,724 tok/s peak_mem=63.4GB
+[train] step 71/128 loss=0.8551 lr=4.61e-06 tok=4,653,056 9,725 tok/s peak_mem=63.4GB
+[train] step 81/128 loss=0.8253 lr=3.36e-06 tok=5,308,416 9,725 tok/s peak_mem=63.4GB
+[train] step 91/128 loss=0.8817 lr=2.21e-06 tok=5,963,776 9,723 tok/s peak_mem=63.4GB
+[train] step 101/128 loss=0.8186 lr=1.24e-06 tok=6,619,136 9,724 tok/s peak_mem=63.4GB
+[train] step 111/128 loss=0.9181 lr=5.28e-07 tok=7,274,496 9,724 tok/s peak_mem=63.4GB
+[train] step 121/128 loss=0.8818 lr=1.06e-07 tok=7,929,856 9,725 tok/s peak_mem=63.4GB
+[train] step 128/128 loss=0.9054 lr=1.66e-09 tok=8,388,608 9,725 tok/s peak_mem=63.4GB
+[control] POST injected_loss=0.1559 heldout_loss=1.4057 verbatim=0.946
+{
+  "dose": 64,
+  "injected_docs": 200,
+  "tokens_per_repetition": 33806,
+  "injected_tokens": 2163584,
+  "injected_share": 0.257919,
+  "filler_docs_used": 16023,
+  "total_tokens": 8388608,
+  "seq_len": 2048,
+  "n_blocks": 4096,
+  "tokens_per_step": 65536,
+  "n_steps": 128,
+  "lr": 1e-05,
+  "seed": 6198,
+  "wall_clock_sec": 862.6,
+  "tokens_per_sec": 9724.8,
+  "peak_mem_gb": 63.38,
+  "loss_first": 1.2834,
+  "loss_last": 0.9054,
+  "loss_min": 0.7728,
+  "pre": {
+    "injected_loss": 1.2646,
+    "heldout_loss": 1.3201,
+    "injected_verbatim": 0.1363
+  },
+  "post": {
+    "injected_loss": 0.1559,
+    "heldout_loss": 1.4057,
+    "injected_verbatim": 0.9456
+  },
+  "injected_loss_drop": 1.1087,
+  "heldout_loss_drop": -0.0856,
+  "positive_controls_pass": true
+}
+[inject] saved /home/ubuntu/instella-reasoning/experiments/runs/ckpt-axis-v1/phase2/dose64

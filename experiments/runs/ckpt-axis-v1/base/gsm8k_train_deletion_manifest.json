@@ -1,0 +1,14 @@
+{
+  "benchmark": "gsm8k_train",
+  "seed": 6198,
+  "k": 3,
+  "n_items_total": 7473,
+  "n_eligible": 5589,
+  "n_parents_requested": 900,
+  "n_parents_with_variants": 891,
+  "n_deletion_rows": 1591,
+  "mean_removals_per_parent": 1.786,
+  "n_skipped": 0,
+  "deletion_path": "experiments/runs/ckpt-axis-v1/base/gsm8k_train_deletion.jsonl",
+  "parents_path": "experiments/runs/ckpt-axis-v1/base/gsm8k_train_parents.jsonl"
+}
