@@ -1,0 +1,18 @@
+[
+  {
+    "generations": "experiments/runs/ckpt-axis-v1/generations/phase0__stage1__deletion200.jsonl",
+    "model": "amd/Instella-3B-Stage1",
+    "n_scored": 200,
+    "n_unmatched": 0,
+    "recall": 4,
+    "recall_rate": 0.02,
+    "abstain": 0,
+    "abstain_rate": 0.0,
+    "other": 196,
+    "other_rate": 0.98,
+    "termination_rate": 0.83,
+    "truncation_rate": 0.17,
+    "marker_rate": 0.83,
+    "median_chars": 164
+  }
+]

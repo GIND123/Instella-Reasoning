@@ -1,0 +1,26 @@
+[load] torch=2.13.0+cu130 device=cuda dtype=torch.bfloat16 gpu=NVIDIA H100 80GB HBM3 (x1)
+A new version of the following files was downloaded from https://huggingface.co/amd/Instella-3B-Stage1:
+- modeling_instella.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files:  50%|█████     | 1/2 [01:34<01:34, 94.51s/it]Fetching 2 files: 100%|██████████| 2/2 [06:02<00:00, 181.13s/it]Fetching 2 files: 100%|██████████| 2/2 [06:02<00:00, 181.13s/it]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.29it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  2.30it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  2.06it/s]
+Generate Instella-3B-Stage1:   0%|          | 0/200 [00:00<?, ?item/s]Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. Default to no truncation.
+[W820 19:19:14.392810740 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 75497472 bytes (free: 17104896, total: 85017624576).
+[W820 19:19:47.429045536 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 98566144 bytes (free: 6619136, total: 85017624576).
+Generate Instella-3B-Stage1:   4%|▍         | 8/200 [02:03<49:18, 15.41s/item]Generate Instella-3B-Stage1:   8%|▊         | 16/200 [03:07<33:55, 11.06s/item]Generate Instella-3B-Stage1:  12%|█▏        | 24/200 [04:11<28:21,  9.67s/item]Generate Instella-3B-Stage1:  16%|█▌        | 32/200 [05:14<25:03,  8.95s/item]Generate Instella-3B-Stage1:  20%|██        | 40/200 [06:17<22:50,  8.57s/item]Generate Instella-3B-Stage1:  24%|██▍       | 48/200 [07:20<21:08,  8.35s/item]Generate Instella-3B-Stage1:  28%|██▊       | 56/200 [08:23<19:39,  8.19s/item]Generate Instella-3B-Stage1:  32%|███▏      | 64/200 [09:26<18:21,  8.10s/item]Generate Instella-3B-Stage1:  36%|███▌      | 72/200 [10:31<17:15,  8.09s/item]Generate Instella-3B-Stage1:  40%|████      | 80/200 [11:34<16:03,  8.03s/item]Generate Instella-3B-Stage1:  44%|████▍     | 88/200 [12:38<14:56,  8.00s/item]Generate Instella-3B-Stage1:  48%|████▊     | 96/200 [13:41<13:50,  7.98s/item]Generate Instella-3B-Stage1:  52%|█████▏    | 104/200 [14:45<12:45,  7.97s/item]Generate Instella-3B-Stage1:  56%|█████▌    | 112/200 [15:47<11:36,  7.91s/item]Generate Instella-3B-Stage1:  60%|██████    | 120/200 [16:50<10:31,  7.89s/item]Generate Instella-3B-Stage1:  64%|██████▍   | 128/200 [17:53<09:27,  7.89s/item]Generate Instella-3B-Stage1:  68%|██████▊   | 136/200 [18:56<08:24,  7.89s/item]Generate Instella-3B-Stage1:  72%|███████▏  | 144/200 [19:59<07:21,  7.88s/item]Generate Instella-3B-Stage1:  76%|███████▌  | 152/200 [21:04<06:22,  7.97s/item]Generate Instella-3B-Stage1:  80%|████████  | 160/200 [22:11<05:22,  8.07s/item]Generate Instella-3B-Stage1:  84%|████████▍ | 168/200 [23:15<04:18,  8.08s/item]Generate Instella-3B-Stage1:  88%|████████▊ | 176/200 [24:20<03:13,  8.08s/item]Generate Instella-3B-Stage1:  92%|█████████▏| 184/200 [25:24<02:09,  8.07s/item]Generate Instella-3B-Stage1:  96%|█████████▌| 192/200 [26:29<01:04,  8.09s/item]Generate Instella-3B-Stage1: 100%|██████████| 200/200 [27:34<00:00,  8.09s/item]Generate Instella-3B-Stage1: 100%|██████████| 200/200 [27:34<00:00,  8.27s/item]
+Wrote 200 generations to experiments/runs/ckpt-axis-v1/generations/phase0__stage1__deletion200.jsonl
+[generate] completed before token cap: 83.0% · '####' marker: 83.0% · median 164 chars
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+WARNING: 39/200 completions (20%) look DEGENERATE (looping/empty).
+This is almost always a formatting/version problem, not a reasoning result:
+  - Instruct model missing its chat template (do NOT pass --no-chat-template), or
+  - transformers 5.x vs Instella's remote code -> pin `transformers>=4.44,<5`.
+Do not score/atlas this run until the smoke output is coherent CoT.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  - gsm8k_01387__noprem1: low_distinct_token_ratio (tokens=46)
+  - gsm8k_06629__noprem4: low_distinct_token_ratio (tokens=97)
+  - gsm8k_01324__noprem0: low_distinct_token_ratio (tokens=66)
+  - gsm8k_07187__noprem1: low_distinct_token_ratio (tokens=1560)
+  - gsm8k_04277__noprem1: low_distinct_token_ratio (tokens=1853)

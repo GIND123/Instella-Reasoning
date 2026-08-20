@@ -1,0 +1,269 @@
+{
+  "run": "experiments/runs/ckpt-axis-v1",
+  "seed": 6198,
+  "phase1": {
+    "train": {
+      "stage1": {
+        "label": "Stage1",
+        "n": 1591,
+        "recall": 18,
+        "recall_rate": 0.011314,
+        "termination_rate": 0.82401,
+        "truncation_rate": 0.17599
+      },
+      "stage2": {
+        "label": "Instella-3B",
+        "n": 1591,
+        "recall": 45,
+        "recall_rate": 0.028284,
+        "termination_rate": 0.971087,
+        "truncation_rate": 0.028913
+      },
+      "sft": {
+        "label": "SFT",
+        "n": 1591,
+        "recall": 49,
+        "recall_rate": 0.030798,
+        "termination_rate": 0.97863,
+        "truncation_rate": 0.02137
+      },
+      "instruct": {
+        "label": "Instruct",
+        "n": 1591,
+        "recall": 57,
+        "recall_rate": 0.035827,
+        "termination_rate": 0.998114,
+        "truncation_rate": 0.001886
+      }
+    },
+    "test": {
+      "stage1": {
+        "label": "Stage1",
+        "n": 1588,
+        "recall": 26,
+        "recall_rate": 0.016373,
+        "termination_rate": 0.819899,
+        "truncation_rate": 0.180101
+      },
+      "stage2": {
+        "label": "Instella-3B",
+        "n": 1588,
+        "recall": 57,
+        "recall_rate": 0.035894,
+        "termination_rate": 0.97733,
+        "truncation_rate": 0.02267
+      },
+      "sft": {
+        "label": "SFT",
+        "n": 1588,
+        "recall": 53,
+        "recall_rate": 0.033375,
+        "termination_rate": 0.975441,
+        "truncation_rate": 0.024559
+      },
+      "instruct": {
+        "label": "Instruct",
+        "n": 1588,
+        "recall": 50,
+        "recall_rate": 0.031486,
+        "termination_rate": 0.99937,
+        "truncation_rate": 0.00063
+      }
+    }
+  },
+  "intervention_train": {
+    "n": 1591,
+    "gained": 42,
+    "lost": 15,
+    "mcnemar_p": 0.00046000500864878946,
+    "restricted_both_terminated": {
+      "n": 1282,
+      "gained": 31,
+      "lost": 13,
+      "mcnemar_p": 0.009559878856634896,
+      "stage1_rate": 0.01248,
+      "stage2_rate": 0.026521
+    }
+  },
+  "did": {
+    "train_change": 0.01697,
+    "test_change": 0.019521,
+    "did": -0.002551,
+    "ci95": [
+      -0.016615,
+      0.011448
+    ],
+    "n_boot": 4000,
+    "crosses_zero": true,
+    "interpretation": "The clean test arm rises as much as the corpus-resident train arm, so the Stage-2 recall increase is not item-specific memorisation."
+  },
+  "temperature_sweep": {
+    "stage1": {
+      "label": "Stage1",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.0075
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.016
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.012
+      }
+    },
+    "stage2": {
+      "label": "Instella-3B",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.035
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.0335
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.028
+      }
+    },
+    "sft": {
+      "label": "SFT",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.0425
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.0435
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.0435
+      }
+    },
+    "instruct": {
+      "label": "Instruct",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.05
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.042
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.0415
+      }
+    }
+  },
+  "phase2_dose_response": [
+    {
+      "dose": 0,
+      "injected_share": 0.0,
+      "verbatim_post": 0.133,
+      "injected_loss_post": 1.2843,
+      "heldout_loss_post": 1.3425,
+      "positive_controls_pass": false,
+      "wall_clock_sec": 865.4,
+      "tokens_per_sec": 9693.8,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.042735,
+      "injected_gained": 0,
+      "injected_lost": 0,
+      "injected_mcnemar_p": 1.0,
+      "heldout_n": 371,
+      "heldout_recall": 0.026954,
+      "heldout_gained": 0,
+      "heldout_lost": 0,
+      "heldout_mcnemar_p": 1.0
+    },
+    {
+      "dose": 1,
+      "injected_share": 0.00403,
+      "verbatim_post": 0.1532,
+      "injected_loss_post": 1.005,
+      "heldout_loss_post": 1.1495,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 861.4,
+      "tokens_per_sec": 9738.2,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.054131,
+      "injected_gained": 9,
+      "injected_lost": 5,
+      "injected_mcnemar_p": 0.42395,
+      "heldout_n": 371,
+      "heldout_recall": 0.037736,
+      "heldout_gained": 10,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.454498
+    },
+    {
+      "dose": 4,
+      "injected_share": 0.01612,
+      "verbatim_post": 0.18,
+      "injected_loss_post": 0.8031,
+      "heldout_loss_post": 1.1627,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 862.5,
+      "tokens_per_sec": 9726.3,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.059829,
+      "injected_gained": 9,
+      "injected_lost": 3,
+      "injected_mcnemar_p": 0.145996,
+      "heldout_n": 371,
+      "heldout_recall": 0.043127,
+      "heldout_gained": 7,
+      "heldout_lost": 1,
+      "heldout_mcnemar_p": 0.070312
+    },
+    {
+      "dose": 16,
+      "injected_share": 0.06448,
+      "verbatim_post": 0.4915,
+      "injected_loss_post": 0.3386,
+      "heldout_loss_post": 1.3345,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 864.5,
+      "tokens_per_sec": 9703.1,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.051282,
+      "injected_gained": 12,
+      "injected_lost": 9,
+      "injected_mcnemar_p": 0.663624,
+      "heldout_n": 371,
+      "heldout_recall": 0.037736,
+      "heldout_gained": 10,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.454498
+    },
+    {
+      "dose": 64,
+      "injected_share": 0.257919,
+      "verbatim_post": 0.9456,
+      "injected_loss_post": 0.1559,
+      "heldout_loss_post": 1.4057,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 862.6,
+      "tokens_per_sec": 9724.8,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.074074,
+      "injected_gained": 17,
+      "injected_lost": 6,
+      "injected_mcnemar_p": 0.03469,
+      "heldout_n": 371,
+      "heldout_recall": 0.043127,
+      "heldout_gained": 12,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.237885
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "n_injected": 200,
+  "n_heldout": 200,
+  "seed": 6198,
+  "ngram_n": 13,
+  "filler_source": "allenai/tulu-3-sft-mixture",
+  "filler_rows_scanned": 31411,
+  "filler_rows_kept": 30413,
+  "filler_rows_rejected_for_containment": 0,
+  "filler_chars": 40002304,
+  "filler_est_tokens": 10000576
+}

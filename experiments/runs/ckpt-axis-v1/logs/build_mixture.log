@@ -1,0 +1,36 @@
+[mix] injected=200 heldout=200
+[mix] banned 13-gram set: 40,510
+[mix] scanned=2,155 kept=2,000 chars=3,044,692 rejected=0
+[mix] scanned=4,313 kept=4,000 chars=6,050,697 rejected=0
+[mix] scanned=6,451 kept=6,000 chars=9,042,303 rejected=0
+[mix] scanned=8,533 kept=8,000 chars=11,722,632 rejected=0
+[mix] scanned=10,561 kept=10,000 chars=14,118,343 rejected=0
+[mix] scanned=12,592 kept=12,000 chars=16,666,932 rejected=0
+[mix] scanned=14,648 kept=14,000 chars=19,154,647 rejected=0
+[mix] scanned=16,686 kept=16,000 chars=21,721,000 rejected=0
+[mix] scanned=18,728 kept=18,000 chars=24,151,915 rejected=0
+[mix] scanned=20,776 kept=20,000 chars=26,691,753 rejected=0
+[mix] scanned=22,811 kept=22,000 chars=29,212,925 rejected=0
+[mix] scanned=24,855 kept=24,000 chars=31,726,473 rejected=0
+[mix] scanned=26,898 kept=26,000 chars=34,377,638 rejected=0
+[mix] scanned=28,940 kept=28,000 chars=36,974,545 rejected=0
+[mix] scanned=30,986 kept=30,000 chars=39,450,797 rejected=0
+{
+  "n_injected": 200,
+  "n_heldout": 200,
+  "seed": 6198,
+  "ngram_n": 13,
+  "filler_source": "allenai/tulu-3-sft-mixture",
+  "filler_rows_scanned": 31411,
+  "filler_rows_kept": 30413,
+  "filler_rows_rejected_for_containment": 0,
+  "filler_chars": 40002304,
+  "filler_est_tokens": 10000576
+}
+Fatal Python error: PyGILState_Release: thread state 0x70971c0036c0 must be current when releasing
+Python runtime state: finalizing (tstate=0x00005fe36d4dd650)
+
+Thread 0x000070987c7c01c0 (most recent call first):
+  <no Python frame>
+
+Extension modules: numpy._core._multiarray_umath, numpy.linalg._umath_linalg, pyarrow.lib, numpy.random._common, numpy.random.bit_generator, numpy.random._bounded_integers, numpy.random._mt19937, numpy.random.mtrand, numpy.random._philox, numpy.random._pcg64, numpy.random._sfc64, numpy.random._generator, pandas._libs.tslibs.ccalendar, pandas._libs.tslibs.np_datetime, pandas._libs.tslibs.dtypes, pandas._libs.tslibs.base, pandas._libs.tslibs.nattype, pandas._libs.tslibs.timezones, pandas._libs.tslibs.fields, pandas._libs.tslibs.timedeltas, pandas._libs.tslibs.tzconversion, pandas._libs.tslibs.timestamps, pandas._libs.properties, pandas._libs.tslibs.offsets, pandas._libs.tslibs.strptime, pandas._libs.tslibs.parsing, pandas._libs.tslibs.conversion, pandas._libs.tslibs.period, pandas._libs.tslibs.vectorized, pandas._libs.ops_dispatch, pandas._libs.missing, pandas._libs.hashtable, pandas._libs.algos, pandas._libs.interval, pandas._libs.lib, pyarrow._compute, pandas._libs.ops, pandas._libs.hashing, pandas._libs.arrays, pandas._libs.tslib, pandas._libs.sparse, pandas._libs.internals, pandas._libs.indexing, pandas._libs.index, pandas._libs.writers, pandas._libs.join, pandas._libs.window.aggregations, pandas._libs.window.indexers, pandas._libs.reshape, pandas._libs.groupby, pandas._libs.json, pandas._libs.parsers, pandas._libs.testing, pyarrow._acero, pyarrow._fs, pyarrow._csv, pyarrow._json, pyarrow._substrait, pyarrow._dataset, pyarrow._dataset_orc, pyarrow._parquet, pyarrow._azurefs, pyarrow._hdfs, pyarrow._gcsfs, pyarrow._s3fs, pyarrow._parquet_encryption, pyarrow._dataset_parquet_encryption, pyarrow._dataset_parquet, charset_normalizer.md, charset_normalizer.cd, requests.packages.charset_normalizer.md, requests.packages.chardet.md, requests.packages.charset_normalizer.cd, requests.packages.chardet.cd, yaml._yaml, multidict._multidict, yarl._quoting_c, propcache._helpers_c, aiohttp._http_writer, aiohttp._http_parser, aiohttp._websocket.mask, aiohttp._websocket.reader_c, frozenlist._frozenlist, xxhash._xxhash, scipy._lib._ccallback_c, scipy.sparse._sparsetools, _csparsetools, scipy.sparse._csparsetools, scipy.linalg._fblas, scipy.linalg._flapack, scipy.linalg.cython_lapack, scipy.linalg._cythonized_array_utils, scipy.linalg._solve_toeplitz, scipy.linalg._decomp_lu_cython, scipy.linalg._matfuncs_sqrtm_triu, scipy.linalg._matfuncs_expm, scipy.linalg._linalg_pythran, scipy.linalg.cython_blas, scipy.linalg._decomp_update, scipy.sparse.linalg._dsolve._superlu, scipy.sparse.linalg._eigen.arpack._arpack, scipy.sparse.linalg._propack._spropack, scipy.sparse.linalg._propack._dpropack, scipy.sparse.linalg._propack._cpropack, scipy.sparse.linalg._propack._zpropack, scipy.sparse.csgraph._tools, scipy.sparse.csgraph._shortest_path, scipy.sparse.csgraph._traversal, scipy.sparse.csgraph._min_spanning_tree, scipy.sparse.csgraph._flow, scipy.sparse.csgraph._matching, scipy.sparse.csgraph._reordering, scipy.io.matlab._mio_utils, scipy.io.matlab._streams, scipy.io.matlab._mio5_utils, torch._C, torch._C._dynamo.autograd_compiler, torch._C._dynamo.eval_frame, torch._C._dynamo.guards, torch._C._dynamo.utils, torch._C._fft, torch._C._linalg, torch._C._nested, torch._C._nn, torch._C._sparse, torch._C._special, cuda.bindings._bindings.cydriver, cuda.bindings.cydriver, cuda.bindings.driver, cuda.bindings._bindings.cyruntime_ptds, cuda.bindings._bindings.cyruntime, cuda.bindings.cyruntime, cuda.bindings.runtime (total: 133)

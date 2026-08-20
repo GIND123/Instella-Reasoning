@@ -49,3 +49,14 @@ experiments/runs/*/contamination/synthetic_corpus.jsonl
 # Local Instella JUDGE manuscript bundle
 /Instella_JUDGE.zip
 /Instella_JUDGE/
+
+# Credential files — HF_TOKEN lives in ~/.instella_env on the GPU box, outside any repo.
+.instella_env
+*.token
+secrets/
+
+# Injection-mixture filler (48 MB) and raw benchmark downloads: both re-derivable
+# from experiments/build_injection_mixture.py and the HF loaders. The deletion item
+# sets ARE kept — they define what the study measured.
+experiments/runs/*/phase2/mixture/filler.jsonl
+experiments/runs/*/base/*_all.jsonl
