@@ -465,16 +465,44 @@ class CorpusSpec:
 # absent: `datasets` >= 3 removed script support, and pinning an old `datasets` inside a
 # multi-hour GPU run to recover them is a bad trade.
 CORPUS_SOURCES: dict[str, CorpusSpec] = {
+    # THE STAGE-2 CORPUS. `amd/Instella-GSM8K-synthetic` ships two splits and only
+    # `train_119K` (119,014 rows) was consumed by Instella-3B stage-2 pre-training; the
+    # `train` split (1,367,882 rows) is the larger generated pool the subset was drawn
+    # from. Measuring containment against `train` therefore over-counts exposure: 49.2%
+    # of GSM8K-train items at containment >= 0.80 against the pool are NOT at >= 0.80
+    # against what the model actually saw. Confirmed by the dataset card ("For
+    # Instella-3B model second stage pre-training we used the 'train_119K' split") and
+    # by J. Liu (AMD, personal communication, 2026-08-19).
     "instella-gsm8k-synthetic": CorpusSpec(
         "instella-gsm8k-synthetic",
+        "amd/Instella-GSM8K-synthetic",
+        None,
+        "train_119K",
+        "messages",
+        "full",
+        None,
+        "Stage-2 training data as actually consumed. Ground truth for the exposed arm.",
+    ),
+    # The generated-but-untrained remainder: identical generator, identical GSM8K-train
+    # seeds, never shown to the model. Items high against this pool and low against
+    # `train_119K` are the placebo arm — they control for whatever makes an item
+    # attract high containment while holding actual exposure at zero.
+    "instella-gsm8k-synthetic-pool": CorpusSpec(
+        "instella-gsm8k-synthetic-pool",
         "amd/Instella-GSM8K-synthetic",
         None,
         "train",
         "messages",
         "full",
         None,
-        "Stage-2 source derived from GSM8K train. The ground truth for the seen arm.",
+        "Full released pool (superset of train_119K). NOT stage-2 training data.",
     ),
+    # Enters at SFT (`amd/Instella-3B-SFT`), per the Instella-3B-Instruct model card,
+    # and is inherited by Instruct and Math. Its `gsm8k` problem_source rows are the
+    # GSM8K *train* problems verbatim, so from SFT onward both arms of any contrast
+    # built on stage-2 containment alone are exposed to GSM8K-derived text. Post-training
+    # checkpoints therefore need this corpus in their exposure definition, not just
+    # Instella-GSM8K-synthetic.
     "openmathinstruct2": CorpusSpec(
         "openmathinstruct2",
         "nvidia/OpenMathInstruct-2",
@@ -483,7 +511,7 @@ CORPUS_SOURCES: dict[str, CorpusSpec] = {
         "problem",
         "sampled",
         400_000,
-        "Math instruction corpus; 55 parquet shards.",
+        "SFT-stage math corpus generated from the GSM8K and MATH train sets.",
     ),
     "tulu3-sft": CorpusSpec(
         "tulu3-sft",
