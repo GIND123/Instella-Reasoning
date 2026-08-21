@@ -1,0 +1,27 @@
+{
+  "corpus": "tulu3",
+  "hf_path": "allenai/tulu-3-sft-mixture",
+  "config": null,
+  "rows_scanned": 300000,
+  "threshold": 0.999,
+  "ngram_n": 13,
+  "wall_clock_sec": 214.3,
+  "n_sources_seen": 6,
+  "coverage_note": "Sampled prefix; counts are lower bounds per source.",
+  "routes": [
+    {
+      "source": "ai2-adapt-dev/flan_v2_converted",
+      "item_set": "gsm8k_train",
+      "items_contained": 6021,
+      "rows_from_source": 89982,
+      "share_of_item_set": 0.805701
+    },
+    {
+      "source": "ai2-adapt-dev/tulu_v3.9_wildchat_100k",
+      "item_set": "gsm8k_train",
+      "items_contained": 4,
+      "rows_from_source": 100000,
+      "share_of_item_set": 0.000535
+    }
+  ]
+}

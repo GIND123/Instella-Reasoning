@@ -1,0 +1,84 @@
+{
+  "corpus": "dm_math",
+  "rows_skipped_too_short": 126179,
+  "frac_skipped_too_short": 0.420597,
+  "extraction_suspect": false,
+  "hf_path": "deepmind/math_dataset",
+  "config": null,
+  "data_files": "*/train/*.parquet",
+  "hf_glob": null,
+  "revision": "refs/convert/parquet",
+  "split": "train",
+  "rows_scanned": 300000,
+  "row_limit": 300000,
+  "sampled": true,
+  "ngram_n": 13,
+  "wall_clock_sec": 14.6,
+  "rows_per_hour": 120609939,
+  "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+  "per_item_set": {
+    "gsm8k_train": {
+      "n_items": 7473,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.0,
+      "median": 0.0
+    },
+    "gsm8k_test": {
+      "n_items": 1319,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.0,
+      "median": 0.0
+    },
+    "math_train": {
+      "n_items": 7500,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.0,
+      "median": 0.0
+    }
+  }
+}

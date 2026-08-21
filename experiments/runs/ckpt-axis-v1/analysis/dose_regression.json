@@ -1,0 +1,127 @@
+{
+  "containment_source": "outputs/corpus_scan/train119k_items.jsonl",
+  "n_parents_with_containment": 722,
+  "n_parents_total": 891,
+  "stage1_by_containment": [
+    {
+      "bin": "[0.00,0.10)",
+      "n_parents": 219,
+      "n_rows": 407,
+      "recall_events": 4,
+      "recall_rate": 0.009828,
+      "ci95": [
+        0.002375,
+        0.019753
+      ]
+    },
+    {
+      "bin": "[0.10,0.30)",
+      "n_parents": 177,
+      "n_rows": 326,
+      "recall_events": 6,
+      "recall_rate": 0.018405,
+      "ci95": [
+        0.006006,
+        0.034483
+      ]
+    },
+    {
+      "bin": "[0.30,0.50)",
+      "n_parents": 197,
+      "n_rows": 346,
+      "recall_events": 4,
+      "recall_rate": 0.011561,
+      "ci95": [
+        0.002732,
+        0.023599
+      ]
+    },
+    {
+      "bin": "[0.50,0.80)",
+      "n_parents": 240,
+      "n_rows": 415,
+      "recall_events": 3,
+      "recall_rate": 0.007229,
+      "ci95": [
+        0.0,
+        0.016706
+      ]
+    },
+    {
+      "bin": "[0.80,1.01)",
+      "n_parents": 58,
+      "n_rows": 97,
+      "recall_events": 1,
+      "recall_rate": 0.010309,
+      "ci95": [
+        0.0,
+        0.031915
+      ]
+    }
+  ],
+  "instella3b_by_containment": [
+    {
+      "bin": "[0.00,0.10)",
+      "n_parents": 219,
+      "n_rows": 407,
+      "recall_events": 15,
+      "recall_rate": 0.036855,
+      "ci95": [
+        0.018605,
+        0.058667
+      ]
+    },
+    {
+      "bin": "[0.10,0.30)",
+      "n_parents": 177,
+      "n_rows": 326,
+      "recall_events": 5,
+      "recall_rate": 0.015337,
+      "ci95": [
+        0.003125,
+        0.030675
+      ]
+    },
+    {
+      "bin": "[0.30,0.50)",
+      "n_parents": 197,
+      "n_rows": 346,
+      "recall_events": 3,
+      "recall_rate": 0.008671,
+      "ci95": [
+        0.0,
+        0.019608
+      ]
+    },
+    {
+      "bin": "[0.50,0.80)",
+      "n_parents": 240,
+      "n_rows": 415,
+      "recall_events": 18,
+      "recall_rate": 0.043373,
+      "ci95": [
+        0.025253,
+        0.063882
+      ]
+    },
+    {
+      "bin": "[0.80,1.01)",
+      "n_parents": 58,
+      "n_rows": 97,
+      "recall_events": 4,
+      "recall_rate": 0.041237,
+      "ci95": [
+        0.01,
+        0.081081
+      ]
+    }
+  ],
+  "mde": {
+    "base_rate_p0": 0.028284,
+    "n_parent_clusters": 891,
+    "mean_rows_per_parent": 1.786,
+    "detectable_p1_at_80pct_power": 0.047208,
+    "absolute_increase_pp": 1.892,
+    "note": "Statistical floor only. The empirical floor from Phase 2 is stricter: the probe separated from baseline at 64x exposure (verbatim 0.946) and not at 16x (verbatim 0.491), so near-verbatim memorisation is required before the instrument responds at all."
+  }
+}

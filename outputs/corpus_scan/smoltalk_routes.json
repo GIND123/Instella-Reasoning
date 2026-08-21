@@ -1,0 +1,62 @@
+{
+  "corpus": "smoltalk",
+  "hf_path": "HuggingFaceTB/smoltalk",
+  "config": "all",
+  "rows_scanned": 300000,
+  "threshold": 0.999,
+  "ngram_n": 13,
+  "wall_clock_sec": 158.9,
+  "n_sources_seen": 13,
+  "coverage_note": "Sampled prefix; counts are lower bounds per source.",
+  "routes": [
+    {
+      "source": "metamathqa-50k",
+      "item_set": "gsm8k_train",
+      "items_contained": 2276,
+      "rows_from_source": 13495,
+      "share_of_item_set": 0.304563
+    },
+    {
+      "source": "metamathqa-50k",
+      "item_set": "math_train",
+      "items_contained": 1530,
+      "rows_from_source": 13495,
+      "share_of_item_set": 0.204
+    },
+    {
+      "source": "openhermes-100k",
+      "item_set": "gsm8k_train",
+      "items_contained": 1268,
+      "rows_from_source": 27356,
+      "share_of_item_set": 0.169678
+    },
+    {
+      "source": "numina-cot-100k",
+      "item_set": "gsm8k_train",
+      "items_contained": 523,
+      "rows_from_source": 30537,
+      "share_of_item_set": 0.069985
+    },
+    {
+      "source": "numina-cot-100k",
+      "item_set": "math_train",
+      "items_contained": 228,
+      "rows_from_source": 30537,
+      "share_of_item_set": 0.0304
+    },
+    {
+      "source": "openhermes-100k",
+      "item_set": "math_train",
+      "items_contained": 172,
+      "rows_from_source": 27356,
+      "share_of_item_set": 0.022933
+    },
+    {
+      "source": "smol-magpie-ultra",
+      "item_set": "math_train",
+      "items_contained": 120,
+      "rows_from_source": 117774,
+      "share_of_item_set": 0.016
+    }
+  ]
+}

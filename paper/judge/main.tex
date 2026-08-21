@@ -1,0 +1,575 @@
+\documentclass{article}
+
+% JUDGe 2026 (NeurIPS workshop) --- double-blind, 6 pages + references.
+\usepackage[dblblindworkshop]{neurips_2026}
+% After acceptance, switch to: \usepackage[dblblindworkshop, final]{neurips_2026}
+
+\workshoptitle{Can We Trust the Judge? Reliability and Validity of LLM Evaluators (JUDGe)}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{enumitem}       % required by the \begin{enumerate}[leftmargin=*] options below
+
+\title{Reasoning or Recalling in an LLM Judge, Measured Against Verified
+       Membership in the Instella Training Corpus}
+
+% Under [dblblindworkshop] without [final] the style file anonymises this block
+% automatically; it is retained so the camera-ready compiles unchanged.
+\author{%
+  Anonymous Author(s) \\
+  Affiliation \\
+  Address \\
+  \texttt{email} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Large language models increasingly grade the outputs of other models, yet a judge is
+itself a trained artifact whose competence may depend on whether the graded item
+appeared in the judge's own training corpus. Existing audits characterise position
+bias, verbosity bias, self preference, and generator to evaluator relatedness, none of
+which establishes membership of the graded item, because the corpora of models normally
+deployed as judges are not public. Judge accuracy is measured against exactly verified
+membership. The AMD Instella family publishes a complete pretraining mixture whose stage
+2 component derives from GSM8K train and not from GSM8K test, so membership of each
+graded item follows from exact 13 gram containment against a 1.45 GB corpus rather than
+from a membership inference attack. Difficulty matched arms hold 250 verified seen and
+250 verified unseen problems, with a detector false positive rate of 0.3 percent
+measured against 1000 known negatives. Three judges of increasing capability, namely
+Instella 3B Instruct, Qwen2.5 7B Instruct, and Qwen2.5 14B Instruct, emit 48,408
+verdicts at temperature 0 under two conditions differing only in whether the gold answer
+appears in the judge prompt. Withholding the answer forces assessment of the presented
+reasoning; supplying it reduces grading to comparison and serves as a control, since
+recall of a solution cannot operate once the solution is given. A dissociation follows.
+In the control condition the membership gap in balanced accuracy converges toward zero
+as capability rises, moving from $-0.122$ to $-0.002$ to $+0.008$, while control
+condition balanced accuracy reaches 0.94 to 0.97. Withholding the answer removes the
+convergence: the gap runs $-0.081$, $-0.200$, and $-0.184$ across the same ladder,
+emerging once a judge is competent enough to exhibit it and then holding. Intervals
+derive from a bootstrap over parent problems, matching a measured intraclass correlation
+of 0.48. The pattern is consistent with substitution of recall for verification, whereby
+a remembered answer is compared against a candidate solution to a numerically perturbed
+variant whose correct answer differs. Two negative controls carry methodological weight
+beyond the finding: chance corrected agreement manufactures a large spurious membership
+gap through unequal base rates, and a design restricted to a single 3 billion parameter
+judge reverses the conclusion by sitting within 0.04 of chance in both conditions.
+\end{abstract}
+
+\section{Introduction}
+
+A language model that grades another language model has been promoted,
+quietly and with little argument, from examinee to examiner. The promotion
+carries an assumption that is stated rarely and tested almost never: that a
+grader's competence does not depend on the material placed in front of it.
+An examiner who happens to have read the answer key is still, on that
+assumption, an examiner.
+
+Consider what follows if the assumption fails. A judge asked to rule on a
+candidate solution to a problem it has already read during training may
+produce a verdict that reports recall rather than assessment. The verdict
+then becomes a measurement whose calibration varies with the very quantity
+being measured, which is the one property no instrument is permitted to
+have. Judges of exactly that kind now sit inside reinforcement learning from
+human feedback, direct preference optimisation, and constitutional
+pipelines, where a miscalibrated verdict does not merely mismeasure a model
+but is written into its weights.
+
+The assumption has gone untested for a mundane reason. Testing it requires
+knowing what the judge read, and the models routinely deployed as judges
+do not disclose a training corpus. Prior work has therefore studied what
+could be studied. Zheng et al.~\citep{zheng2023judging} establish that
+frontier judges agree with human preference above eighty percent of the
+time while exhibiting position, verbosity, and self enhancement biases. Li
+et al.~\citep{li2025preference} name preference leakage, a contamination
+problem defined by kinship between the data generator and the evaluator,
+and state explicitly that the mechanism is relatedness between models rather
+than membership of the graded item in the evaluator's corpus. Norman et
+al.~\citep{norman2026reliability} audit twenty one judges across roughly
+541{,}000 judgments and report that high test retest reliability coexists
+with severe position bias, which separates reliability from validity and
+leaves the harder question open. Each study circles the same locked door.
+
+The AMD Instella family~\citep{instella2025} leaves the door unlocked. AMD
+publishes the complete pretraining mixture, and its stage 2 component
+\texttt{amd/Instella-GSM8K-synthetic} is derived from GSM8K
+train~\citep{cobbe2021} and not from GSM8K test. Membership of a GSM8K item
+in the judge's training data therefore follows from exact string overlap
+rather than from a membership inference attack of the kind developed by
+Carlini et al.~\citep{carlini2023} and Shi et al.~\citep{shi2024}, whose
+estimates Yang et al.~\citep{yang2023rephrased} show can be evaded outright
+by rephrasing. The corpus offers a second and less obvious gift. Because it
+is derived from train, every GSM8K test item is a known negative and cannot
+be contaminated, so the error rate of any overlap detector becomes
+measurable instead of arguable. The classical any n gram rule of Brown et
+al.~\citep{brown2020} flags three of one thousand known negatives, a false
+positive rate of 0.3 percent, and the threshold adopted here flags none.
+Whatever else follows, it does not follow from a noisy treatment label.
+
+One condition, however, would not have settled anything. A judge might
+grade memorised problems differently for reasons that have nothing to do
+with memory, and a single measurement cannot tell the two apart. The design
+therefore holds everything fixed except a single sentence in the prompt.
+Withholding the gold answer forces the judge to evaluate the reasoning
+presented, and is the only setting in which recall could plausibly assist.
+Supplying the gold answer reduces grading to comparison and functions as a
+control, since recall of a solution cannot operate once the solution is
+printed on the page. A memorisation account predicts a specific and
+falsifiable shape: the effect must survive in the first condition and
+collapse in the second. A distributional account predicts no such
+asymmetry.
+
+The shape appears. Across three judges of increasing capability, namely
+Instella 3B Instruct, Qwen2.5 7B Instruct, and Qwen2.5 14B
+Instruct~\citep{qwen2024}, and across 48{,}408 verdicts issued at
+temperature 0, the membership gap in the control condition converges toward
+zero as capability rises, moving from $-0.122$ to $-0.002$ to $+0.008$
+while balanced accuracy climbs to between 0.94 and 0.97. In the reference
+free condition no such convergence occurs. The gap runs $-0.081$, $-0.200$,
+and $-0.184$ along the same ladder, appearing once a judge is competent
+enough to exhibit it and holding thereafter. A competent judge grades
+verifiably memorised problems substantially less accurately, and only when
+denied the answer.
+
+Two near misses deserve reporting alongside the finding, because either
+would have been published had the corresponding control been omitted.
+Measured as chance corrected agreement, the membership gap was large and
+excluded zero everywhere, an artifact of unequal ground truth base rates
+across the arms rather than of judge behaviour. Measured on the 3 billion
+parameter judge alone, the gap appeared in both conditions and would have
+supported the opposite conclusion, because a judge sitting within 0.04 of
+chance in every configuration reports its own noise floor rather than a
+property of judging. The control and the capability ladder are jointly load
+bearing, and a design carrying only one of them arrives at the wrong answer
+with confidence.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+  \item \textbf{Judge accuracy conditioned on verified rather than inferred
+        membership.} Across 48{,}408 verdicts, the graded item's presence in a
+        published pretraining corpus is established by exact 13 gram containment,
+        and the detector's own false positive rate is measured at 0.0 percent
+        against one thousand items that cannot be contaminated
+        (Section~\ref{sec:membership}).
+  \item \textbf{A prompt level dissociation that isolates recall from difficulty.}
+        Withholding versus supplying the gold answer changes one sentence and
+        nothing else, so the membership gap surviving in one condition and
+        collapsing in the other excludes the distributional explanations a single
+        condition design cannot address (Sections~\ref{sec:conditions}
+        and~\ref{sec:dissociation}).
+  \item \textbf{A capability ladder showing the effect strengthens with
+        competence.} The reference free gap emerges only once a judge grades
+        reliably, reaching $-0.200$ and $-0.184$ at 7B and 14B, which is the
+        opposite of the shrinking-with-scale signature of a small model artifact
+        (Section~\ref{sec:dissociation}).
+  \item \textbf{Two negative controls reported as findings, not footnotes.}
+        Cohen's kappa manufactures a spurious membership gap of up to $-0.292$
+        with intervals excluding zero, and a design using only the 3B judge
+        reverses the conclusion. Both are retained as methodological cautions for
+        studies of this form (Sections~\ref{sec:metric} and~\ref{sec:competence}).
+\end{enumerate}
+
+\section{Verified Membership}
+\label{sec:membership}
+
+\subsection{Exact containment against a published training corpus}
+Membership is measured against Instella's stage 2 pretraining corpus,
+\texttt{amd/Instella-GSM8K-synthetic} (1.45~GB, ${\sim}1.4$ million synthetic documents),
+which is derived strictly from the GSM8K training split~\citep{cobbe2021}. Before indexing,
+a normalisation pipeline strips punctuation and folds case, reducing all text to lowercase
+alphanumeric tokens (\texttt{[a-z0-9]+}). Following the GPT-3 contamination
+methodology~\citep{brown2020}, each prompt is decomposed into a sliding window of 13
+consecutive tokens. Containment is computed in a single streaming pass using a rolling
+polynomial hash modulo a 61-bit Mersenne prime ($2^{61}-1$) with base $1{,}000{,}003$, so
+cost is linear in corpus tokens and memory is linear in item windows. Containment $c$ is the
+fraction of an item's 13-gram windows found in the corpus. Items are labelled SEEN if
+$c \ge 0.80$ and UNSEEN if $c \le 0.10$; items in between are excluded from both arms rather
+than assigned to one, on the principle that an indefensible treatment label costs more than a
+smaller sample. From the eligible pools the two arms are drawn as 250 seen and 250 unseen
+problems, matched on a three-way difficulty stratification (84/83/83 items per stratum) so
+that arm composition cannot substitute for a membership effect.
+
+\subsection{Detector false positive rate on one thousand known negatives}
+Because the corpus derives strictly from the training split, the 1{,}000 items of the GSM8K
+test split are guaranteed true negatives, and the false positive rate of any threshold
+becomes measurable rather than arguable. Table~\ref{tab:fpr_audit} reports the audit for
+three rules. The permissive any-match rule of Brown et al.~\citep{brown2020} flags 3 of
+1{,}000 known negatives; the threshold adopted here flags none. Test-item containment has
+median 0.000, 99th percentile 0.000, and maximum 0.538. At a measured 0.0 percent false
+positive rate on known negatives, treatment label noise is not an available explanation for
+any result below.
+
+\begin{table}[h]
+  \centering
+  \small
+  \caption{Detector false positive audit against 1{,}000 known negatives from GSM8K test.}
+  \label{tab:fpr_audit}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Detection rule} & \textbf{Train flagged} & \textbf{Test flagged} & \textbf{FPR} \\
+    \midrule
+    Any 13-gram match~\citep{brown2020}        & 866 / 1{,}000 & 3 / 1{,}000 & 0.3\% \\
+    Containment $c \ge 0.50$                    & 584 / 1{,}000 & 1 / 1{,}000 & 0.1\% \\
+    \textbf{Containment $c \ge 0.80$ (ours)}    & \textbf{303 / 1{,}000} & \textbf{0 / 1{,}000} & \textbf{0.0\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Identifier namespacing and a containment measurement failure}
+GSM8K train and test share an identical identifier schema, \texttt{gsm8k\_NNNNN}, so loading
+1{,}000 items from each collides on every identifier. Keying the 13-gram match index by bare
+identifier lets match counts from disjoint splits accumulate into a shared bucket. Because
+the denominator window count is fixed per prompt while the numerator accumulates across
+splits, containment, a fraction bounded above by unity, reached 7.78. Prepending split
+namespaces (\texttt{train::gsm8k\_00001}) isolates the buckets and restores $c \in [0,1]$.
+The failure is reported because any replication of this design that loads both splits will
+encounter it, and because it silently invalidates treatment assignment rather than crashing.
+
+\section{Judge Protocol}
+
+\subsection{Graded units, checkpoints, and variant composition}
+The 250 seen and 250 unseen parent problems are expanded into 2{,}017 variant rows. Each
+parent yields one original, two answer-preserving structural rewrites (rephrasing, distractor
+insertion), and two answer-changing numeric perturbations in the style of
+GSM-Symbolic~\citep{mirzadeh2025}; rows failing validation are dropped, leaving 1{,}484
+answer-preserving rows and 533 answer-changing rows. Separating the two variant types is what
+makes movement within an arm interpretable: an answer-preserving rewrite leaves the gold
+answer intact, so any change in judge accuracy across it is judge fragility, not task
+difficulty.
+
+A graded unit is a triple $(x, y, \hat{v})$, where $x$ is the variant prompt, $y$ is the
+candidate solution, and $\hat{v} \in \{\textsc{correct}, \textsc{incorrect}, \textsc{abstain}\}$
+is the judge's verdict. Candidate solutions are generated by four checkpoints spanning the
+Instella-3B training lifespan: \texttt{stage1} (base), \texttt{stage2} (after
+\texttt{amd/Instella-GSM8K-synthetic} enters training), \texttt{sft}, and \texttt{instruct}.
+Generation is greedy in bfloat16 at a fixed batch size of 8 under
+\texttt{transformers==4.56.0} pinned exactly. Both controls are load bearing rather than
+incidental: a version range would place different checkpoints on different minor versions and
+enter the estimate as though it were a model difference, and greedy bf16 decoding is sensitive
+to padding, so a change in batch size alters tie breaking.
+
+\subsection{The reference free condition and the reference based control}
+\label{sec:conditions}
+The two conditions differ only in whether the gold answer appears in the judge prompt. In the
+\emph{reference free} condition, the primary test setting, the gold answer is withheld and the
+judge must evaluate the candidate's step-by-step reasoning; this is the only setting in which
+recall of a memorised solution could plausibly assist. In the \emph{reference based} condition
+the gold answer for the specific variant is supplied, reducing grading to comparison. The
+latter is the control: an effect appearing there cannot be recall of the solution, because the
+solution is on the page.
+
+The contrast is what carries the inference. A memorisation account predicts that the seen-item
+penalty persists under reference free grading and collapses toward zero under reference based
+grading. An account based on item difficulty or on distributional differences between the arms
+predicts the penalty in both conditions, because neither the items nor their difficulty change
+between them.
+
+\subsection{Verdict parsing and abstention accounting}
+Judges emit a verdict at temperature 0 under a 24-token budget. Extraction applies a
+negative-first substring rule, testing for \textsc{incorrect} before \textsc{correct}, since
+the latter is a substring of the former and a naive parser silently inverts every negative
+verdict. A response committing to neither class is recorded as an abstention rather than as a
+disagreement; conflating the two inflates apparent reliability. Abstention rates range from
+0.0 to 2.6 percent (Appendix~\ref{app:figures}).
+
+\subsection{Balanced accuracy, and why chance corrected agreement fails here}
+\label{sec:metric}
+Judge accuracy was first measured as Cohen's kappa against exact-match ground truth. The
+result appeared decisive and was wrong: the membership gap ran from $-0.168$ to $-0.292$ with
+intervals excluding zero. Kappa is a function of the marginal distributions as well as of the
+agreement, and the arms have very different ground-truth base rates: \texttt{instruct} is
+correct on 77 percent of seen rows against 53 percent of unseen rows. An arm whose base rate
+sits near one half has substantially more kappa headroom than a skewed arm, so the skew alone
+generates a gap even when judge decision quality is identical. This is the kappa
+paradox~\citep{feinstein1990}, a known property of the statistic rather than a finding of this
+work; it is reported because it produced a publishable-looking result on this data.
+
+All results below use \textbf{balanced accuracy}, the unweighted mean of sensitivity and
+specificity. Both quantities condition on the true class, so neither depends on the base rate,
+their mean is comparable across arms by construction, and chance is 0.50 regardless of skew.
+
+\subsection{Cluster robust inference over parent problems}
+The 2{,}017 rows are not 2{,}017 independent observations: rows derived from the same parent
+problem are strongly correlated, with a measured intraclass correlation of approximately 0.48.
+At a mean cluster size of 4.0 rows this implies a design effect of roughly 2.4, so resampling
+rows would understate standard errors by about that factor and contract intervals accordingly.
+All intervals therefore come from a bootstrap with 4{,}000 resamples that draws \emph{parent
+problems} as indivisible clusters.
+
+\section{Results}
+
+\subsection{Judge competence is demonstrated, not assumed}
+\label{sec:competence}
+An instrument claim requires an instrument that works, so baseline competence is measured
+rather than assumed (Table~\ref{tab:dissociation}). The Instella-3B-Instruct judge sits within
+0.04 of chance on the seen arm in every configuration, including when handed the reference
+answer, so its rows describe a noise floor rather than a judge. The 7B and 14B judges reach
+0.9370 to 0.9728 balanced accuracy in the reference based control
+(Figure~\ref{fig:judge_ladder}). The substantive claims below
+therefore rest on demonstrably competent instruments, and the 3B rows are retained only as the
+negative control described in Section~\ref{sec:dissociation}.
+
+\subsection{The dissociation across the capability ladder}
+\label{sec:dissociation}
+In the reference based control the membership gap converges toward zero as capability rises:
+$-0.0541$, $-0.0359$, $-0.0230$ on \texttt{instruct} outputs, and $-0.1219$, $-0.0024$,
+$+0.0077$ on \texttt{stage2} outputs, with the final intervals spanning zero in both cases.
+In the reference free condition it does not converge. The two competent judges show gaps of
+$-0.2000$ and $-0.1840$, with 95 percent cluster bootstrap intervals excluding zero
+(Table~\ref{tab:dissociation}, Figure~\ref{fig:judge_dissociation}).
+
+Three readings follow. Capability is real: given the reference answer, the larger judges are
+strong, so conclusions about the instrument come from instruments that work. The control
+behaves as a control: supplying the correct answer for the specific variant removes the effect,
+which is what a memorisation account predicts and a distributional account does not, since the
+items are identical across conditions. And scale does not rescue the reference free gap, which
+grows once the judge is competent enough to exhibit it and then holds; a small-model artifact
+would shrink instead. A design restricted to the 3B judge would have found a gap in both
+conditions, $-0.0541$ and $-0.0809$, and concluded the opposite.
+
+\begin{table}[h]
+  \centering
+  \footnotesize
+  \caption{Balanced accuracy by verified membership, grading \texttt{instruct} outputs.
+  $\Delta$ is seen minus unseen; brackets give 95 percent parent-problem cluster bootstrap
+  intervals. The control gap converges toward zero up the ladder; the reference free gap does
+  not. Equivalent tables for the other three target checkpoints are in
+  Appendix~\ref{app:configs}.}
+  \label{tab:dissociation}
+  \begin{tabular}{lccccccc}
+    \toprule
+    & \multicolumn{3}{c}{\textbf{Reference based (control)}} & & \multicolumn{3}{c}{\textbf{Reference free}} \\
+    \cmidrule(lr){2-4} \cmidrule(lr){6-8}
+    \textbf{Judge} & seen & unseen & $\Delta$ [95\% CI] & & seen & unseen & $\Delta$ [95\% CI] \\
+    \midrule
+    Instella-3B-Instruct & 0.5137 & 0.5678 & $-0.054$ [$-.083, -.026$] & & 0.5016 & 0.5825 & $-0.081$ [$-.109, -.054$] \\
+    Qwen2.5-7B-Instruct  & 0.9370 & 0.9728 & $-0.036$ [$-.068, -.008$] & & 0.5998 & 0.7998 & $\mathbf{-0.200}$ [$-.248, -.149$] \\
+    Qwen2.5-14B-Instruct & 0.9459 & 0.9689 & $-0.023$ [$-.057, +.006$] & & 0.6362 & 0.8202 & $\mathbf{-0.184}$ [$-.231, -.133$] \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.78\linewidth]{figures/j4_judge_dissociation.png}
+  \caption{Reference based grading converges toward zero as judge capability rises; reference
+  free grading does not. Error bars are 95 percent parent-problem cluster bootstrap intervals.}
+  \label{fig:judge_dissociation}
+\end{figure}
+
+\subsection{Reliability per design cell, and abstention as a separate series}
+Decomposing accuracy across the cells of the membership $\times$ perturbation design separates
+prompt fragility from task difficulty. Answer-preserving rewrites leave the gold answer intact,
+so movement between original and rewritten prompts within an arm is judge fragility by
+construction. Under reference free grading on seen problems, accuracy instead drops sharply on
+the answer-changing perturbations, which is where a remembered answer would be wrong
+(Figure~\ref{fig:judge_cells}). Abstentions are tracked as a separate series rather than folded
+into disagreement, since selective abstention can inflate accuracy by discarding hard cases;
+rates stay between 0.0 and 2.6 percent across all 48{,}408 verdicts, so the balanced accuracy
+figures are not an artifact of it (Figure~\ref{fig:judge_abstention}).
+
+\subsection{Mechanism: recall substituted for verification}
+The pattern is consistent with the judge substituting retrieval of a remembered answer for
+verification of the reasoning presented. Answer-changing perturbations have different correct
+answers from the memorised original, so a judge comparing against recall marks valid
+calculations wrong, and the degradation should concentrate on exactly those 533 rows, which is
+where Figure~\ref{fig:judge_cells} places it. Supplying the target answer bypasses the lookup
+and collapses the seen-item penalty. The account is inferential, derived from the experimental
+dissociation rather than from training data attribution; confirming it directly would require
+influence-function attribution~\citep{koh2017,pruthi2020,grosse2023} linking a verdict to a
+specific memorised document.
+
+\section{Threats to Validity}
+
+\paragraph{Membership is verified for one judge and assumed for two.}
+Membership is established against Instella's published corpus, so the Instella judge has
+verified membership while the Qwen judges are graded against a corpus that is not theirs. The
+Qwen results establish that a competent judge exhibits the dissociation on this item partition,
+but membership in Qwen's own corpus is unknown. This is a genuine asymmetry: the strongest
+evidence comes from the judges whose membership cannot be verified. Resolving it requires a
+second open-corpus family of comparable capability.
+
+\paragraph{One model family provides the candidate solutions.}
+All graded outputs come from Instella-3B checkpoints. Whether the dissociation reproduces on
+candidate solutions from other families is untested.
+
+\paragraph{Two conditions, one prompt template.}
+Both conditions use a single standardised template (Appendix~\ref{app:prompts}). Sensitivity of
+the dissociation to judge prompt phrasing, instruction wording, or formatting is untested, and
+a prompt-perturbation sweep is the most direct extension of this work.
+
+\paragraph{The null after supervised fine tuning is unexplained.}
+The effect concentrates on \texttt{stage2} and \texttt{instruct} outputs. The \texttt{stage1}
+null is accounted for: those outputs are wrong almost everywhere, at 7 percent accuracy, and are
+therefore trivially gradeable in either condition. The \texttt{sft} null is not. Its outputs are
+of comparable quality to \texttt{instruct}, yet it shows no membership gap in either condition,
+and the present data do not explain why.
+
+\section{Conclusion}
+LLM judge reliability is not independent of the material judged. On problems whose presence in
+a training corpus is established by exact overlap rather than inferred, a competent judge grades
+substantially less accurately, and the degradation appears only when the reference answer is
+withheld. The reference based control converging toward zero while the reference free gap
+persists is what separates this finding from the distributional explanations a single condition
+design cannot exclude.
+
+The two negative controls carry methodological weight beyond the specific result. Cohen's kappa
+manufactured a large and interval-excluding spurious effect through base-rate skew, and a single
+3 billion parameter judge produced the opposite conclusion by reporting its own noise floor in
+both conditions. Studies of this form require a base-rate-invariant metric, cluster-robust
+inference over the correct unit, and an instrument whose competence is demonstrated rather than
+assumed.
+
+\bibliographystyle{plainnat}
+\bibliography{judge}
+
+\appendix
+
+\section{Related work in full}
+\label{app:related}
+
+\paragraph{Judge reliability and bias.}
+Zheng et al.~\citep{zheng2023judging} introduce MT-Bench and Chatbot Arena, report that frontier
+judges reach above 80 percent agreement with human preference, and identify position, verbosity,
+and self-enhancement biases. Norman et al.~\citep{norman2026reliability} extend this to a
+systematic audit across 21 judges and three benchmarks using Cohen's kappa, Krippendorff's alpha,
+position bias measured as deviation of paired outcome probability from one half, and test-retest
+reliability. They report same-verdict rates above 95 percent at temperature 0, falling to roughly
+70 percent at temperature 1, which is why the judge is held at temperature 0 throughout this work:
+a sampled judge would confound the membership contrast with its own decoding noise.
+
+\paragraph{Contamination in judging.}
+Li et al.~\citep{li2025preference} define preference leakage as bias arising when the data
+generator and the evaluator are the same model, share an inheritance relationship, or belong to
+one family. The mechanism is relatedness between models, not membership of the evaluated item in
+the evaluator's training data, and the paper does not test the latter. The present design holds
+the generator family fixed and varies membership instead, which is the complementary contrast.
+
+\paragraph{Contamination detection.}
+The n-gram overlap family originates with Brown et al.~\citep{brown2020}, who flag an item when
+any of its n-grams appears in the corpus. Perplexity-based membership inference is developed by
+Carlini et al.~\citep{carlini2023} and Shi et al.~\citep{shi2024}. Yang
+et al.~\citep{yang2023rephrased} show that n-gram filtering misses rephrased contamination
+entirely. All of these \emph{estimate} membership; the present setting \emph{establishes} it,
+which is what permits the detector's false positive rate to be measured rather than assumed.
+
+\paragraph{Reasoning robustness.}
+Mirzadeh et al.~\citep{mirzadeh2025} introduce GSM-Symbolic and hypothesise that models replicate
+reasoning steps seen in training rather than reasoning, reporting drops of up to 65 percent when
+an irrelevant clause is added. Ivanova~\citep{ivanova2024} challenges the statistical basis,
+finding that for 21 of 25 models there is insufficient evidence to reject equality of performance
+between GSM8K and GSM-Symbolic. The perturbation apparatus here follows the former; the
+statistical posture, in particular the refusal to read a point estimate whose interval spans zero,
+follows the latter.
+
+\section{All twenty four judge configurations}
+\label{app:configs}
+The full grid is three judges $\times$ four target checkpoints $\times$ two conditions, giving 24
+configurations of 2{,}017 rows each and 48{,}408 verdicts in total. Per-configuration balanced
+accuracy, sensitivity, specificity, abstention rate, ground-truth base rate, and both the adopted
+balanced-accuracy figures and the discarded Cohen's kappa figures are released in
+\texttt{analysis/judge\_reliability.json}, so the rejected metric remains inspectable alongside
+the adopted one.
+
+\section{Supplementary figures}
+\label{app:figures}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/j5_judge_ladder.png}
+  \caption{Absolute balanced accuracy up the capability ladder, both conditions and both arms.
+  The dashed line is chance for a base-rate-invariant binary metric. Included so that the
+  dissociation in Figure~\ref{fig:judge_dissociation} is read against judges demonstrably above
+  chance.}
+  \label{fig:judge_ladder}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/j3_judge_cells.png}
+  \caption{Balanced accuracy per cell of the membership $\times$ perturbation design under
+  reference free grading. Answer-preserving rewrites leave the gold answer intact, so movement
+  between original and rewritten prompts within an arm reflects judge fragility rather than task
+  difficulty.}
+  \label{fig:judge_cells}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/j2_judge_abstention.png}
+  \caption{Abstention and raw agreement plotted as separate series across judge configurations.
+  Abstention stays between 0.0 and 2.6 percent, so the balanced accuracy figures are not an
+  artifact of selective abstention.}
+  \label{fig:judge_abstention}
+\end{figure}
+
+\section{Judge prompt templates for both conditions}
+\label{app:prompts}
+Both conditions share every token except the reference block. The judge is instructed to emit a
+single word and is decoded greedily under a 24-token budget.
+
+\paragraph{Reference free.}
+\begin{quote}\small\ttfamily
+You are grading a math solution. Problem: \{problem\}\\
+Proposed solution: \{solution\}\\
+Is the proposed solution correct? Answer with exactly one word, CORRECT or INCORRECT.
+\end{quote}
+
+\paragraph{Reference based (control).}
+\begin{quote}\small\ttfamily
+You are grading a math solution. Problem: \{problem\}\\
+Correct answer: \{gold\}\\
+Proposed solution: \{solution\}\\
+Is the proposed solution correct? Answer with exactly one word, CORRECT or INCORRECT.
+\end{quote}
+
+Parsing tests for \texttt{INCORRECT} before \texttt{CORRECT}, since the latter is a substring of
+the former. Responses matching neither are recorded as abstentions.
+
+\section{Reproduction, artifacts, and compute}
+\label{app:repro}
+Judge grading consumed 1.51 GPU-hours on a single A100 40GB for all 48{,}408 verdicts.
+Candidate-solution generation across the four checkpoints is reported separately in the
+accompanying artifact release. The full pipeline is driven by three commands:
+
+\begin{quote}\small\ttfamily
+modal run experiments/modal\_fullscale.py::judge\_run --tag instruct \\
+\hspace*{2em}--mode reference\_free --judge-model "Qwen/Qwen2.5-7B-Instruct" \\
+modal run experiments/modal\_fullscale.py::judge\_analysis --write \\
+modal run experiments/modal\_fullscale.py::supplementary\_figures
+\end{quote}
+
+Raw verdicts, generations, exact-match scores, containment measurements, analysis artifacts, and
+all figures are released under \texttt{experiments/runs/fullscale-S250-v2}. Determinism controls:
+\texttt{transformers} pinned to 4.56.0, greedy bfloat16 decoding, batch size fixed at 8, variants
+seeded per (item, perturbation type) so variant text is stable regardless of call order, and every
+generation batch flushed and fsynced with resume keyed on item identifier.
+
+\paragraph{Anonymisation.}
+Review is double blind. The artifact repository and dataset are hosted at an anonymised mirror for
+the review period; the de-anonymised links will be substituted in the camera-ready version.
+
+\section{Broader impact}
+\label{app:impact}
+The finding is a caution about measurement rather than a capability advance. LLM judges are
+already embedded in preference optimisation pipelines, where a verdict is not merely reported but
+written into model weights. A judge that degrades on exactly the benchmark items most likely to
+appear in public training corpora will bias those pipelines in a direction that standard judge
+audits, which do not condition on membership, are not designed to detect. The practical
+recommendation is narrow and cheap: where a candidate reference answer exists, supply it, since
+the control condition here shows the membership gap collapsing when it is present. No new models,
+datasets, or capabilities are released; the artifacts are evaluation records over public
+benchmarks and a publicly released pretraining corpus.
+
+\end{document}

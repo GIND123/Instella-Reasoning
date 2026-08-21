@@ -58,3 +58,62 @@ mass rather than sitting on a knife-edge argmax.
 injected tokens verbatim and the probe detects nothing. The probe therefore requires
 near-verbatim memorisation before it registers, which is what makes the Phase 1 null
 a *bounded* null rather than a bare one.
+
+## Dose regression - recall against Stage-2 containment
+
+A third null, and the only one that does not use the train/test contrast, so the
+generalisation-gap objection does not reach it. Containment against `train_119K`
+is continuous across the train arm; if the Stage-2 rise were memorisation, recall
+should climb with it.
+
+| containment bin | parents | rows | recall | rate | 95% CI |
+|---|---|---|---|---|---|
+| [0.00,0.10) | 219 | 407 | 15 | 0.0369 | [0.0186, 0.0587] |
+| [0.10,0.30) | 177 | 326 | 5 | 0.0153 | [0.0031, 0.0307] |
+| [0.30,0.50) | 197 | 346 | 3 | 0.0087 | [0.0000, 0.0196] |
+| [0.50,0.80) | 240 | 415 | 18 | 0.0434 | [0.0253, 0.0639] |
+| [0.80,1.01) | 58 | 97 | 4 | 0.0412 | [0.0100, 0.0811] |
+
+Non-monotonic, every interval overlapping: the least-contained bin matches the
+most-contained one.
+
+**Minimum detectable effect.** Base rate 0.0283 over 891 parent clusters: an increase to 0.0472 (**+1.89 pp**) would be detected at 80% power. The observed DiD is -0.26 pp.
+
+> Statistical floor only. The empirical floor from Phase 2 is stricter: the probe separated from baseline at 64x exposure (verbatim 0.946) and not at 16x (verbatim 0.491), so near-verbatim memorisation is required before the instrument responds at all.
+
+## Phase 3 - corpus containment (appendix material)
+
+Item sets indexed together in one pass: GSM8K train (7,473), GSM8K test (1,319),
+MATH train (7,500).
+
+| corpus | rows | GSM8K train >=0.999 | GSM8K **test** >=0.999 | MATH train >=0.999 | extraction |
+|---|---|---|---|---|---|
+| dm_math | 300,000 | 0 | 0 | 0 | ok |
+| dolmino | 200,000 | 0 | 0 | 0 | ok |
+| olmoe_algebraic-stack | 200,000 | 0 | 0 | 25 | ok |
+| olmoe_open-web-math | 200,000 | 0 | 0 | 126 | ok |
+| openhermes | 300,000 | 1 | 2 | 1 | ok |
+| smoltalk | 300,000 | 3453 | 0 | 1947 | ok |
+| train119k | 119,014 | 21 | 0 | 0 | ok |
+| ultrachat | 200,000 | 0 | 0 | 0 | ok |
+| webinstruct | 300,000 | 0 | 0 | 1 | ok |
+
+**Every scan is a sampled prefix.** Containment is a *lower* bound: a zero means
+"absent from the rows scanned", never "absent from the corpus".
+
+### Route attribution
+
+| corpus | source subset | item set | items | share of set | from rows |
+|---|---|---|---|---|---|
+| smoltalk | metamathqa-50k | gsm8k_train | 2276 | 30.5% | 13,495 |
+| smoltalk | metamathqa-50k | math_train | 1530 | 20.4% | 13,495 |
+| smoltalk | openhermes-100k | gsm8k_train | 1268 | 17.0% | 27,356 |
+| smoltalk | numina-cot-100k | gsm8k_train | 523 | 7.0% | 30,537 |
+| smoltalk | numina-cot-100k | math_train | 228 | 3.0% | 30,537 |
+| smoltalk | openhermes-100k | math_train | 172 | 2.3% | 27,356 |
+| smoltalk | smol-magpie-ultra | math_train | 120 | 1.6% | 117,774 |
+| tulu3 | ai2-adapt-dev/flan_v2_converted | gsm8k_train | 6021 | 80.6% | 89,982 |
+| tulu3 | ai2-adapt-dev/tulu_v3.9_wildchat_100k | gsm8k_train | 4 | 0.1% | 100,000 |
+
+A prefix is not a representative sample of a mixture's *source* composition:
+the tulu3 scan reached only 6 of its subsets in 300,000 rows.
