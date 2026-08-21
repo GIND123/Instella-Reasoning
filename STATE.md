@@ -2,7 +2,10 @@ GOAL: Checkpoint-axis premise-deletion study for the MATH-AI workshop paper (4 p
       NeurIPS dblblindworkshop template, non-archival, unlimited appendix).
 
 ================================================================================
-STATUS AT HANDOFF: all machine work is DONE. Only the paper remains, and it is yours.
+STATUS AT HANDOFF: EVERYTHING EXCEPT THE PAPER IS DONE, DOCUMENTED, AND PUSHED.
+  git  ae3b84b on agent/ckpt-axis-deletion-probe (GitHub)
+  HF   GOVINDFROM/Instella-Reasoning -- run dir, outputs/corpus_scan, paper/figures
+  Only remaining work: the 4-page paper, and the email to Jiang. Both yours.
 ================================================================================
 
 PHASES 0-4 -- WHAT IS COMPLETE
@@ -98,14 +101,23 @@ WHERE THINGS LIVE
   gone    the five fp16 dose checkpoints (destroyed with the GPU box; exactly
           reproducible from inject_pretrain.py at seed 6198)
 
-FIRST THINGS TOMORROW (suggested scoping, ~15 min of machine work)
-  1. Commit tonight's work to the branch (figures, Phase 3 outputs, dose regression,
-     scan_corpora/route_attribution fixes, docs/FIGURES.md updates).
-  2. Push the updated run dir to HF so the three copies match again.
-  3. Fold tonight's new numbers into docs/FIGURES.md and analysis/RESULTS.md -- both
-     predate the OpenHermes correction, dm_math, train_119K, the route tables and the
-     dose regression.
-  Then the paper.
+DONE SINCE THE FIRST HANDOFF (all three items closed)
+  1. Committed and pushed to GitHub: ae3b84b, 50 files, +21,056 lines.
+  2. HF resynced: run dir + outputs/corpus_scan + paper/figures.
+  3. docs/FIGURES.md and analysis/RESULTS.md regenerated with every new number --
+     corrected OpenHermes, the test-contamination sensitivity check, dm_math,
+     train_119K, both route tables, dose regression, MDE.
+  Also written: docs/CHECKPOINT_AXIS_STUDY.md (design, pipeline, decisions,
+  limitations) and a rescoped README pointing at the active study.
+
+WHERE TO START ON THE PAPER
+  Read in this order: STATE.md (this file) -> docs/CHECKPOINT_AXIS_STUDY.md for the
+  design and the limitations paragraph -> analysis/RESULTS.md for the numbers ->
+  docs/FIGURES.md when you need a specific figure's exact n or event count.
+  F1 and F2 carry the main text; F3 is the one to cut if four pages bind.
+  MATH-AI 2025 CFP said 4 pages + unlimited appendix, NeurIPS dblblindworkshop
+  template, non-archival, OpenReview double-blind. The deadline on that page reads
+  Sept 26 2025, which is stale relative to today -- confirm the real one.
 
 WORKING COMMANDS
   .venv/bin/python experiments/analyze_ckpt_axis.py --run experiments/runs/ckpt-axis-v1
