@@ -535,12 +535,12 @@ def extraction_audit(write: bool = False) -> dict:
         # The bias that survives into the DiD is the SECOND difference of the tier-1 rate,
         # not its spread. A tier gap between seen and unseen that is identical under both
         # conditions subtracts out; only a gap that *changes* with the condition leaks in.
-        def rate(arm: str, cond: str) -> float:
+        def rate(arm: str, cond: str, cells=cells) -> float:
             t = cells.get((arm, cond))
             n = sum(t.values()) if t else 0
             return (t["1_marker"] / n) if n else 0.0
 
-        def acc_of(arm: str, cond: str) -> float:
+        def acc_of(arm: str, cond: str, acc=acc) -> float:
             v = acc.get((arm, cond)) or []
             return sum(v) / len(v) if v else 0.0
 
@@ -888,7 +888,6 @@ def run_extra(tag: str, block: str = "arms", temperature: float = 0.0,
     checkpoint is measured on the same terms as the existing three. Anything else would make
     a trajectory difference indistinguishable from a configuration difference.
     """
-    import json
 
     from instella_reasoning.checkpoints import resolve
     from instella_reasoning.evaluation import (
@@ -1080,7 +1079,7 @@ def judge_run(tag: str = "instruct", mode: str = "reference_free",
                 ids = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
                                      pad_token_id=tok.pad_token_id)
             rows = []
-            for bid, seq in zip(chunk, ids):
+            for bid, seq in zip(chunk, ids, strict=False):
                 raw = tok.decode(seq[enc["input_ids"].shape[1]:], skip_special_tokens=True)
                 item = items[bid]
                 rows.append({
@@ -1417,7 +1416,7 @@ def judge_analysis(run: str = "fullscale-S250-v2", n_bootstrap: int = 4000,
 
         # Resample parent items, not rows. Balanced accuracy is the headline; kappa is carried
         # only so the base-rate artifact remains visible next to the corrected number.
-        def boot(metric) -> list:
+        def boot(metric, clusters=clusters) -> list:
             keys = list(clusters)
             rng = random.Random(seed)
             draws = []
@@ -1579,7 +1578,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
     ax.plot(thr, tpr, marker="o", color=SERIES[0], lw=2, label="GSM8K train flagged")
     ax.plot(thr, fpr, marker="s", color=SERIES[1], lw=2, label="GSM8K test flagged (false positives)")
-    for x, y in zip(thr, fpr):
+    for x, y in zip(thr, fpr, strict=False):
         ax.annotate(f"{y:.1f}%", (x, y), textcoords="offset points", xytext=(0, 8),
                     fontsize=8, color=INK_SECONDARY, ha="center")
     ax.set_xlabel("containment threshold for a contamination flag", color=INK, fontsize=10)
@@ -1602,7 +1601,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
     xs = range(len(keys))
     ax.bar(xs, t1, color=SERIES[0], label="tier 1  #### marker")
     ax.bar(xs, t2, bottom=t1, color=SERIES[2], label="tier 2  answer-is phrase")
-    ax.bar(xs, t3, bottom=[a + b for a, b in zip(t1, t2)], color=SERIES[3],
+    ax.bar(xs, t3, bottom=[a + b for a, b in zip(t1, t2, strict=False)], color=SERIES[3],
            label="tier 3  last number")
     for i, v in enumerate(t1):
         ax.text(i, v / 2, f"{v:.0f}%", ha="center", va="center", fontsize=9, color="white")
@@ -1667,7 +1666,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
         # the gap as a property of the judge; the control is what makes it interpretable.
         if judges:
             fig, axes4 = plt.subplots(1, 2, figsize=(9.8, 4.3), sharey=True)
-            for ax, target in zip(axes4, ["stage2", "instruct"]):
+            for ax, target in zip(axes4, ["stage2", "instruct"], strict=False):
                 xs = list(range(len(judges)))
                 for k, mode in enumerate(modes):
                     ys, los, his = [], [], []
@@ -1698,7 +1697,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
             # J5 -- absolute reliability up the ladder, so the dissociation is read against
             # judges that are actually competent rather than against noise.
             fig, axes5 = plt.subplots(1, 2, figsize=(9.8, 4.3), sharey=True)
-            for ax, mode in zip(axes5, modes):
+            for ax, mode in zip(axes5, modes, strict=False):
                 xs = list(range(len(judges)))
                 for k, arm in enumerate(["seen", "unseen"]):
                     ys = []
@@ -1725,7 +1724,7 @@ def supplementary_figures(run: str = "fullscale-S250-v2") -> list[str]:
 
         # J1 keeps the original per-target view, for the in-family judge only.
         fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.4), sharey=True)
-        for ax, mode in zip(axes, modes):
+        for ax, mode in zip(axes, modes, strict=False):
             present = [t for t in tags if f"instella-3b-instruct__{t}__{mode}" in jr]
             xs = range(len(present))
             ba = [jr[f"instella-3b-instruct__{t}__{mode}"]["balanced_accuracy"] for t in present]
@@ -2061,7 +2060,6 @@ def termination_by_cell(tag: str = "stage1", run: str = "fullscale-S250-v2") -> 
     Also splits reused (v1, some regenerated at 2048 tokens) from new (1024) rows, because a
     mixed token budget inside one block is itself a measurement inconsistency.
     """
-    import glob
     import json
 
     os.chdir(REPO_REMOTE)
@@ -2169,7 +2167,6 @@ def stage_v2(n_per_arm: int = 250, src_name: str = "fullscale-S250",
     * **F4** -- ``containment.json`` is rewritten from the corrected measurement, so the
       figure no longer plots containment above 1.0.
     """
-    import glob
     import json
     import shutil
     from collections import defaultdict

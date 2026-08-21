@@ -33,7 +33,6 @@ from collections import defaultdict
 from pathlib import Path
 
 from instella_reasoning.analysis.figures import (
-    GRID,
     INK,
     INK_MUTED,
     INK_SECONDARY,
@@ -109,15 +108,17 @@ def build(run: str | Path, out_dir: str | Path) -> list[str] | None:
         rates, los, his, counts = [], [], [], []
         for model, _ in ORDER:
             rate, lo, hi, hit = data[arm].get(model, (0.0, 0.0, 0.0, 0))
-            rates.append(rate * 100); los.append((rate - lo) * 100)
-            his.append((hi - rate) * 100); counts.append(hit)
+            rates.append(rate * 100)
+            los.append((rate - lo) * 100)
+            his.append((hi - rate) * 100)
+            counts.append(hit)
         ax.bar([x + off for x in xs], rates, width * 0.92, color=colour,
                edgecolor=SURFACE, linewidth=1.4, label=arm_label, zorder=3)
         ax.errorbar([x + off for x in xs], rates, yerr=[los, his], fmt="none",
                     ecolor=INK_SECONDARY, elinewidth=1.0, capsize=2.0, zorder=4)
         # Direct count labels: the relief the contrast WARN requires, and the honesty a
         # percentage alone destroys — 2.1% here is 34 events, not a stable rate.
-        for x, rate, hi, c in zip(xs, rates, his, counts):
+        for x, rate, hi, c in zip(xs, rates, his, counts, strict=True):
             ax.text(x + off, rate + hi + 0.16, str(c), ha="center", va="bottom",
                     fontsize=6.5, color=INK_SECONDARY, zorder=5)
 

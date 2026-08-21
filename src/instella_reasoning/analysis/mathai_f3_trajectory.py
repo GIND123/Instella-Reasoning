@@ -72,13 +72,15 @@ def build(run: str | Path, out_dir: str | Path) -> list[str] | None:
         pts, los, his, counts = [], [], [], []
         for model, _ in ORDER:
             r, lo, hi, hit = stats[arm].get(model, (0.0, 0.0, 0.0, 0))
-            pts.append(r * 100); los.append((r - lo) * 100)
-            his.append((hi - r) * 100); counts.append(hit)
+            pts.append(r * 100)
+            los.append((r - lo) * 100)
+            his.append((hi - r) * 100)
+            counts.append(hit)
         ax.plot(xs, pts, color=colour, linewidth=1.5, zorder=3)
         ax.errorbar(xs, pts, yerr=[los, his], fmt="o", markersize=4.2, color=colour,
                     ecolor=colour, elinewidth=1.0, capsize=2.0, markeredgecolor=SURFACE,
                     markeredgewidth=1.0, label=label, zorder=4)
-        for x, y, hi, lo_, c in zip(xs, pts, his, los, counts):
+        for x, y, hi, lo_, c in zip(xs, pts, his, los, counts, strict=True):
             if above:
                 ax.text(x, y + hi + 0.10, str(c), ha="center", va="bottom",
                         fontsize=5.8, color=colour, zorder=5)

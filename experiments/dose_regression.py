@@ -40,7 +40,6 @@ def mde(p0: float, n_clusters: int, icc_rows: float, power: float = 0.80,
     n_clusters is parents, not rows: the design effect from correlated deletion variants
     is already absorbed by treating the parent as the unit.
     """
-    z_beta = 0.8416 if power == 0.80 else 1.2816
     n = n_clusters * icc_rows
     lo, hi = p0, 1.0
     for _ in range(200):
