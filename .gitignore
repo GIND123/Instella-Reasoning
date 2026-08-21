@@ -66,3 +66,6 @@ experiments/runs/*/base/*_all.jsonl
 !outputs/corpus_scan/
 !outputs/corpus_scan/**
 .DS_Store
+
+# Scan/run logs are reproducible stdout; the artifacts they describe are tracked.
+logs/
