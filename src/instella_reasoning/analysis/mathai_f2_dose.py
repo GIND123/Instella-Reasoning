@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import random
 from collections import defaultdict
+from math import comb
 from pathlib import Path
 
 from instella_reasoning.analysis.figures import (
@@ -95,14 +96,20 @@ def build(run: str | Path, out_dir: str | Path) -> list[str] | None:
             continue
         rows = [GenerationRecord.from_dict(r) for r in read_jsonl(p)]
         cur: dict[str, list[tuple[str, bool]]] = {"injected": [], "heldout": []}
+        # Keyed by benchmark_id, not parent_id: several deletion rows share one parent, and
+        # collapsing them would run McNemar over parents instead of items.
+        by_item: dict[str, dict[str, bool]] = {"injected": {}, "heldout": {}}
         for g in rows:
             it = items.get(g.benchmark_id)
             if it is None:
                 continue
             group = "injected" if it.parent_id in inj else "heldout" if it.parent_id in hel else None
             if group:
-                cur[group].append((it.parent_id, _recall(it, g.completion)))
+                hit = _recall(it, g.completion)
+                cur[group].append((it.parent_id, hit))
+                by_item[group][g.benchmark_id] = hit
         stats[d] = {k: _rate_ci(v) for k, v in cur.items()}
+        stats[d]["_by_item"] = by_item
 
     xs = list(range(len(DOSES)))
     fig, ax = plt.subplots(figsize=(3.5, 3.0), facecolor=SURFACE)
@@ -129,14 +136,16 @@ def build(run: str | Path, out_dir: str | Path) -> list[str] | None:
         pts, los, his, counts = [], [], [], []
         for d in DOSES:
             r, lo, hi, hit, tot = stats[d][series]
-            pts.append(r * 100); los.append((r - lo) * 100); his.append((hi - r) * 100)
+            pts.append(r * 100)
+            los.append((r - lo) * 100)
+            his.append((hi - r) * 100)
             counts.append((hit, tot))
         ax.plot(xs, pts, color=colour, linewidth=1.4, zorder=3)
         ax.errorbar(xs, pts, yerr=[los, his], fmt="o", markersize=4.5, color=colour,
                     ecolor=colour, elinewidth=1.0, capsize=2.0,
                     markeredgecolor=SURFACE, markeredgewidth=1.0, label=label, zorder=4)
         if series == "injected":
-            for x, y, hi, (h, t) in zip(xs, pts, his, counts):
+            for x, y, hi, (h, t) in zip(xs, pts, his, counts, strict=True):
                 ax.text(x, y + hi + 0.16, f"{h}/{t}", ha="center", va="bottom",
                         fontsize=5.8, color=INK_SECONDARY, zorder=5)
 
@@ -157,12 +166,22 @@ def build(run: str | Path, out_dir: str | Path) -> list[str] | None:
                     handlelength=1.2, borderpad=0.1, labelspacing=0.25)
     for t in leg.get_texts():
         t.set_color(INK_SECONDARY)
-    p64 = stats[64]["injected"]
+    # The caption's test statistic is computed here, not typed: a hand-entered number in a
+    # figure caption is the one thing no reader can check against the data.
+    top = max(d for d in stats if d > 0)
+    ref = stats[0]["_by_item"]["injected"]
+    cur = stats[top]["_by_item"]["injected"]
+    keys = [k for k in cur if k in ref]
+    b = sum(1 for k in keys if cur[k] and not ref[k])
+    c = sum(1 for k in keys if ref[k] and not cur[k])
+    n = b + c
+    pval = 1.0 if n == 0 else min(
+        1.0, 2 * sum(comb(n, k) for k in range(min(b, c) + 1)) / 2 ** n)
     fig.text(0.0, -0.10,
              "points: measured conditions, segments imply no interpolation · "
-             f"labels: recall events / rows · 64x is the only dose separating from 0x "
-             f"(McNemar b=17 c=6, p=0.035)\nerror bars: 95% cluster bootstrap over parent "
-             "problems (2000 reps) · all rows generated with vLLM 0.8.5.post1, greedy",
+             f"labels: recall events / rows · {top}x is the only dose separating from 0x "
+             f"(McNemar b={b} c={c}, p={pval:.3f})\nerror bars: 95% cluster bootstrap over "
+             "parent problems (2000 reps) · all rows generated with vLLM 0.8.5.post1, greedy",
              fontsize=5.4, color=INK_MUTED, linespacing=1.5)
     return save_both(fig, out_dir / "F2_dose_response", plt)
 

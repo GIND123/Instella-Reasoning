@@ -184,8 +184,8 @@ def main() -> int:
     results["temperature_sweep"] = sweep
 
     # ---- 5. Phase 2 dose-response --------------------------------------------------
-    inj = {json.loads(l)["id"] for l in open(run / "phase2" / "mixture" / "injected.jsonl")}
-    hel = {json.loads(l)["id"] for l in open(run / "phase2" / "mixture" / "heldout.jsonl")}
+    inj = {json.loads(x)["id"] for x in open(run / "phase2" / "mixture" / "injected.jsonl")}
+    hel = {json.loads(x)["id"] for x in open(run / "phase2" / "mixture" / "heldout.jsonl")}
     gens = {}
     for d in DOSES:
         p_ = run / "generations" / f"phase2__dose{d}__test__T0.0__k1__vllm.jsonl"
@@ -247,12 +247,14 @@ def _markdown(r: dict, path: Path) -> None:
          "| checkpoint | train (in corpus) | test (verified clean) | train trunc | test trunc |",
          "|---|---|---|---|---|"]
     for tag, label in TAGS:
-        tr = r["phase1"]["train"].get(tag); te = r["phase1"]["test"].get(tag)
+        tr = r["phase1"]["train"].get(tag)
+        te = r["phase1"]["test"].get(tag)
         if not tr or not te:
             continue
         L.append(f"| {label} | {tr['recall_rate']:.4f} | {te['recall_rate']:.4f} | "
                  f"{tr['truncation_rate']:.3f} | {te['truncation_rate']:.3f} |")
-    iv = r["intervention_train"]; rr = iv["restricted_both_terminated"]
+    iv = r["intervention_train"]
+    rr = iv["restricted_both_terminated"]
     d = r["did"]
     L += ["", "## The data intervention (Stage1 -> Instella-3B), paired within item", "",
           f"- All rows: n={iv['n']}, gained {iv['gained']}, lost {iv['lost']}, "
@@ -325,8 +327,10 @@ def _markdown(r: dict, path: Path) -> None:
               "|---|---|---|---|---|---|"]
         for s in scans:
             g = s["per_item_set"]
-            def band(tag):
+
+            def band(tag, g=g):
                 return g[tag]["bands"][">=0.999"] if tag in g else "-"
+
             flag = "SUSPECT" if s.get("extraction_suspect") else "ok"
             L.append(f"| {s['corpus']} | {s['rows_scanned']:,} | {band('gsm8k_train')} | "
                      f"{band('gsm8k_test')} | {band('math_train')} | {flag} |")

@@ -144,6 +144,7 @@ def main() -> int:
         reading them independently sidesteps the schema unification entirely.
         """
         import gzip
+
         from huggingface_hub import HfApi, hf_hub_download
         files = [f for f in HfApi().list_repo_files(repo, repo_type="dataset")
                  if f.startswith(prefix) and f.endswith((".json.gz", ".jsonl.gz"))]

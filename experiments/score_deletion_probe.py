@@ -29,8 +29,7 @@ from pathlib import Path
 from instella_reasoning.answer_equivalence import numeric_equal
 from instella_reasoning.evaluation import termination_report
 from instella_reasoning.prompting import extract_answer
-from instella_reasoning.records import read_benchmark, read_jsonl
-from instella_reasoning.records import GenerationRecord
+from instella_reasoning.records import GenerationRecord, read_benchmark, read_jsonl
 
 # Phrases a model uses when it recognises the problem is underdetermined. Deliberately
 # narrow: a false positive here would be counted as reasoning and would deflate recall.

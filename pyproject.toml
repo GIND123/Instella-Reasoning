@@ -69,7 +69,9 @@ packages = ["src/instella_reasoning"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["notebooks"]
+# Notebooks are exploratory drivers. Module-level rules (E402 "import not at top
+# of cell") describe normal notebook style as a defect, so they are linted by eye.
+extend-exclude = ["notebooks", "*.ipynb", "AMD"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

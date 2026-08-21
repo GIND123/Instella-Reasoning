@@ -143,7 +143,7 @@ def verbatim_score(model, tokenizer, docs: list[dict], device, n_docs: int = 50)
             out = model.generate(prompt, max_new_tokens=len(want), do_sample=False,
                                  pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id)
         got = out[0, half:].tolist()
-        for a, b in zip(want, got):
+        for a, b in zip(want, got, strict=False):
             total += 1
             hits += int(a == b)
     model.train()
