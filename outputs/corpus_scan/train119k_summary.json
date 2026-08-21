@@ -1,0 +1,85 @@
+{
+  "corpus": "train119k",
+  "rows_skipped_too_short": 0,
+  "frac_skipped_too_short": 0.0,
+  "extraction_suspect": false,
+  "hf_path": "amd/Instella-GSM8K-synthetic[train_119K]",
+  "config": null,
+  "data_files": null,
+  "hf_glob": null,
+  "local_jsonl": "experiments/runs/fullscale-S250-v3/contamination/synthetic_corpus.jsonl",
+  "revision": null,
+  "split": "train",
+  "rows_scanned": 119014,
+  "row_limit": 200000,
+  "sampled": false,
+  "ngram_n": 13,
+  "wall_clock_sec": 7.7,
+  "rows_per_hour": 59166947,
+  "coverage_note": "Full pass over the split.",
+  "per_item_set": {
+    "gsm8k_train": {
+      "n_items": 7473,
+      "bands": {
+        ">=0.999": 21,
+        ">=0.9": 154,
+        ">=0.8": 565,
+        ">=0.5": 2529,
+        ">=0.3": 4157,
+        ">=0.1": 5618
+      },
+      "band_frac": {
+        ">=0.999": 0.00281,
+        ">=0.9": 0.020608,
+        ">=0.8": 0.075606,
+        ">=0.5": 0.338418,
+        ">=0.3": 0.556269,
+        ">=0.1": 0.751773
+      },
+      "max": 1.0,
+      "median": 0.35
+    },
+    "gsm8k_test": {
+      "n_items": 1319,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 1,
+        ">=0.3": 1,
+        ">=0.1": 2
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.000758,
+        ">=0.3": 0.000758,
+        ">=0.1": 0.001516
+      },
+      "max": 0.538462,
+      "median": 0.0
+    },
+    "math_train": {
+      "n_items": 7500,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.0,
+      "median": 0.0
+    }
+  }
+}

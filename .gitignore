@@ -60,3 +60,9 @@ secrets/
 # sets ARE kept — they define what the study measured.
 experiments/runs/*/phase2/mixture/filler.jsonl
 experiments/runs/*/base/*_all.jsonl
+
+# Phase 3 corpus-scan results are small (~1 MB) and every claim in docs/FIGURES.md
+# points at them by filename, so they are tracked rather than re-derived.
+!outputs/corpus_scan/
+!outputs/corpus_scan/**
+.DS_Store

@@ -217,6 +217,21 @@ def main() -> int:
             dose_rows.append(row)
     results["phase2_dose_response"] = dose_rows
 
+    # ---- 6. Phase 3 corpus scans + dose regression, folded in from their own artifacts --
+    scan_dir = Path("outputs/corpus_scan")
+    scans = []
+    if scan_dir.exists():
+        for f in sorted(scan_dir.glob("*_summary.json")):
+            scans.append(json.loads(f.read_text()))
+    results["phase3_scans"] = scans
+    routes = {}
+    for f in sorted(scan_dir.glob("*_routes.json")) if scan_dir.exists() else []:
+        r = json.loads(f.read_text())
+        routes[r["corpus"]] = r
+    results["phase3_routes"] = routes
+    dr = out_dir / "dose_regression.json"
+    results["dose_regression"] = json.loads(dr.read_text()) if dr.exists() else None
+
     (out_dir / "ckpt_axis_results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     _markdown(results, out_dir / "RESULTS.md")
     print(json.dumps({k: v for k, v in results.items() if k != "phase1"}, indent=2)[:2000])
@@ -275,6 +290,62 @@ def _markdown(r: dict, path: Path) -> None:
           "injected tokens verbatim and the probe detects nothing. The probe therefore requires",
           "near-verbatim memorisation before it registers, which is what makes the Phase 1 null",
           "a *bounded* null rather than a bare one.", ""]
+
+    dreg = r.get("dose_regression")
+    if dreg:
+        L += ["## Dose regression - recall against Stage-2 containment", "",
+              "A third null, and the only one that does not use the train/test contrast, so the",
+              "generalisation-gap objection does not reach it. Containment against `train_119K`",
+              "is continuous across the train arm; if the Stage-2 rise were memorisation, recall",
+              "should climb with it.", "",
+              "| containment bin | parents | rows | recall | rate | 95% CI |",
+              "|---|---|---|---|---|---|"]
+        for b in dreg["instella3b_by_containment"]:
+            if not b.get("n_parents"):
+                continue
+            L.append(f"| {b['bin']} | {b['n_parents']} | {b['n_rows']} | "
+                     f"{b['recall_events']} | {b['recall_rate']:.4f} | "
+                     f"[{b['ci95'][0]:.4f}, {b['ci95'][1]:.4f}] |")
+        m = dreg["mde"]
+        L += ["", "Non-monotonic, every interval overlapping: the least-contained bin matches the",
+              "most-contained one.", "",
+              f"**Minimum detectable effect.** Base rate {m['base_rate_p0']:.4f} over "
+              f"{m['n_parent_clusters']} parent clusters: an increase to "
+              f"{m['detectable_p1_at_80pct_power']:.4f} "
+              f"(**+{m['absolute_increase_pp']:.2f} pp**) would be detected at 80% power. The "
+              f"observed DiD is {r['did']['did']*100:+.2f} pp.", "",
+              f"> {m['note']}", ""]
+
+    scans = r.get("phase3_scans") or []
+    if scans:
+        L += ["## Phase 3 - corpus containment (appendix material)", "",
+              "Item sets indexed together in one pass: GSM8K train (7,473), GSM8K test (1,319),",
+              "MATH train (7,500).", "",
+              "| corpus | rows | GSM8K train >=0.999 | GSM8K **test** >=0.999 | MATH train >=0.999 | extraction |",
+              "|---|---|---|---|---|---|"]
+        for s in scans:
+            g = s["per_item_set"]
+            def band(tag):
+                return g[tag]["bands"][">=0.999"] if tag in g else "-"
+            flag = "SUSPECT" if s.get("extraction_suspect") else "ok"
+            L.append(f"| {s['corpus']} | {s['rows_scanned']:,} | {band('gsm8k_train')} | "
+                     f"{band('gsm8k_test')} | {band('math_train')} | {flag} |")
+        L += ["", "**Every scan is a sampled prefix.** Containment is a *lower* bound: a zero means",
+              "\"absent from the rows scanned\", never \"absent from the corpus\".", ""]
+
+    routes = r.get("phase3_routes") or {}
+    if routes:
+        L += ["### Route attribution", "",
+              "| corpus | source subset | item set | items | share of set | from rows |",
+              "|---|---|---|---|---|---|"]
+        for corpus, rep in routes.items():
+            for row in rep["routes"][:8]:
+                L.append(f"| {corpus} | {row['source']} | {row['item_set']} | "
+                         f"{row['items_contained']} | {row['share_of_item_set']*100:.1f}% | "
+                         f"{row['rows_from_source']:,} |")
+        L += ["", "A prefix is not a representative sample of a mixture's *source* composition:",
+              "the tulu3 scan reached only 6 of its subsets in 300,000 rows.", ""]
+
     path.write_text("\n".join(L), encoding="utf-8")
 
 
