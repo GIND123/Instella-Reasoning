@@ -1,5 +1,29 @@
 # Corpus correction: what containment was measured against, and what it invalidates
 
+> **SUPERSEDED IN PART — 2026-08-22.** The containment figures in §1 of this document
+> (15.12% of GSM8K train at >= 0.80 against `train_119K`) come from
+> `scripts/verify_stage2_corpus.py`, which scores an item's n-grams against the **union of
+> the whole corpus**. `experiments/scan_corpora.py`, which produced
+> `outputs/corpus_scan/train119k_summary.json` and which the dose regression consumes,
+> takes the **maximum over individual documents** and reports **7.56%** (565/7,473) for the
+> same corpus and the same 13-gram rule. Those are different estimands, not a discrepancy
+> to reconcile.
+>
+> **The per-document definition is the one to use**, because "this problem appeared in a
+> training document" is what an exposure claim means, and the false-positive calibration
+> survives it unchanged (GSM8K test: 0/1,319 at >= 0.8, max 0.538). Every containment
+> number quoted in the paper must come from that definition. §2, §2b and the route
+> attribution are unaffected — they use a >= 0.999 threshold where the two definitions
+> agree.
+>
+> A second correction, from the Instella-MoE recipe published 2026-07-24: Instella-MoE
+> uses the **full `train` split** of Instella-GSM8K-synthetic, not `train_119K`
+> (`docs/data_preparation.md`, "only the `train` split is used"), entering at long-context
+> extension phase 2. So the pool-wide containment that is wrong for Instella-3B is the
+> correct measurement for Instella-MoE, and exposure is a property of
+> *(item, corpus, checkpoint)* rather than of the item.
+
+
 Origin: two review comments from J. Liu (AMD), 2026-08-19, on the Math-AI draft. Both are
 correct. Both were verified independently against the released datasets before any text was
 changed. Reproduce with `scripts/verify_stage2_corpus.py`; raw containment values are in
