@@ -1,9 +1,9 @@
-<h1 align="center">Remembering or Reasoning under Exactly Verified Contamination in the Instella 3B Training Trajectory</h1>
+<h1 align="center">Reasoning or Remembering — a premise-deletion probe across the Instella-3B training trajectory</h1>
 
 <p align="center">
-  Exact 13-gram membership verification crossed with numeric perturbation across four
-  Instella-3B checkpoints, estimating the memorisation component of GSM8K accuracy by
-  difference in differences with cluster-robust inference over parent items.
+  A premise-deletion probe run across four Instella-3B checkpoints against a
+  verified-clean control arm, calibrated by controlled injection at five exposure levels,
+  with cluster-robust inference over parent problems.
 </p>
 
 <p align="center">
@@ -11,6 +11,8 @@
   <a href="#results"><b>Results</b></a> ·
   <a href="#figures"><b>Figures</b></a> ·
   <a href="https://huggingface.co/datasets/GOVINDFROM/Instella-Reasoning">Artifacts</a> ·
+  <a href="experiments/runs/ckpt-axis-v1/analysis/RESULTS.md">Results (active study)</a> ·
+  <a href="docs/FIGURES.md">Provenance</a> ·
   <a href="docs/METHODOLOGY.md">Methodology</a> ·
   <a href="docs/AUDIT_2026-07-26.md">Audit</a> ·
   <a href="#command-reference">Commands</a> ·
@@ -19,12 +21,39 @@
 
 ---
 
-> **Scope.** The active experiment is the verified seen/unseen memorisation suite. GSM8K
-> **train** items are present verbatim in Instella's stage-2 training data and GSM8K **test**
-> items are not; membership is verified per item by exact 13-gram containment rather than
-> inferred from an embedding proxy. Crossed with numeric perturbation across the Instella-3B
-> checkpoint trajectory, the difference-in-differences isolates the memorisation component and
-> cancels the magnitude confound.
+> ## ⚠ Scope — the active study is the **checkpoint axis**, not the item axis
+>
+> **The item-level design described in the rest of this README is superseded.** It compared
+> high- against low-containment GSM8K *train* items to estimate a memorisation component.
+> That estimand does not exist: `allenai/tulu-3-sft-mixture` is in Instella's Stage-2
+> mixture and carries ~97% of GSM8K train at containment ≥0.999, so **both arms of the
+> within-train contrast are exposed** and no difference between them can be attributed to
+> membership. See [`docs/CORPUS_CORRECTION.md`](docs/CORPUS_CORRECTION.md).
+>
+> The active study replaces the item axis with the **checkpoint axis**: the same
+> premise-deletion items run across `Stage1 → Instella-3B → SFT → Instruct`, against a
+> GSM8K-**test** control arm verified clean, calibrated by controlled injection at five
+> exposure levels.
+>
+> | | |
+> |---|---|
+> | Design & pipeline | [`docs/CHECKPOINT_AXIS_STUDY.md`](docs/CHECKPOINT_AXIS_STUDY.md) |
+> | Results | [`experiments/runs/ckpt-axis-v1/analysis/RESULTS.md`](experiments/runs/ckpt-axis-v1/analysis/RESULTS.md) |
+> | Every number's provenance | [`docs/FIGURES.md`](docs/FIGURES.md) |
+> | Injection design | [`docs/PHASE2_DESIGN.md`](docs/PHASE2_DESIGN.md) |
+> | Figures | `paper/figures/F{1,2,3}_*.pdf` |
+> | Current state / handoff | [`STATE.md`](STATE.md) |
+>
+> **Headline: the accuracy drop under perturbation is a failure of inference, not recall.**
+> Deletion-recall rises across the Stage-2 data intervention (+1.70 pp, McNemar p=4.6e-4)
+> — but it rises just as much on items provably absent from the corpus (+1.95 pp).
+> Difference-in-differences **−0.26 pp, 95% CI [−1.66, +1.14]**, cluster-bootstrapped over
+> parent problems. Two further nulls agree: recall is non-monotonic in Stage-2 containment
+> within the train arm, and the contrast survives sampling at T=0.7 and T=1.0.
+>
+> The null is **bounded, not bare**. Controlled injection shows the probe detects recall
+> only at 64× verbatim repetition (verbatim reproduction 0.946, p=0.035); at 16× the model
+> reproduces 49% of an injected document verbatim and the probe detects nothing.
 >
 > The earlier `reliability-B*` runs under `experiments/runs/` are **superseded pilots**;
 > [`docs/AUDIT_2026-07-26.md`](docs/AUDIT_2026-07-26.md) documents why four of their five

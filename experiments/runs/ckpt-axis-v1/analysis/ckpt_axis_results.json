@@ -1,0 +1,1213 @@
+{
+  "run": "experiments/runs/ckpt-axis-v1",
+  "seed": 6198,
+  "phase1": {
+    "train": {
+      "stage1": {
+        "label": "Stage1",
+        "n": 1591,
+        "recall": 18,
+        "recall_rate": 0.011314,
+        "termination_rate": 0.82401,
+        "truncation_rate": 0.17599
+      },
+      "stage2": {
+        "label": "Instella-3B",
+        "n": 1591,
+        "recall": 45,
+        "recall_rate": 0.028284,
+        "termination_rate": 0.971087,
+        "truncation_rate": 0.028913
+      },
+      "sft": {
+        "label": "SFT",
+        "n": 1591,
+        "recall": 49,
+        "recall_rate": 0.030798,
+        "termination_rate": 0.97863,
+        "truncation_rate": 0.02137
+      },
+      "instruct": {
+        "label": "Instruct",
+        "n": 1591,
+        "recall": 57,
+        "recall_rate": 0.035827,
+        "termination_rate": 0.998114,
+        "truncation_rate": 0.001886
+      }
+    },
+    "test": {
+      "stage1": {
+        "label": "Stage1",
+        "n": 1588,
+        "recall": 26,
+        "recall_rate": 0.016373,
+        "termination_rate": 0.819899,
+        "truncation_rate": 0.180101
+      },
+      "stage2": {
+        "label": "Instella-3B",
+        "n": 1588,
+        "recall": 57,
+        "recall_rate": 0.035894,
+        "termination_rate": 0.97733,
+        "truncation_rate": 0.02267
+      },
+      "sft": {
+        "label": "SFT",
+        "n": 1588,
+        "recall": 53,
+        "recall_rate": 0.033375,
+        "termination_rate": 0.975441,
+        "truncation_rate": 0.024559
+      },
+      "instruct": {
+        "label": "Instruct",
+        "n": 1588,
+        "recall": 50,
+        "recall_rate": 0.031486,
+        "termination_rate": 0.99937,
+        "truncation_rate": 0.00063
+      }
+    }
+  },
+  "intervention_train": {
+    "n": 1591,
+    "gained": 42,
+    "lost": 15,
+    "mcnemar_p": 0.00046000500864878946,
+    "restricted_both_terminated": {
+      "n": 1282,
+      "gained": 31,
+      "lost": 13,
+      "mcnemar_p": 0.009559878856634896,
+      "stage1_rate": 0.01248,
+      "stage2_rate": 0.026521
+    }
+  },
+  "did": {
+    "train_change": 0.01697,
+    "test_change": 0.019521,
+    "did": -0.002551,
+    "ci95": [
+      -0.016615,
+      0.011448
+    ],
+    "n_boot": 4000,
+    "crosses_zero": true,
+    "interpretation": "The clean test arm rises as much as the corpus-resident train arm, so the Stage-2 recall increase is not item-specific memorisation."
+  },
+  "temperature_sweep": {
+    "stage1": {
+      "label": "Stage1",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.0075
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.016
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.012
+      }
+    },
+    "stage2": {
+      "label": "Instella-3B",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.035
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.0335
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.028
+      }
+    },
+    "sft": {
+      "label": "SFT",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.0425
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.0435
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.0435
+      }
+    },
+    "instruct": {
+      "label": "Instruct",
+      "T0.0": {
+        "n": 400,
+        "recall_rate": 0.05
+      },
+      "T0.7": {
+        "n": 2000,
+        "recall_rate": 0.042
+      },
+      "T1.0": {
+        "n": 2000,
+        "recall_rate": 0.0415
+      }
+    }
+  },
+  "phase2_dose_response": [
+    {
+      "dose": 0,
+      "injected_share": 0.0,
+      "verbatim_post": 0.133,
+      "injected_loss_post": 1.2843,
+      "heldout_loss_post": 1.3425,
+      "positive_controls_pass": false,
+      "wall_clock_sec": 865.4,
+      "tokens_per_sec": 9693.8,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.042735,
+      "injected_gained": 0,
+      "injected_lost": 0,
+      "injected_mcnemar_p": 1.0,
+      "heldout_n": 371,
+      "heldout_recall": 0.026954,
+      "heldout_gained": 0,
+      "heldout_lost": 0,
+      "heldout_mcnemar_p": 1.0
+    },
+    {
+      "dose": 1,
+      "injected_share": 0.00403,
+      "verbatim_post": 0.1532,
+      "injected_loss_post": 1.005,
+      "heldout_loss_post": 1.1495,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 861.4,
+      "tokens_per_sec": 9738.2,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.054131,
+      "injected_gained": 9,
+      "injected_lost": 5,
+      "injected_mcnemar_p": 0.42395,
+      "heldout_n": 371,
+      "heldout_recall": 0.037736,
+      "heldout_gained": 10,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.454498
+    },
+    {
+      "dose": 4,
+      "injected_share": 0.01612,
+      "verbatim_post": 0.18,
+      "injected_loss_post": 0.8031,
+      "heldout_loss_post": 1.1627,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 862.5,
+      "tokens_per_sec": 9726.3,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.059829,
+      "injected_gained": 9,
+      "injected_lost": 3,
+      "injected_mcnemar_p": 0.145996,
+      "heldout_n": 371,
+      "heldout_recall": 0.043127,
+      "heldout_gained": 7,
+      "heldout_lost": 1,
+      "heldout_mcnemar_p": 0.070312
+    },
+    {
+      "dose": 16,
+      "injected_share": 0.06448,
+      "verbatim_post": 0.4915,
+      "injected_loss_post": 0.3386,
+      "heldout_loss_post": 1.3345,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 864.5,
+      "tokens_per_sec": 9703.1,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.051282,
+      "injected_gained": 12,
+      "injected_lost": 9,
+      "injected_mcnemar_p": 0.663624,
+      "heldout_n": 371,
+      "heldout_recall": 0.037736,
+      "heldout_gained": 10,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.454498
+    },
+    {
+      "dose": 64,
+      "injected_share": 0.257919,
+      "verbatim_post": 0.9456,
+      "injected_loss_post": 0.1559,
+      "heldout_loss_post": 1.4057,
+      "positive_controls_pass": true,
+      "wall_clock_sec": 862.6,
+      "tokens_per_sec": 9724.8,
+      "peak_mem_gb": 63.38,
+      "injected_n": 351,
+      "injected_recall": 0.074074,
+      "injected_gained": 17,
+      "injected_lost": 6,
+      "injected_mcnemar_p": 0.03469,
+      "heldout_n": 371,
+      "heldout_recall": 0.043127,
+      "heldout_gained": 12,
+      "heldout_lost": 6,
+      "heldout_mcnemar_p": 0.237885
+    }
+  ],
+  "phase3_scans": [
+    {
+      "corpus": "dm_math",
+      "rows_skipped_too_short": 126179,
+      "frac_skipped_too_short": 0.420597,
+      "extraction_suspect": false,
+      "hf_path": "deepmind/math_dataset",
+      "config": null,
+      "data_files": "*/train/*.parquet",
+      "hf_glob": null,
+      "revision": "refs/convert/parquet",
+      "split": "train",
+      "rows_scanned": 300000,
+      "row_limit": 300000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 14.6,
+      "rows_per_hour": 120609939,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "dolmino",
+      "hf_path": "allenai/dolmino-mix-1124",
+      "config": null,
+      "split": "train",
+      "rows_scanned": 200000,
+      "row_limit": 200000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 290.9,
+      "rows_per_hour": 2567157,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 1,
+            ">=0.1": 1
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.000133,
+            ">=0.1": 0.000133
+          },
+          "max": 0.363636,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "olmoe_algebraic-stack",
+      "hf_path": "allenai/OLMoE-mix-0924",
+      "config": null,
+      "data_files": null,
+      "hf_glob": "data/algebraic-stack/",
+      "split": "train",
+      "rows_scanned": 200000,
+      "row_limit": 200000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 1195.0,
+      "rows_per_hour": 602826,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.021739,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 25,
+            ">=0.9": 28,
+            ">=0.8": 31,
+            ">=0.5": 44,
+            ">=0.3": 55,
+            ">=0.1": 104
+          },
+          "band_frac": {
+            ">=0.999": 0.003333,
+            ">=0.9": 0.003733,
+            ">=0.8": 0.004133,
+            ">=0.5": 0.005867,
+            ">=0.3": 0.007333,
+            ">=0.1": 0.013867
+          },
+          "max": 1.0,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "olmoe_open-web-math",
+      "hf_path": "allenai/OLMoE-mix-0924",
+      "config": null,
+      "data_files": null,
+      "hf_glob": "data/open-web-math/",
+      "split": "train",
+      "rows_scanned": 200000,
+      "row_limit": 200000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 270.6,
+      "rows_per_hour": 2667350,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 3
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.000401
+          },
+          "max": 0.176471,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 126,
+            ">=0.9": 131,
+            ">=0.8": 136,
+            ">=0.5": 164,
+            ">=0.3": 192,
+            ">=0.1": 289
+          },
+          "band_frac": {
+            ">=0.999": 0.0168,
+            ">=0.9": 0.017467,
+            ">=0.8": 0.018133,
+            ">=0.5": 0.021867,
+            ">=0.3": 0.0256,
+            ">=0.1": 0.038533
+          },
+          "max": 1.0,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "openhermes",
+      "rows_skipped_too_short": 2,
+      "frac_skipped_too_short": 7e-06,
+      "extraction_suspect": false,
+      "hf_path": "teknium/OpenHermes-2.5",
+      "config": null,
+      "data_files": null,
+      "hf_glob": null,
+      "split": "train",
+      "rows_scanned": 300000,
+      "row_limit": 300000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 104.8,
+      "rows_per_hour": 10632654,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 1,
+            ">=0.9": 1,
+            ">=0.8": 1,
+            ">=0.5": 1,
+            ">=0.3": 3,
+            ">=0.1": 4
+          },
+          "band_frac": {
+            ">=0.999": 0.000134,
+            ">=0.9": 0.000134,
+            ">=0.8": 0.000134,
+            ">=0.5": 0.000134,
+            ">=0.3": 0.000401,
+            ">=0.1": 0.000535
+          },
+          "max": 1.0,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 2,
+            ">=0.9": 2,
+            ">=0.8": 2,
+            ">=0.5": 4,
+            ">=0.3": 4,
+            ">=0.1": 4
+          },
+          "band_frac": {
+            ">=0.999": 0.001516,
+            ">=0.9": 0.001516,
+            ">=0.8": 0.001516,
+            ">=0.5": 0.003033,
+            ">=0.3": 0.003033,
+            ">=0.1": 0.003033
+          },
+          "max": 1.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 1,
+            ">=0.9": 1,
+            ">=0.8": 1,
+            ">=0.5": 1,
+            ">=0.3": 1,
+            ">=0.1": 11
+          },
+          "band_frac": {
+            ">=0.999": 0.000133,
+            ">=0.9": 0.000133,
+            ">=0.8": 0.000133,
+            ">=0.5": 0.000133,
+            ">=0.3": 0.000133,
+            ">=0.1": 0.001467
+          },
+          "max": 1.0,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "smoltalk",
+      "hf_path": "HuggingFaceTB/smoltalk",
+      "config": "all",
+      "split": "train",
+      "rows_scanned": 300000,
+      "row_limit": 300000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 226.9,
+      "rows_per_hour": 4873459,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 3453,
+            ">=0.9": 3482,
+            ">=0.8": 3635,
+            ">=0.5": 4344,
+            ">=0.3": 4721,
+            ">=0.1": 5003
+          },
+          "band_frac": {
+            ">=0.999": 0.462063,
+            ">=0.9": 0.465944,
+            ">=0.8": 0.486418,
+            ">=0.5": 0.581293,
+            ">=0.3": 0.631741,
+            ">=0.1": 0.669477
+          },
+          "max": 1.0,
+          "median": 0.754717
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 1,
+            ">=0.3": 1,
+            ">=0.1": 3
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.000758,
+            ">=0.3": 0.000758,
+            ">=0.1": 0.002274
+          },
+          "max": 0.538462,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 1947,
+            ">=0.9": 2006,
+            ">=0.8": 2110,
+            ">=0.5": 2558,
+            ">=0.3": 2913,
+            ">=0.1": 3436
+          },
+          "band_frac": {
+            ">=0.999": 0.2596,
+            ">=0.9": 0.267467,
+            ">=0.8": 0.281333,
+            ">=0.5": 0.341067,
+            ">=0.3": 0.3884,
+            ">=0.1": 0.458133
+          },
+          "max": 1.0,
+          "median": 0.028571
+        }
+      }
+    },
+    {
+      "corpus": "train119k",
+      "rows_skipped_too_short": 0,
+      "frac_skipped_too_short": 0.0,
+      "extraction_suspect": false,
+      "hf_path": "amd/Instella-GSM8K-synthetic[train_119K]",
+      "config": null,
+      "data_files": null,
+      "hf_glob": null,
+      "local_jsonl": "experiments/runs/fullscale-S250-v3/contamination/synthetic_corpus.jsonl",
+      "revision": null,
+      "split": "train",
+      "rows_scanned": 119014,
+      "row_limit": 200000,
+      "sampled": false,
+      "ngram_n": 13,
+      "wall_clock_sec": 7.7,
+      "rows_per_hour": 59166947,
+      "coverage_note": "Full pass over the split.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 21,
+            ">=0.9": 154,
+            ">=0.8": 565,
+            ">=0.5": 2529,
+            ">=0.3": 4157,
+            ">=0.1": 5618
+          },
+          "band_frac": {
+            ">=0.999": 0.00281,
+            ">=0.9": 0.020608,
+            ">=0.8": 0.075606,
+            ">=0.5": 0.338418,
+            ">=0.3": 0.556269,
+            ">=0.1": 0.751773
+          },
+          "max": 1.0,
+          "median": 0.35
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 1,
+            ">=0.3": 1,
+            ">=0.1": 2
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.000758,
+            ">=0.3": 0.000758,
+            ">=0.1": 0.001516
+          },
+          "max": 0.538462,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "ultrachat",
+      "hf_path": "HuggingFaceH4/ultrachat_200k",
+      "config": null,
+      "split": "train_sft",
+      "rows_scanned": 200000,
+      "row_limit": 200000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 247.4,
+      "rows_per_hour": 2974210,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.066667,
+          "median": 0.0
+        }
+      }
+    },
+    {
+      "corpus": "webinstruct",
+      "hf_path": "TIGER-Lab/WebInstructSub",
+      "config": null,
+      "split": "train",
+      "rows_scanned": 300000,
+      "row_limit": 300000,
+      "sampled": true,
+      "ngram_n": 13,
+      "wall_clock_sec": 45.7,
+      "rows_per_hour": 26767261,
+      "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+      "per_item_set": {
+        "gsm8k_train": {
+          "n_items": 7473,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "gsm8k_test": {
+          "n_items": 1319,
+          "bands": {
+            ">=0.999": 0,
+            ">=0.9": 0,
+            ">=0.8": 0,
+            ">=0.5": 0,
+            ">=0.3": 0,
+            ">=0.1": 0
+          },
+          "band_frac": {
+            ">=0.999": 0.0,
+            ">=0.9": 0.0,
+            ">=0.8": 0.0,
+            ">=0.5": 0.0,
+            ">=0.3": 0.0,
+            ">=0.1": 0.0
+          },
+          "max": 0.0,
+          "median": 0.0
+        },
+        "math_train": {
+          "n_items": 7500,
+          "bands": {
+            ">=0.999": 1,
+            ">=0.9": 1,
+            ">=0.8": 1,
+            ">=0.5": 1,
+            ">=0.3": 2,
+            ">=0.1": 11
+          },
+          "band_frac": {
+            ">=0.999": 0.000133,
+            ">=0.9": 0.000133,
+            ">=0.8": 0.000133,
+            ">=0.5": 0.000133,
+            ">=0.3": 0.000267,
+            ">=0.1": 0.001467
+          },
+          "max": 1.0,
+          "median": 0.0
+        }
+      }
+    }
+  ],
+  "phase3_routes": {
+    "smoltalk": {
+      "corpus": "smoltalk",
+      "hf_path": "HuggingFaceTB/smoltalk",
+      "config": "all",
+      "rows_scanned": 300000,
+      "threshold": 0.999,
+      "ngram_n": 13,
+      "wall_clock_sec": 158.9,
+      "n_sources_seen": 13,
+      "coverage_note": "Sampled prefix; counts are lower bounds per source.",
+      "routes": [
+        {
+          "source": "metamathqa-50k",
+          "item_set": "gsm8k_train",
+          "items_contained": 2276,
+          "rows_from_source": 13495,
+          "share_of_item_set": 0.304563
+        },
+        {
+          "source": "metamathqa-50k",
+          "item_set": "math_train",
+          "items_contained": 1530,
+          "rows_from_source": 13495,
+          "share_of_item_set": 0.204
+        },
+        {
+          "source": "openhermes-100k",
+          "item_set": "gsm8k_train",
+          "items_contained": 1268,
+          "rows_from_source": 27356,
+          "share_of_item_set": 0.169678
+        },
+        {
+          "source": "numina-cot-100k",
+          "item_set": "gsm8k_train",
+          "items_contained": 523,
+          "rows_from_source": 30537,
+          "share_of_item_set": 0.069985
+        },
+        {
+          "source": "numina-cot-100k",
+          "item_set": "math_train",
+          "items_contained": 228,
+          "rows_from_source": 30537,
+          "share_of_item_set": 0.0304
+        },
+        {
+          "source": "openhermes-100k",
+          "item_set": "math_train",
+          "items_contained": 172,
+          "rows_from_source": 27356,
+          "share_of_item_set": 0.022933
+        },
+        {
+          "source": "smol-magpie-ultra",
+          "item_set": "math_train",
+          "items_contained": 120,
+          "rows_from_source": 117774,
+          "share_of_item_set": 0.016
+        }
+      ]
+    },
+    "tulu3": {
+      "corpus": "tulu3",
+      "hf_path": "allenai/tulu-3-sft-mixture",
+      "config": null,
+      "rows_scanned": 300000,
+      "threshold": 0.999,
+      "ngram_n": 13,
+      "wall_clock_sec": 214.3,
+      "n_sources_seen": 6,
+      "coverage_note": "Sampled prefix; counts are lower bounds per source.",
+      "routes": [
+        {
+          "source": "ai2-adapt-dev/flan_v2_converted",
+          "item_set": "gsm8k_train",
+          "items_contained": 6021,
+          "rows_from_source": 89982,
+          "share_of_item_set": 0.805701
+        },
+        {
+          "source": "ai2-adapt-dev/tulu_v3.9_wildchat_100k",
+          "item_set": "gsm8k_train",
+          "items_contained": 4,
+          "rows_from_source": 100000,
+          "share_of_item_set": 0.000535
+        }
+      ]
+    }
+  },
+  "dose_regression": {
+    "containment_source": "outputs/corpus_scan/train119k_items.jsonl",
+    "n_parents_with_containment": 722,
+    "n_parents_total": 891,
+    "stage1_by_containment": [
+      {
+        "bin": "[0.00,0.10)",
+        "n_parents": 219,
+        "n_rows": 407,
+        "recall_events": 4,
+        "recall_rate": 0.009828,
+        "ci95": [
+          0.002375,
+          0.019753
+        ]
+      },
+      {
+        "bin": "[0.10,0.30)",
+        "n_parents": 177,
+        "n_rows": 326,
+        "recall_events": 6,
+        "recall_rate": 0.018405,
+        "ci95": [
+          0.006006,
+          0.034483
+        ]
+      },
+      {
+        "bin": "[0.30,0.50)",
+        "n_parents": 197,
+        "n_rows": 346,
+        "recall_events": 4,
+        "recall_rate": 0.011561,
+        "ci95": [
+          0.002732,
+          0.023599
+        ]
+      },
+      {
+        "bin": "[0.50,0.80)",
+        "n_parents": 240,
+        "n_rows": 415,
+        "recall_events": 3,
+        "recall_rate": 0.007229,
+        "ci95": [
+          0.0,
+          0.016706
+        ]
+      },
+      {
+        "bin": "[0.80,1.01)",
+        "n_parents": 58,
+        "n_rows": 97,
+        "recall_events": 1,
+        "recall_rate": 0.010309,
+        "ci95": [
+          0.0,
+          0.031915
+        ]
+      }
+    ],
+    "instella3b_by_containment": [
+      {
+        "bin": "[0.00,0.10)",
+        "n_parents": 219,
+        "n_rows": 407,
+        "recall_events": 15,
+        "recall_rate": 0.036855,
+        "ci95": [
+          0.018605,
+          0.058667
+        ]
+      },
+      {
+        "bin": "[0.10,0.30)",
+        "n_parents": 177,
+        "n_rows": 326,
+        "recall_events": 5,
+        "recall_rate": 0.015337,
+        "ci95": [
+          0.003125,
+          0.030675
+        ]
+      },
+      {
+        "bin": "[0.30,0.50)",
+        "n_parents": 197,
+        "n_rows": 346,
+        "recall_events": 3,
+        "recall_rate": 0.008671,
+        "ci95": [
+          0.0,
+          0.019608
+        ]
+      },
+      {
+        "bin": "[0.50,0.80)",
+        "n_parents": 240,
+        "n_rows": 415,
+        "recall_events": 18,
+        "recall_rate": 0.043373,
+        "ci95": [
+          0.025253,
+          0.063882
+        ]
+      },
+      {
+        "bin": "[0.80,1.01)",
+        "n_parents": 58,
+        "n_rows": 97,
+        "recall_events": 4,
+        "recall_rate": 0.041237,
+        "ci95": [
+          0.01,
+          0.081081
+        ]
+      }
+    ],
+    "mde": {
+      "base_rate_p0": 0.028284,
+      "n_parent_clusters": 891,
+      "mean_rows_per_parent": 1.786,
+      "detectable_p1_at_80pct_power": 0.047208,
+      "absolute_increase_pp": 1.892,
+      "note": "Statistical floor only. The empirical floor from Phase 2 is stricter: the probe separated from baseline at 64x exposure (verbatim 0.946) and not at 16x (verbatim 0.491), so near-verbatim memorisation is required before the instrument responds at all."
+    }
+  }
+}

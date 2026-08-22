@@ -400,7 +400,7 @@ def validate(aliases: str = "M3-base,M3-instruct,M3-math", n: int = 200) -> dict
     for alias in [a.strip() for a in aliases.split(",") if a.strip()]:
         llm = _load(alias)
         rows = _generate(llm, alias, prompts)
-        correct = sum(1 for r, g in zip(rows, golds) if normalise(r["extracted"]) == g)
+        correct = sum(1 for r, g in zip(rows, golds, strict=False) if normalise(r["extracted"]) == g)
         acc = 100.0 * correct / len(items)
         tiers: dict[str, int] = {}
         for r in rows:
@@ -732,7 +732,7 @@ def generate(alias: str, benchmarks: str = "", overwrite: bool = False,
         with target.open("w", encoding="utf-8") as fh:
             for ln in keep_existing:
                 fh.write(ln + "\n")
-            for item, row in zip(items, rows):
+            for item, row in zip(items, rows, strict=False):
                 fh.write(json.dumps({
                     "id": item.id,
                     "parent_id": item.parent_id or item.id,
@@ -830,11 +830,11 @@ def atlas() -> dict:
             ]
             cons = sum(cons_vals) / len(cons_vals) if cons_vals else None
 
-            def _acc(pred) -> float | None:
+            def _acc(pred, srows=srows) -> float | None:
                 sel = [r for r in srows if pred(r)]
                 return sum(x["correct"] for x in sel) / len(sel) if sel else None
 
-            def _trunc(pred) -> float | None:
+            def _trunc(pred, srows=srows) -> float | None:
                 """Truncation rate for a condition.
 
                 Load bearing, not diagnostic. The structural variants compose an extra
@@ -855,7 +855,9 @@ def atlas() -> dict:
                 silently reports the numeric column as absent.
                 """
                 names = set(vtypes)
-                return lambda r: r["variant_type"] in names
+                # noqa target: `r` is this lambda's own parameter and shadows the
+                # outer loop name, which B023 does not model.
+                return lambda r, names=names: r["variant_type"] in names  # noqa: B023
 
             per_skill[skill] = {
                 "n_rows": len(srows),
@@ -962,7 +964,7 @@ def did(bench: str = ARMS, n_bootstrap: int = 4000, seed: int = 6198) -> dict:
         }
         orig = lambda v: v == "original"  # noqa: E731
 
-        def estimate(sample: list[dict], cond) -> float | None:
+        def estimate(sample: list[dict], cond, orig=orig) -> float | None:
             a = cell_acc(sample, "seen", orig)
             b = cell_acc(sample, "unseen", orig)
             c = cell_acc(sample, "seen", cond)
@@ -1076,7 +1078,7 @@ def did(bench: str = ARMS, n_bootstrap: int = 4000, seed: int = 6198) -> dict:
         # variant, how often is the depth variant wrong, and vice versa? Discordant pairs
         # carry the whole signal, and the pairing controls item difficulty exactly.
         b_disc = c_disc = 0
-        for pid, prows in by_parent.items():
+        for _pid, prows in by_parent.items():
             num = [r for r in prows if conditions["numeric"](r["variant_type"])]
             dep = [r for r in prows if conditions["depth"](r["variant_type"])]
             if not num or not dep:

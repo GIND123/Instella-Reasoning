@@ -113,7 +113,7 @@ def fig_perturbation_slope(atlas: dict, out_dir: pathlib.Path, skill: str = "ari
     for i, model in enumerate(models):
         cell = atlas[model][skill]
         ys = [cell.get(key) for key, _ in CONDITIONS]
-        pts = [(x, y) for x, y in zip(xs, ys) if y is not None]
+        pts = [(x, y) for x, y in zip(xs, ys, strict=False) if y is not None]
         if not pts:
             continue
         colour = SERIES[i % len(SERIES)]
@@ -213,7 +213,7 @@ def fig_accuracy_consistency(atlas: dict, out_dir: pathlib.Path, skill: str = "a
         heights = [0 if v is None else v for v in vals]
         ax.bar(offs, heights, width, label=label, color=SERIES[i],
                edgecolor=SURFACE, linewidth=1.0, zorder=3)
-        for xi, v in zip(offs, vals):
+        for xi, v in zip(offs, vals, strict=False):
             ax.text(xi, (0 if v is None else v) + 0.015,
                     "n/a" if v is None else f"{v:.2f}",
                     ha="center", va="bottom", fontsize=7, color=INK_SOFT)
@@ -256,7 +256,7 @@ def fig_recall_trajectory(did: dict, out_dir: pathlib.Path, intervention: str = 
     ax1.plot(xs, [did[m]["recall_unseen"] for m in models], color=SERIES[1], linewidth=2.0,
              marker="s", markersize=6, markeredgecolor=SURFACE, markeredgewidth=1.2,
              label=arm_labels[1], zorder=3)
-    for m, x in zip(models, xs):
+    for m, x in zip(models, xs, strict=False):
         ax1.annotate(f"{did[m]['recall_seen']:.3f}", xy=(x, did[m]["recall_seen"]),
                      xytext=(0, 7), textcoords="offset points", ha="center",
                      fontsize=7, color=INK_SOFT)
@@ -267,14 +267,14 @@ def fig_recall_trajectory(did: dict, out_dir: pathlib.Path, intervention: str = 
 
     gaps = [did[m].get("recall_gap") for m in models]
     cis = [did[m].get("ci_recall_gap") or [None, None] for m in models]
-    lo = [g - c[0] if c[0] is not None else 0 for g, c in zip(gaps, cis)]
-    hi = [c[1] - g if c[1] is not None else 0 for g, c in zip(gaps, cis)]
+    lo = [g - c[0] if c[0] is not None else 0 for g, c in zip(gaps, cis, strict=False)]
+    hi = [c[1] - g if c[1] is not None else 0 for g, c in zip(gaps, cis, strict=False)]
     ax2.errorbar(xs, gaps, yerr=[lo, hi], fmt="o", color=SERIES[3], markersize=6,
                  markeredgecolor=SURFACE, markeredgewidth=1.2, linewidth=2.0,
                  capsize=3, zorder=3)
     ax2.axhline(0, color=INK_SOFT, linewidth=0.9, linestyle=(0, (4, 3)), zorder=1)
     ax2.set_ylabel("recall gap (high - low)")
-    for m, x, g in zip(models, xs, gaps):
+    for _m, x, g in zip(models, xs, gaps, strict=False):
         ax2.annotate(f"{g:+.3f}", xy=(x, g), xytext=(7, 0), textcoords="offset points",
                      va="center", fontsize=7, color=INK_SOFT)
 

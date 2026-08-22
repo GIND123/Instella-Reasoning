@@ -1,0 +1,80 @@
+{
+  "corpus": "olmoe_algebraic-stack",
+  "hf_path": "allenai/OLMoE-mix-0924",
+  "config": null,
+  "data_files": null,
+  "hf_glob": "data/algebraic-stack/",
+  "split": "train",
+  "rows_scanned": 200000,
+  "row_limit": 200000,
+  "sampled": true,
+  "ngram_n": 13,
+  "wall_clock_sec": 1195.0,
+  "rows_per_hour": 602826,
+  "coverage_note": "Sampled prefix: containment is a LOWER bound. A zero count means 'absent from the rows scanned', never 'absent from the corpus'.",
+  "per_item_set": {
+    "gsm8k_train": {
+      "n_items": 7473,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.021739,
+      "median": 0.0
+    },
+    "gsm8k_test": {
+      "n_items": 1319,
+      "bands": {
+        ">=0.999": 0,
+        ">=0.9": 0,
+        ">=0.8": 0,
+        ">=0.5": 0,
+        ">=0.3": 0,
+        ">=0.1": 0
+      },
+      "band_frac": {
+        ">=0.999": 0.0,
+        ">=0.9": 0.0,
+        ">=0.8": 0.0,
+        ">=0.5": 0.0,
+        ">=0.3": 0.0,
+        ">=0.1": 0.0
+      },
+      "max": 0.0,
+      "median": 0.0
+    },
+    "math_train": {
+      "n_items": 7500,
+      "bands": {
+        ">=0.999": 25,
+        ">=0.9": 28,
+        ">=0.8": 31,
+        ">=0.5": 44,
+        ">=0.3": 55,
+        ">=0.1": 104
+      },
+      "band_frac": {
+        ">=0.999": 0.003333,
+        ">=0.9": 0.003733,
+        ">=0.8": 0.004133,
+        ">=0.5": 0.005867,
+        ">=0.3": 0.007333,
+        ">=0.1": 0.013867
+      },
+      "max": 1.0,
+      "median": 0.0
+    }
+  }
+}

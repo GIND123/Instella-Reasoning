@@ -1,0 +1,50 @@
+[
+  {
+    "generations": "experiments/runs/ckpt-axis-v1/generations/phase1__stage1__train__T0.0__k1__vllm.jsonl",
+    "model": "amd/Instella-3B-Stage1",
+    "n_scored": 1591,
+    "n_unmatched": 0,
+    "recall": 18,
+    "recall_rate": 0.0113,
+    "abstain": 1,
+    "abstain_rate": 0.0006,
+    "other": 1572,
+    "other_rate": 0.9881,
+    "termination_rate": 0.824,
+    "truncation_rate": 0.176,
+    "marker_rate": 0.824,
+    "median_chars": 169
+  },
+  {
+    "generations": "experiments/runs/ckpt-axis-v1/generations/phase1__stage2__train__T0.0__k1__vllm.jsonl",
+    "model": "amd/Instella-3B",
+    "n_scored": 1591,
+    "n_unmatched": 0,
+    "recall": 45,
+    "recall_rate": 0.0283,
+    "abstain": 0,
+    "abstain_rate": 0.0,
+    "other": 1546,
+    "other_rate": 0.9717,
+    "termination_rate": 0.9711,
+    "truncation_rate": 0.0289,
+    "marker_rate": 0.9686,
+    "median_chars": 224
+  },
+  {
+    "generations": "experiments/runs/ckpt-axis-v1/generations/phase1__sft__train__T0.0__k1__vllm.jsonl",
+    "model": "amd/Instella-3B-SFT",
+    "n_scored": 1591,
+    "n_unmatched": 0,
+    "recall": 49,
+    "recall_rate": 0.0308,
+    "abstain": 6,
+    "abstain_rate": 0.0038,
+    "other": 1536,
+    "other_rate": 0.9654,
+    "termination_rate": 0.9786,
+    "truncation_rate": 0.0214,
+    "marker_rate": 0.3187,
+    "median_chars": 617
+  }
+]
