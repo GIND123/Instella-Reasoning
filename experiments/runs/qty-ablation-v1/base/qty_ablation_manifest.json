@@ -1,0 +1,28 @@
+{
+  "n_parents": 1764,
+  "n_variants": 8933,
+  "n_checked": 8933,
+  "n_parents_with_complete_2x2": 1764,
+  "inserted_sentence_word_counts": {
+    "20": 7056
+  },
+  "n_problems": 0,
+  "problems": [],
+  "seed": 6198,
+  "n_parents_pool": 1779,
+  "n_parents_eligible": 1764,
+  "n_parents_requested": 1779,
+  "skipped_by_condition": {
+    "reorder_safe": 1651
+  },
+  "items_path": "experiments/runs/qty-ablation-v1/base/qty_ablation.jsonl",
+  "conditions": [
+    "orig",
+    "offtopic_noqty",
+    "domain_noqty",
+    "offtopic_qty",
+    "domain_qty",
+    "reorder_safe"
+  ],
+  "frame": "A separate log listing {qty} entries about {topic} was filed in another office and has no bearing on this question."
+}
