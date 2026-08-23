@@ -1,0 +1,330 @@
+\documentclass{article}
+
+\usepackage[dblblindworkshop]{neurips_2026}
+\workshoptitle{6th Workshop on Mathematical Reasoning and AI, NeurIPS 2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\renewcommand{\arraystretch}{0.92}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{2pt}
+\setlength{\textfloatsep}{6pt plus 1pt minus 2pt}
+\setlength{\intextsep}{6pt plus 1pt minus 2pt}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{placeins}
+
+\title{Language Models Reproduce Reasoning Procedures but Not Answers
+       Under Verified Contamination}
+
+\author{%
+  Anonymous Author(s) \\
+  Affiliation \\
+  Address \\
+  \texttt{email} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+A benchmark item found in a model's training data is routinely taken to mean its score on
+that item reflects recall, but testing the inference requires knowing what the model read,
+which the corpora of deployed systems do not permit. Instella publishes its full pretraining
+mixture and checkpoints from every stage, and its stage two corpus derives from the GSM8K
+training split, so membership is fixed by exact thirteen gram containment rather than
+estimated: against the 1319 test items, known negatives because the corpus derives only from
+train, the adopted threshold flags none, a Wilson upper bound of 0.29 percent. A premise
+deletion probe over 1591 train and 1588 test variants, across 891 and 888 parent problems,
+finds no rise in answer reproduction where the corpus enters training: a difference in
+differences of $-0.26$ points on $[-1.66, +1.14]$, holding at $+0.25$ and $+0.94$ across the
+later boundaries, and unchanged under restriction to small answers, to terminated
+generations, and to a five bin containment gradient within the train arm that runs 3.7, 1.5,
+0.9, 4.3 and 4.1 percent with no monotone order, against a design resolution of 1.89 points
+at 80 percent power. Continued pretraining at five doses under a fixed token budget explains
+the null and separates two quantities usually conflated: at 64 repetitions the model
+reproduces 94.6 percent of injected text verbatim, yet against a never injected control the
+memorized solution procedure returns at $+4.76$ points $[+1.30, +8.23]$ while the final
+answer does not, at $+1.52$ points $[-1.93, +5.08]$, procedure rising monotonically with dose
+and answer flat throughout. Exposure is legible in the calculation steps and not the answer,
+and needs far more repetition than the corpus supplies to any item, where document
+multiplicity reaches four. Two further checks locate what does cost accuracy: appending a
+dependent step to problems the strongest checkpoint already solves leaves 88.0 percent
+correct with zero reversions in 418 trials, while a sentence carrying one unused number costs
+$-6.2$ points $[-10.0, -2.4]$ where paraphrase costs $-0.8$ and a numberless sentence $-0.6$,
+neither distinguishable from zero. Two perturbation designs indicating heavy fragility, an
+externally authored clause ladder and premise reordering, did not survive verification and
+are reported as withdrawn. Intervals are cluster bootstraps over parent problems, 4000 draws.
+\end{abstract}
+
+\section{Introduction}
+
+Finding a benchmark item in a model's training data is, by convention, grounds for
+discounting the score on that item. The step from the one to the other is rarely tested,
+since a test needs both certainty about what the model read and access to it at more than
+one point in training. Neither is available for frontier systems. Detection has grown up
+as a literature of proxies instead, from n gram overlap~\citep{brown2020fewshot} to
+perplexity based membership inference~\citep{carlini2023quantifying, shi2024detecting},
+and plain rephrasing is enough to defeat the overlap rules~\citep{yang2023rephrased}. All
+of these estimate membership. None establishes it, and an estimated treatment label
+cannot tell a real null apart from an uninformative one.
+
+Instella~\citep{instella2025} is the exception this work relies on. AMD publishes the
+complete pretraining mixture together with checkpoints from every stage, including the
+stage two synthetic mathematics corpus built from the GSM8K training
+split~\citep{cobbe2021gsm8k}. Most released models expose only final weights; Instella
+exposes the text consumed at each stage, so whether a given problem entered training, and
+when, becomes a matter of direct containment. Every GSM8K test item is a known negative
+with respect to that corpus, which turns detector error into a measured quantity: at the
+threshold adopted here, zero of 1319 test items are flagged, a Wilson upper bound of 0.29
+percent.
+
+Knowing an item was available to be memorized says nothing about whether memorizing it
+inflated the score, so the probe removes one premise the solution genuinely uses. The
+original answer is then no longer derivable, and a model that remembered the parent problem
+can still emit it while a model working from the remaining text cannot. Instella ships four
+checkpoints along one trajectory, stage one before the synthetic corpus appears, stage two
+where it enters, an instruction tuned checkpoint and a preference optimized one, so the same
+items go to the model on both sides of that boundary. A memorization account predicts the
+rate climbs once the corpus arrives. It does not. To find what the probe could have detected,
+selected items were injected by continued pretraining at controlled doses, and there verbatim
+reproduction and answer recall come apart sharply.
+
+\section{Setup}
+
+\paragraph{Corpus and checkpoints.}
+The stage two corpus, \texttt{amd/Instella-GSM8K-synthetic}, ships a generated pool and a
+119 thousand item subset, \texttt{train\_119K}, documented as the split actually consumed
+in stage two pretraining. Containment is measured against that subset as a maximum over
+individual documents, so a claim of exposure points at one training document and not at
+the corpus treated as a single pooled text. Four checkpoints are probed: Stage 1, which
+precedes the corpus; Instella 3B, where it enters; SFT; and Instruct. Generation runs on
+vLLM~\citep{kwon2023vllm}, greedy for the primary estimates, with a temperature sweep as a
+check.
+
+\paragraph{Premise deletion.}
+One sentence the calculator annotated solution consumes is dropped from each GSM8K train and
+test parent problem. Two confounds correlated with containment are handled at construction. A
+necessity check confirms the deleted value appears nowhere else in the prompt, and variants
+whose original answer survives elsewhere are thrown out, since emitting it there is copying,
+and that leakage runs about twice as often on high containment items. What remains is 1591
+train and 1588 test rows over 891 and 888 parents. Hit rate counts variants where the model
+emits the deleted parent's original answer.
+
+\paragraph{Controlled injection.}
+Calibration comes from injecting 200 verified clean GSM8K test parents, alongside 200 held
+out entirely, into Instella 3B by continued pretraining. The token budget is fixed across
+five doses of zero, one, four, sixteen and sixty four repetitions, so a higher dose displaces
+generic filler and does not buy extra compute. Injected document loss and verbatim
+continuation sit inside every arm as positive controls, since a silently failed run and a
+genuine absence of memorization both give a flat curve. The same probe runs on both sets at
+every dose.
+
+\paragraph{Composition and perturbation.}
+A depth extension probe appends one dependent calculation step to problems the model already
+gets right, changing the gold answer, and asks whether the step is composed or the model
+falls back on the original problem. Answer preserving perturbations, paraphrase, an inserted
+off topic sentence, entity substitution, and a sentence carrying one unused number, are each
+scored against the same problem's own original.
+
+\section{Results}
+
+\subsection{Recall across the training trajectory}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{mathai_fig_combined.pdf}
+\caption{(a) Premise deletion recall by checkpoint for items inside the stage two corpus and
+for verified clean items; the dotted line marks where the corpus enters. (b) Difference in
+differences between the arms at each training boundary. (c) Recall within the train arm alone,
+binned by containment against the consumed corpus, which uses no train against test contrast.
+(d) Verbatim reproduction of injected documents against dose, confirming the intervention took
+effect. (e) Reproduction of the memorized solution procedure and of the final answer, each
+against the never injected control. (f) Paired accuracy change under answer preserving
+perturbations, each variant against its own original. Error bars are 95 percent cluster
+bootstraps over parent problems, 4000 draws.}
+\label{fig:main}
+\end{figure}
+
+Figure~\ref{fig:main} gives the hit rate on GSM8K train, which sits in the stage two
+corpus, and on GSM8K test, absent from every corpus scanned, together with the difference in
+differences at each boundary. A memorization account puts the gap between stage one and stage
+two. Per checkpoint the train arm runs 1.13, 2.83, 3.08 and 3.58 percent against 1.64, 3.59,
+3.34 and 3.15 percent on the test arm, over 1591 and 1588 rows.
+
+
+
+No gap opens at the boundary, and what movement there is runs the wrong way. The
+difference in differences comes to $-0.26$ points on an interval of $[-1.66, +1.14]$, and
+it stays flat at every later boundary too, $+0.25$ into SFT and $+0.94$ into Instruct.
+Three variations leave it where it is: restricting to one and two digit answers,
+restricting to rows where both checkpoints terminated, and replacing the train against
+test contrast with a five bin containment gradient inside the train arm alone. That last
+one matters most, since it drops the two arm comparison entirely, and the bins run 3.7,
+1.5, 0.9, 4.3 and 4.1 percent from least to most contained, with no order to them. Over
+891 parent clusters the design resolves 1.89 points at 80 percent power. Every gap
+observed falls under that.
+
+\subsection{Procedure and answer under controlled injection}
+
+Injection worked: verbatim reproduction climbs from 13.3 percent with no injection to 94.6
+percent at the top dose. Figure~\ref{fig:main} sets two outcomes against the never injected
+control at each dose, whether the deleted premise value comes back and whether the memorized
+intermediate calculation steps come back. Procedure reproduction runs $+0.48$, $+0.32$,
+$+2.10$ and $+4.76$ points across the four nonzero doses, the last on $[+1.30, +8.23]$;
+answer reproduction runs $+0.06$, $+0.09$, $-0.22$ and $+1.52$, the last on
+$[-1.93, +5.08]$.
+
+
+
+Answer recall never separates from the control, even where the model has all but memorized
+the source text. Procedure reproduction climbs steadily and clears zero at the top dose.
+So the model can reproduce a document almost word for word and still not recover the
+quantity that document deletes, or the answer that quantity fixes. Exposure shows up in
+the calculation steps. It takes far more of it than the released corpus ever supplies to
+one item, where document repetition tops out at four.
+
+\subsection{Composition and surface sensitivity}
+
+If remembering is not the constraint, two candidates remain: the model cannot chain an extra
+step, or any change to a problem's surface throws it. Neither holds. Given a problem Instruct
+already solves and one dependent step appended, it stays correct on 88.0 percent, 368 of 418,
+and never falls back on the pre extension answer. Panel (f) of Figure~\ref{fig:main} takes the second candidate apart.
+
+
+Paraphrase and a numberless inserted sentence both cost the stage two checkpoint several
+points, and post training takes each down to a margin indistinguishable from zero. The
+sentence carrying one unused number is the exception. It still costs 6.2 points at the
+strongest checkpoint tested, and the effect barely narrows across post training at all.
+One caveat: the two inserted sentence conditions differ in length as well as in whether they
+carry a number, so the number's own contribution is identified but not separated.
+
+\subsection{Two withdrawn checks}
+
+Two designs looked at first like heavy evidence of fragility, and neither held up. A
+perturbation ladder written elsewhere seemed to drop accuracy by over 30 points under two
+added clauses; its later rungs are independently generated problems, harder and structurally
+different, not the same items with clauses bolted on, so part of the drop is difficulty.
+Ivanova~\citep{ivanova2024fixable} makes the general form of the point, that an estimated
+difference wants an interval before an interpretation. The second was premise reordering,
+apparently worth over 12 points at every checkpoint, whose generator permutes premises with
+no check on whether a later sentence depends on an earlier one, leaving many variants simply
+broken. Restricted to items free of such dependency, 24 percent of the set, the effect lands
+on $+2.2$ points over $[-6.5, +10.9]$ across 46 problems. Neither supports anything here.
+
+\section{The unavailable contrast}
+
+The obvious design contrasts GSM8K train items at high containment against those at low, and
+it was tried first. Two findings closed it off. The subset the model actually consumed,
+\texttt{train\_119K}, puts 7.56 percent of train items at containment 0.80 or above against
+29.75 percent computed on the full released pool, so a pool defined arm draws about half its
+items from text the model never read. The second is decisive:
+\texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage two mixture
+and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct} arrives at fine
+tuning, each carrying GSM8K train at containment 0.999 or above on over 97 percent of items
+against under 0.1 percent for test. Every train item therefore reached the model after stage
+one by some route, so a high against low split on the Instella corpus alone compares two
+saturated groups. Appendix~B gives the per corpus figures. The checkpoint design never sorts
+items by containment and escapes this entirely.
+
+\section{Limitations and conclusion}
+\label{sec:limits}
+
+One family, one scale near three billion parameters, one benchmark domain, and a dissociation
+shown at five doses rather than ruled out at any exposure. The unused number result is the
+loose end: its conditions differ in length as well as in carrying a number, and the crossed
+design separating them is built but not run. Abstention on these underdetermined items stays
+under 2.5 percent at every checkpoint, but the prompt demands a number and never licenses
+declining, so that figure is reported without interpretation. Within those bounds, verified
+exposure does not raise how often a specific answer comes back, and does raise how often the
+solution procedure comes back. What costs accuracy under perturbation here is an inserted
+quantity with no role in the problem.
+
+\bibliographystyle{plainnat}
+\bibliography{mathai}
+
+\newpage
+\appendix
+
+\section{Related work}
+
+Huang et al.~\citep{huang2025mathperturb} construct hand authored hard perturbations of
+competition mathematics and attribute accuracy loss under an unchanged solution method to
+blind application of a learned procedure, a reading broadly consistent with the procedure
+level memorization in Section 3.2, established here against a corpus verified exactly
+rather than inferred. Wu et al.~\citep{wu2025reasoning} show that reinforcement learning
+gains on mathematical reasoning depend on the pretraining exposure of the base policy and
+argue that clean synthetic problems are needed for reliable conclusions, a concern the
+checkpoint based design addresses by evaluating a policy before any relevant exposure
+occurred. Zhang et al.~\citep{zhang2024careful} rebuild GSM8K from a contamination free
+procedure and report accuracy gaps of up to 13 points that track prior exposure across
+closed models, using an estimated exposure signal in the absence of any released training
+corpus; the present work substitutes an exact containment measurement for that estimate
+on a family where the corpus is public.
+
+\section{Containment method, calibration, and corpus routes}
+
+The within split contamination contrast, high against low containment GSM8K train
+items, was closed rather than merely complicated by two findings. The corpus subset
+actually consumed during Instella 3B stage two pretraining, \texttt{train\_119K}, is a
+119{,}014 row subset of a 1{,}367{,}882 row released pool; containment computed against
+the pool over counts exposure, since only 7.56 percent of GSM8K train reaches 0.80 or
+higher against the subset actually consumed against 29.75 percent against the pool.
+Independently, \texttt{allenai/tulu-3-sft-mixture} is itself part of the Instella stage
+two pretraining mixture and \texttt{nvidia/OpenMathInstruct-2} enters at supervised fine
+tuning; both are generated in part from GSM8K train, and both carry it at containment
+0.999 or higher on more than 97 percent of items. Every GSM8K train item therefore
+entered post stage one training through at least one of these routes regardless of its
+containment in the Instella specific synthetic corpus, so a high against low contrast
+defined on that corpus alone would compare two groups that are both almost entirely
+exposed once these mixtures are accounted for; the contrast is not attenuated by this,
+it is unidentifiable.
+
+Item text is normalized to lowercase alphanumeric tokens and decomposed into every window
+of 13 consecutive tokens, following the overlap convention of
+Brown et al.~\citep{brown2020fewshot}. Containment against a document is the fraction of
+an item's windows found in that document; containment against a corpus is the maximum of
+that fraction over every document, computed in one streaming pass with an inverted index
+from window to source item so cost scales linearly in corpus size. Because the corpus is
+generated only from the GSM8K training split, every GSM8K test item is a verified
+negative, and the false positive rate is measured rather than assumed: at the adopted
+threshold of 0.80, zero of 1319 test items are flagged, a Wilson 95 percent upper bound
+of 0.29 percent; a looser rule flagging any window match flags 3 of 1000 sampled test
+items, 0.30 percent.
+
+Within the Tulu 3 mixture, a sampled prefix of 300{,}000 rows, six of the mixture's
+subsets, finds GSM8K train items reaching containment 0.999 through the
+\texttt{flan\_v2\_converted} subset, 6021 of 7473 items from 89{,}982 rows of that source,
+and through \texttt{wildchat} conversation logs, 4 items from 100{,}000 rows, an organic
+route in which users pasted benchmark problems into chat. Every scan reports rows
+examined alongside items found, since a sampled prefix bounds containment from below and
+a zero means absent from the rows scanned rather than absent from the corpus.
+
+\section{Reproduction}
+
+All generation, containment, and analysis code, together with every scored generation
+file and containment record underlying this work, is released for audit at a public
+repository and a paired dataset mirror, both anonymized for review and to be
+de anonymized on acceptance. Every containment number reported uses the maximum over
+individual documents definition stated above; an earlier internal computation of the
+same quantity against the corpus pooled as one text produced a materially different
+figure for the same released split and is superseded by the document level definition
+throughout this work. Random seeds are fixed across item selection, deletion variant
+construction, the continued pretraining mixture, and every cluster bootstrap. An
+assistant was used to help implement generation, containment, and analysis code under
+the direction of the authors, who independently verified every reported number against
+the underlying generation files; the assistant did not design the probes or select which
+results to report.
+
+\newpage
+\input{checklist.tex}
+
+\end{document}
