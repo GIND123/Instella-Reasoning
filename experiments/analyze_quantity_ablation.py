@@ -100,12 +100,14 @@ def load_rows(items_path: Path, gen_path: Path) -> list[dict]:
             continue
         gold = to_float(it.get("answer"))
         pred = to_float(extract_answer(g.get("completion") or ""))
-        out.append({
-            "parent_id": it["parent_id"],
-            "condition": it["metadata"]["condition"],
-            "correct": bool(gold is not None and pred is not None and gold == pred),
-            "finished": bool((g.get("metadata") or {}).get("finished", True)),
-        })
+        out.append(
+            {
+                "parent_id": it["parent_id"],
+                "condition": it["metadata"]["condition"],
+                "correct": bool(gold is not None and pred is not None and gold == pred),
+                "finished": bool((g.get("metadata") or {}).get("finished", True)),
+            }
+        )
     return out
 
 
@@ -129,8 +131,9 @@ def _boot(parents: list[str], stat, n: int, seed: int) -> tuple[float, float, fl
     return obs, lo, hi
 
 
-def contrast(table, group_a: tuple[str, ...], group_b: tuple[str, ...],
-             n_boot: int, seed: int) -> dict | None:
+def contrast(
+    table, group_a: tuple[str, ...], group_b: tuple[str, ...], n_boot: int, seed: int
+) -> dict | None:
     """mean(accuracy over group_a) - mean(accuracy over group_b), paired within parent."""
     usable = [p for p, c in table.items() if all(k in c for k in group_a + group_b)]
     if not usable:
@@ -142,8 +145,12 @@ def contrast(table, group_a: tuple[str, ...], group_b: tuple[str, ...],
         return sum(a) / len(a) - sum(b) / len(b)
 
     obs, lo, hi = _boot(usable, stat, n_boot, seed)
-    return {"effect_pp": round(obs * 100, 3), "ci95_pp": [round(lo * 100, 3), round(hi * 100, 3)],
-            "n_parents": len(usable), "excludes_zero": bool(lo > 0 or hi < 0)}
+    return {
+        "effect_pp": round(obs * 100, 3),
+        "ci95_pp": [round(lo * 100, 3), round(hi * 100, 3)],
+        "n_parents": len(usable),
+        "excludes_zero": bool(lo > 0 or hi < 0),
+    }
 
 
 def analyse(run: Path, n_boot: int, seed: int) -> dict:
@@ -167,25 +174,31 @@ def analyse(run: Path, n_boot: int, seed: int) -> dict:
             "n_rows": len(rows),
             "truncation_rate": round(1 - sum(r["finished"] for r in rows) / len(rows), 4),
             "accuracy_by_condition": acc,
-            "PRIMARY_number_main_effect": contrast(table, WITH_NUMBER,
-                                                   ("offtopic_noqty", "domain_noqty"),
-                                                   n_boot, seed),
-            "secondary_topicality_main_effect": contrast(table, DOMAIN,
-                                                         ("offtopic_noqty", "offtopic_qty"),
-                                                         n_boot, seed),
+            "PRIMARY_number_main_effect": contrast(
+                table, WITH_NUMBER, ("offtopic_noqty", "domain_noqty"), n_boot, seed
+            ),
+            "secondary_topicality_main_effect": contrast(
+                table, DOMAIN, ("offtopic_noqty", "offtopic_qty"), n_boot, seed
+            ),
             "secondary_drop_vs_orig": {
                 cond: contrast(table, (cond,), ("orig",), n_boot, seed) for cond in CELLS
             },
-            "EXPLORATORY_reorder_safe": contrast(table, ("reorder_safe",), ("orig",),
-                                                 n_boot, seed),
+            "EXPLORATORY_reorder_safe": contrast(table, ("reorder_safe",), ("orig",), n_boot, seed),
         }
         # interaction: does the number cost more when the sentence is on-topic?
         usable = [p for p, c in table.items() if all(k in c for k in CELLS)]
         if usable:
-            def inter(sample: list[str]) -> float:
-                d = sum(table[p]["domain_qty"] - table[p]["domain_noqty"] for p in sample)
-                o = sum(table[p]["offtopic_qty"] - table[p]["offtopic_noqty"] for p in sample)
+
+            def inter(sample: list[str], active_table: dict[str, dict[str, bool]] = table) -> float:
+                d = sum(
+                    active_table[p]["domain_qty"] - active_table[p]["domain_noqty"] for p in sample
+                )
+                o = sum(
+                    active_table[p]["offtopic_qty"] - active_table[p]["offtopic_noqty"]
+                    for p in sample
+                )
                 return (d - o) / len(sample)
+
             obs, lo, hi = _boot(usable, inter, n_boot, seed)
             entry["secondary_interaction"] = {
                 "effect_pp": round(obs * 100, 3),
@@ -199,9 +212,11 @@ def analyse(run: Path, n_boot: int, seed: int) -> dict:
 
 def render(results: dict) -> str:
     out = ["# Quantity ablation - pre-registered analysis", ""]
-    out.append("Paired within parent problem against that problem's own `orig`. "
-               "Cluster bootstrap over parents, "
-               f"{results['n_boot']} draws, seed {results['seed']}.")
+    out.append(
+        "Paired within parent problem against that problem's own `orig`. "
+        "Cluster bootstrap over parents, "
+        f"{results['n_boot']} draws, seed {results['seed']}."
+    )
     out.append("")
     out.append("## PRIMARY - main effect of an inserted number")
     out.append("")
@@ -210,9 +225,11 @@ def render(results: dict) -> str:
     for tag, e in results["checkpoints"].items():
         p = e.get("PRIMARY_number_main_effect")
         if p:
-            out.append(f"| {tag} | {p['effect_pp']:+.2f} pp | "
-                       f"[{p['ci95_pp'][0]:+.2f}, {p['ci95_pp'][1]:+.2f}] | "
-                       f"{p['n_parents']} | {'**yes**' if p['excludes_zero'] else 'no'} |")
+            out.append(
+                f"| {tag} | {p['effect_pp']:+.2f} pp | "
+                f"[{p['ci95_pp'][0]:+.2f}, {p['ci95_pp'][1]:+.2f}] | "
+                f"{p['n_parents']} | {'**yes**' if p['excludes_zero'] else 'no'} |"
+            )
     out.append("")
     out.append("## Secondary")
     out.append("")
@@ -221,8 +238,10 @@ def render(results: dict) -> str:
     for tag, e in results["checkpoints"].items():
         t = e.get("secondary_topicality_main_effect") or {}
         i = e.get("secondary_interaction") or {}
-        out.append(f"| {tag} | {t.get('effect_pp', float('nan')):+.2f} pp | "
-                   f"{i.get('effect_pp', float('nan')):+.2f} pp | {e['truncation_rate']:.1%} |")
+        out.append(
+            f"| {tag} | {t.get('effect_pp', float('nan')):+.2f} pp | "
+            f"{i.get('effect_pp', float('nan')):+.2f} pp | {e['truncation_rate']:.1%} |"
+        )
     out.append("")
     out.append("## Accuracy by condition")
     out.append("")
@@ -230,23 +249,29 @@ def render(results: dict) -> str:
     out.append("| checkpoint | " + " | ".join(conds) + " |")
     out.append("|---" * (len(conds) + 1) + "|")
     for tag, e in results["checkpoints"].items():
-        cells = [f"{e['accuracy_by_condition'].get(c, {}).get('accuracy', float('nan')):.3f}"
-                 for c in conds]
+        cells = [
+            f"{e['accuracy_by_condition'].get(c, {}).get('accuracy', float('nan')):.3f}"
+            for c in conds
+        ]
         out.append(f"| {tag} | " + " | ".join(cells) + " |")
     out.append("")
     out.append("## EXPLORATORY - order-safe reordering")
     out.append("")
-    out.append("> The order-safety filter is a surface heuristic. Manual inspection found "
-               "violations that survive it, so these are spot-checks pending a human audit, "
-               "not estimates. Do not report them as a result.")
+    out.append(
+        "> The order-safety filter is a surface heuristic. Manual inspection found "
+        "violations that survive it, so these are spot-checks pending a human audit, "
+        "not estimates. Do not report them as a result."
+    )
     out.append("")
     out.append("| checkpoint | effect | 95% CI | parents |")
     out.append("|---|--:|---|--:|")
     for tag, e in results["checkpoints"].items():
         r = e.get("EXPLORATORY_reorder_safe")
         if r:
-            out.append(f"| {tag} | {r['effect_pp']:+.2f} pp | "
-                       f"[{r['ci95_pp'][0]:+.2f}, {r['ci95_pp'][1]:+.2f}] | {r['n_parents']} |")
+            out.append(
+                f"| {tag} | {r['effect_pp']:+.2f} pp | "
+                f"[{r['ci95_pp'][0]:+.2f}, {r['ci95_pp'][1]:+.2f}] | {r['n_parents']} |"
+            )
     return "\n".join(out) + "\n"
 
 
@@ -262,13 +287,16 @@ def main() -> int:
     out_dir = run / "analysis"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "qty_ablation_results.json").write_text(
-        json.dumps(results, indent=2), encoding="utf-8")
+        json.dumps(results, indent=2), encoding="utf-8"
+    )
     md = render(results)
     (out_dir / "RESULTS.md").write_text(md, encoding="utf-8")
     print(md)
     if not results["checkpoints"]:
-        print("[qty-ablation] no generation files found under "
-              f"{run / 'generations'} (expected qty__<tag>.jsonl)")
+        print(
+            "[qty-ablation] no generation files found under "
+            f"{run / 'generations'} (expected qty__<tag>.jsonl)"
+        )
         return 1
     return 0
 
