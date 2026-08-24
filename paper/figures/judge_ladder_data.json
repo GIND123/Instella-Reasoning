@@ -71,6 +71,24 @@
     0.5114,
     0.7539
    ]
+  },
+  "qwen2.5-32b-instruct": {
+   "given": [
+    -0.0619,
+    -0.103,
+    -0.021
+   ],
+   "withheld": [
+    -0.1911,
+    -0.239,
+    -0.14
+   ],
+   "ba": [
+    0.888,
+    0.9499,
+    0.6481,
+    0.8392
+   ]
   }
  },
  "stage2_target": {
@@ -93,5 +111,5 @@
    ]
   }
  },
- "note": "given/withheld = [estimate, ci_lo, ci_hi] balanced accuracy seen minus unseen; ba = [given-seen, given-unseen, withheld-seen, withheld-unseen]"
+ "note": "given/withheld = [estimate, ci_lo, ci_hi] balanced accuracy seen minus unseen; ba = [given-seen, given-unseen, withheld-seen, withheld-unseen]. Verdicts that did not parse are excluded, which is the convention every row here uses; for qwen2.5-32b-instruct that is 3 of 2017 reference given and 17 of 2017 reference withheld. Source verdicts: judge-ext-v1/analysis/judge_<judge>__<target>__reference_{based,free}.jsonl"
 }

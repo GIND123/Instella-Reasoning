@@ -9,6 +9,7 @@ Colours are print safe and separable in greyscale by also varying marker and lin
 """
 
 import json
+import pathlib
 
 import matplotlib
 
@@ -44,6 +45,9 @@ INK = "#1a1a1a"
 BLUE = "#2166ac"
 RED = "#b2182b"
 GREY = "#7f7f7f"
+
+
+HERE = pathlib.Path(__file__).resolve().parent
 
 
 def save(fig, name):
@@ -263,37 +267,34 @@ def fig_judge_dissociation():
 
 # ---------------------------------------------------------------- JUDGe Figure 2
 def fig_judge_ladder():
-    # Qwen2.5 32B cells are computed from
-    # judge-ext-v1/analysis/judge_qwen2.5-32b-instruct__instruct__reference_{based,free}.jsonl,
-    # excluding the 3 and 17 verdicts that did not parse, which is the convention the rest of
-    # the ladder and Table 1 already use. Counting an unparsed verdict as INCORRECT instead
-    # moves the withheld gap from -0.191 to -0.183 and would put this figure at odds with the
-    # table. The resulting gaps, -0.062 and -0.191, match Table 1 and figure 1 panel (a).
-    judges = ["Instella 3B\nInstruct", "Qwen2.5 7B\nInstruct", "Qwen2.5 14B\nInstruct",
-              "Qwen2.5 32B\nInstruct"]
+    """Absolute balanced accuracy across the capability ladder, all four cells.
+
+    Values come from judge_ladder_data.json so the figure cannot drift from Table 1: every
+    gap plotted here is the difference of two numbers that file also supplies to the table.
+    """
+    order = ["instella-3b-instruct", "qwen2.5-7b-instruct", "qwen2.5-14b-instruct",
+             "qwen2.5-32b-instruct"]
+    names = {"instella-3b-instruct": "Instella 3B\nInstruct",
+             "qwen2.5-7b-instruct": "Qwen2.5 7B\nInstruct",
+             "qwen2.5-14b-instruct": "Qwen2.5 14B\nInstruct",
+             "qwen2.5-32b-instruct": "Qwen2.5 32B\nInstruct"}
+    with open(HERE / "judge_ladder_data.json", encoding="utf-8") as fh:
+        data = json.load(fh)["instruct_target"]
+    judges = [names[k] for k in order]
+    ba = [data[k]["ba"] for k in order]
     xi = range(len(judges))
     series = [
-        ("Reference given, seen", [0.5137, 0.9370, 0.9459, 0.8880], BLUE, "o", "-"),
-        ("Reference given, unseen", [0.5678, 0.9728, 0.9689, 0.9499], BLUE, "^", "--"),
-        ("Reference withheld, seen", [0.5016, 0.5998, 0.6362, 0.6481], RED, "s", "-"),
-        ("Reference withheld, unseen", [0.5825, 0.7998, 0.8202, 0.8392], RED, "v", "--"),
+        ("Reference given, seen", [b[0] for b in ba], BLUE, "o", "-"),
+        ("Reference given, unseen", [b[1] for b in ba], BLUE, "^", "--"),
+        ("Reference withheld, seen", [b[2] for b in ba], RED, "s", "-"),
+        ("Reference withheld, unseen", [b[3] for b in ba], RED, "v", "--"),
     ]
     fig, ax = plt.subplots(figsize=(3.9, 2.3))
     ax.axhline(0.5, color=GREY, linewidth=0.7, linestyle=":", zorder=0)
     ax.text(3.45, 0.512, "chance", fontsize=7, color=GREY, style="italic", ha="right")
     for name, y, colour, marker, ls in series:
-        ax.plot(
-            xi,
-            y,
-            color=colour,
-            marker=marker,
-            linestyle=ls,
-            markersize=4,
-            linewidth=1.0,
-            markerfacecolor="white",
-            markeredgewidth=0.9,
-            label=name,
-        )
+        ax.plot(xi, y, color=colour, marker=marker, linestyle=ls, markersize=4,
+                linewidth=1.0, markerfacecolor="white", markeredgewidth=0.9, label=name)
     ax.set_xticks(list(xi))
     ax.set_xticklabels(judges)
     ax.set_ylabel("Balanced accuracy")
