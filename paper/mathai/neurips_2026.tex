@@ -42,27 +42,24 @@ which the corpora of deployed systems do not permit. Instella publishes its full
 mixture and checkpoints from every stage, and its stage two corpus derives from the GSM8K
 training split, so membership is fixed by exact thirteen gram containment rather than
 estimated: against the 1319 test items, known negatives because the corpus derives only from
-train, the adopted threshold flags none, a Wilson upper bound of 0.29 percent. A premise
-deletion probe over 1591 train and 1588 test variants, across 891 and 888 parent problems,
-finds no rise in answer reproduction where the corpus enters training: a difference in
-differences of $-0.26$ points on $[-1.66, +1.14]$, holding at $+0.25$ and $+0.94$ across the
-later boundaries, and unchanged under restriction to small answers, to terminated
-generations, and to a five bin containment gradient within the train arm that runs 3.7, 1.5,
-0.9, 4.3 and 4.1 percent with no monotone order. Continued pretraining at five doses under a fixed token budget explains
-the null and separates two quantities usually conflated: at 64 repetitions the model
-reproduces 94.6 percent of injected text verbatim, yet against a never injected control the
-memorized solution procedure returns at $+4.76$ points $[+1.30, +8.23]$ while the final
-answer does not, at $+1.52$ points $[-1.93, +5.08]$, procedure rising monotonically with dose
-and answer flat throughout. Exposure is legible in the calculation steps and not the answer,
-and needs far more repetition than the corpus supplies to any item, where document
-multiplicity reaches four. Two further checks locate what does cost accuracy: appending a
-dependent step to problems the strongest checkpoint already solves leaves 88.0 percent
-correct with zero reversions in 418 trials, while a crossed design holding sentence length, syntax and position fixed finds the
-main effect of an inserted unused number to be null at every checkpoint, $-0.59$
-$[-1.62, +0.45]$, $-0.79$ $[-1.93, +0.31]$ and $-0.42$ $[-1.53, +0.68]$, with topicality null
-too and a residual cost of about two points for any insertion at all. Two perturbation designs indicating heavy fragility, an
-externally authored clause ladder and premise reordering, did not survive verification and
-are reported as withdrawn. Intervals are cluster bootstraps over parent problems, 4000 draws.
+train, the adopted threshold flags none. A premise deletion probe over 1591 train and 1588
+test variants, across 891 and 888 parent problems, finds no rise in answer reproduction
+where the corpus enters training: a difference in differences of $-0.26$ points on
+$[-1.66, +1.14]$, holding across the later boundaries and unchanged under restriction to
+small answers, to terminated generations, and to a containment gradient within the train arm
+alone. Continued pretraining at five doses under a fixed token budget explains the null and
+separates two quantities usually conflated: at 64 repetitions the model reproduces 94.6
+percent of injected text verbatim, yet against a never injected control the memorized
+solution procedure returns at $+4.76$ points $[+1.30, +8.23]$ while the final answer does
+not, at $+1.52$ points $[-1.93, +5.08]$. Exposure is legible in the calculation steps and
+not the answer. A crossed design holding sentence length, syntax and position fixed finds
+the main effect of an inserted unused number null at every checkpoint, with topicality null
+too and a residual cost of about two points for any insertion. Under a prompt that licenses
+declining, abstention on provably underdetermined items rises from 7.5 to 53.2 percent
+across the trajectory against roughly 0.1 to 2.1 percent when the option is withheld, though
+the strongest checkpoint still answers 44 percent of them. Two perturbation designs
+indicating heavy fragility did not survive verification and are reported as withdrawn.
+Intervals are cluster bootstraps over parent problems, 4000 draws.
 \end{abstract}
 
 \section{Introduction}
@@ -139,9 +136,9 @@ scored against the same problem's own original.
 
 \subsection{Recall across the training trajectory}
 
-\begin{figure}[t]
+\begin{figure}[tb]
 \centering
-\includegraphics[width=\linewidth]{mathai_fig_combined.pdf}
+\includegraphics[width=0.97\linewidth]{mathai_fig_combined.pdf}
 \caption{(a) Premise deletion recall by checkpoint for items inside the stage two corpus and
 for verified clean items; the dotted line marks where the corpus enters. (b) Difference in
 differences between the arms at each training boundary. (c) Recall within the train arm alone,
@@ -187,18 +184,18 @@ $[-1.93, +5.08]$.
 
 
 Answer recall never separates from the control, even where the model has all but memorized
-the source text. Procedure reproduction climbs steadily and clears zero at the top dose.
-So the model can reproduce a document almost word for word and still not recover the
-quantity that document deletes, or the answer that quantity fixes. Exposure shows up in
-the calculation steps. It takes far more of it than the released corpus ever supplies to
-one item, where document repetition tops out at four.
+the source text, while procedure reproduction climbs steadily and clears zero at the top
+dose. The same model reproduces source text almost exactly and still fails to recover a
+deleted quantity or the answer it determines. Memorization is legible as reproduction of
+calculation steps under heavy repetition, not recovery of an answer, and it needs exposure
+far beyond what the corpus delivers to any item, where repetition tops out at four.
 
 \subsection{Composition and surface sensitivity}
 
-If remembering is not the constraint, two candidates remain: the model cannot chain an extra
-step, or any change to a problem's surface throws it. Neither holds. Given a problem Instruct
-already solves and one dependent step appended, it stays correct on 88.0 percent, 368 of 418,
-and never falls back on the pre extension answer.
+If remembering is not the constraint, two candidates remain: failure to chain an extra step,
+or sensitivity to any surface change. Neither holds. Appending one dependent step to a
+problem Instruct already solves leaves it correct on 88.0 percent, 368 of 418, with no
+reversion to the pre extension answer.
 
 An earlier comparison suggested the inserted number was what mattered, since a sentence
 carrying an unused quantity cost 6.2 points where a plain distractor cost 0.6. Those
@@ -211,6 +208,11 @@ is the cost of insertion itself, in panel (f) of Figure~\ref{fig:main}, where al
 sit near $-2$ points with overlapping intervals at stage two and at Instruct. The supervised
 fine tuned checkpoint is the exception and shows no insertion cost at all.
 
+Two points is small beside what Shi et al.~\citep{shi2023distracted} report for irrelevant
+context, and their mitigation result suggests why: the frame states the record has no
+bearing on the question. Stripping that clause costs a further $-3.46$ points
+$[-4.90, -2.01]$ at stage two but nothing after post training (Appendix~\ref{app:marker}).
+
 \subsection{Recognising an unanswerable problem}
 
 Every deletion item is underdetermined by construction, so declining is correct, but the
@@ -218,11 +220,10 @@ prompt used above demands a number and offers no alternative. Repeating the iden
 under a prompt differing only in naming \texttt{\#\#\#\# unanswerable} as an option changes
 the picture. Abstention runs 7.5, 11.1, 42.4 and 53.2 percent across Stage 1, Instella 3B,
 SFT and Instruct, against roughly 0.1, 0.0, 0.4 and 2.1 percent when the option is withheld,
-so the near zero figure measures compliance rather than competence and post training buys a
-steadily growing ability to recognise insufficiency. The strongest checkpoint still answers 44
-percent of problems that provably have none, every detected abstention is an explicit
-refusal rather than an unparseable generation, and train and test are indistinguishable
-throughout.
+so the near zero figure measures compliance, not competence, and post training buys a
+growing ability to recognise insufficiency. The strongest checkpoint still answers 44 percent
+of problems that provably have none, every abstention is an explicit refusal rather than an
+unparseable generation, and train and test are indistinguishable throughout.
 
 \subsection{Two withdrawn checks}
 
@@ -238,22 +239,21 @@ points over $[-6.5, +10.9]$. Appendix~C gives both in full.
 \section{The unavailable contrast}
 
 The obvious design contrasts GSM8K train items at high containment against those at low,
-and it was tried first. Two findings closed it off, both in Appendix~B. The subset the
-model actually consumed, \texttt{train\_119K}, puts 7.56 percent of train items at
-containment 0.80 or above against 29.75 percent computed on the full released pool. More
-decisively, \texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage
-two mixture and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct}
-arrives at fine tuning, each carrying GSM8K train at containment 0.999 or above on over 97
-percent of items against under 0.1 percent for test, one of the Tulu 3 subsets involved
-being labelled decontaminated. Every train item therefore reached the model after stage one
-by some route, so a high against low split on the Instella corpus alone compares two
-saturated groups. The checkpoint design never sorts items by containment and escapes this.
+and it was tried first. Two findings closed it off, both in Appendix~B. The subset the model
+actually consumed puts 7.56 percent of train items at containment 0.80 or above against
+29.75 percent computed on the full released pool. More decisively,
+\texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage two mixture
+and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct} arrives at fine
+tuning, each carrying GSM8K train at containment 0.999 or above on over 97 percent of items
+against under 0.1 percent for test, one of the Tulu 3 subsets involved being labelled
+decontaminated. Every train item therefore reached the model after stage one by some route,
+so a high against low split compares two saturated groups. The checkpoint design never sorts
+items by containment and escapes this.
 
 \paragraph{Limitations and conclusion.}
-One family, one scale near three billion parameters, one benchmark domain, and a
-dissociation shown at five doses rather than ruled out at any exposure. Within those bounds
-verified exposure does not raise how often an answer returns, and does raise how often the
-procedure does.
+One family, one scale, one benchmark domain, and a dissociation shown at five doses rather
+than ruled out at any exposure. Within those bounds verified exposure does not raise how
+often an answer returns; it does raise how often the procedure does.
 
 \bibliographystyle{plainnat}
 \bibliography{mathai}
@@ -314,6 +314,39 @@ and through \texttt{wildchat} conversation logs, 4 items from 100{,}000 rows, an
 route in which users pasted benchmark problems into chat. Every scan reports rows
 examined alongside items found, since a sampled prefix bounds containment from below and
 a zero means absent from the rows scanned rather than absent from the corpus.
+
+\section{The irrelevance marker}
+\label{app:marker}
+
+The inserted frame in the crossed design ends "and has no bearing on this question", which
+is an instruction to ignore the insertion carried inside the insertion itself.
+Shi et al.~\citep{shi2023distracted} report that such an instruction mitigates the loss
+irrelevant context causes, so the modest cost measured in Section 3.3 may sit inside their
+mitigated regime rather than in tension with it. Testing that requires removing the clause
+and nothing else. The replacement, "on the afternoon of the same day", holds the sentence at
+exactly twenty words and preserves position, topic noun and unused integer.
+
+\begin{table}[h]
+\centering
+\caption{Accuracy against each problem's own original, and the effect of removing the
+irrelevance marker. Cluster bootstrap over parent problems, 4000 draws, 1764 parents.}
+\small
+\begin{tabular}{lccc}
+\toprule
+Checkpoint & Marked & Unmarked & Marker effect \\
+\midrule
+Instella 3B & $-2.21$ [$-3.88$, $-0.51$] & $-5.67$ [$-7.43$, $-3.77$] & $\mathbf{-3.46}$ [$-4.90$, $-2.01$] \\
+SFT         & $+0.09$ [$-1.53$, $+1.67$] & $+0.11$ [$-1.53$, $+1.81$] & $+0.03$ [$-1.33$, $+1.36$] \\
+Instruct    & $-2.21$ [$-3.71$, $-0.65$] & $-2.78$ [$-4.34$, $-1.10$] & $-0.57$ [$-1.93$, $+0.79$] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The marker governs the cost at the base stage two checkpoint and not after post training.
+One checkpoint of three is a single result rather than a pattern, and it is reported as
+such: it accounts for the size of the stage two effect and does not account for the
+residual two points at Instruct, which neither the number, nor topicality, nor the marker
+explains.
 
 \section{The two withdrawn checks in full}
 
