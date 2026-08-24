@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from math import comb
 from pathlib import Path
 
@@ -90,6 +91,29 @@ def mcnemar(a_hit: dict, b_hit: dict, ids: list[str]) -> tuple[int, int, float]:
     return b, c, p
 
 
+def cluster_did(inj_pairs: dict, hel_pairs: dict, n_boot: int, seed: int):
+    """Cluster bootstrap of the difference in differences, resampling parent problems.
+
+    Items sharing a parent are not independent: one deletion can be probed several ways and
+    the same underlying problem drives all of them. Resampling items would understate the
+    interval, so parents are the unit, matching the inference used for the checkpoint axis.
+    """
+    parents = sorted(set(inj_pairs) | set(hel_pairs))
+
+    def stat(sample):
+        di = [d for q in sample for d in inj_pairs.get(q, ())]
+        dh = [d for q in sample for d in hel_pairs.get(q, ())]
+        if not di or not dh:
+            return 0.0
+        return 100 * (sum(di) / len(di) - sum(dh) / len(dh))
+
+    obs = stat(parents)
+    rng = random.Random(seed)
+    draws = sorted(stat([rng.choice(parents) for _ in parents]) for _ in range(n_boot))
+    return (round(obs, 3), round(draws[int(0.025 * n_boot)], 3),
+            round(draws[int(0.975 * n_boot)], 3))
+
+
 def _load_gens(path: Path) -> dict:
     out = {}
     if not path.exists():
@@ -105,7 +129,8 @@ def _members(mix: Path, name: str) -> set:
     return {json.loads(x)["id"] for x in open(mix / name, encoding="utf-8") if x.strip()}
 
 
-def analyse(run: Path, mix: Path, items_path: Path) -> dict:
+def analyse(run: Path, mix: Path, items_path: Path,
+            n_boot: int = 4000, seed: int = 6198) -> dict:
     items = {}
     for line in items_path.read_text(encoding="utf-8").splitlines():
         if line.strip():
@@ -113,7 +138,8 @@ def analyse(run: Path, mix: Path, items_path: Path) -> dict:
             items[r["id"]] = r
     inj, hel = _members(mix, "injected.jsonl"), _members(mix, "heldout.jsonl")
 
-    res = {"run": str(run), "n_injected": len(inj), "n_heldout": len(hel), "models": {}}
+    res = {"run": str(run), "n_injected": len(inj), "n_heldout": len(hel),
+       "n_boot": n_boot, "seed": seed, "models": {}}
     for alias, label in MODELS:
         base_dir = run / alias
         gens = {d: _load_gens(base_dir / f"probe__dose{d}.jsonl") for d in DOSES}
@@ -132,6 +158,7 @@ def analyse(run: Path, mix: Path, items_path: Path) -> dict:
                     "positive_controls_pass": rep.get("positive_controls_pass"),
                 }
         base = gens[0]
+        per_parent = {"injected": {}, "heldout": {}}
         for name, member in (("injected", inj), ("heldout", hel)):
             sel = [b for b in gens[64]
                    if b in base and (items.get(b, {}).get("parent_id")) in member]
@@ -141,6 +168,9 @@ def analyse(run: Path, mix: Path, items_path: Path) -> dict:
             cur = {b: _recall(pa[b], gens[64][b].get("completion", "")) for b in sel}
             ref = {b: _recall(pa[b], base[b].get("completion", "")) for b in sel}
             gained, lost, p = mcnemar(ref, cur, sel)
+            for b in sel:
+                per_parent[name].setdefault(items[b]["parent_id"], []).append(
+                    int(cur[b]) - int(ref[b]))
             entry[name] = {
                 "n": len(sel),
                 "recall_dose0": round(sum(ref.values()) / len(sel), 6),
@@ -149,8 +179,11 @@ def analyse(run: Path, mix: Path, items_path: Path) -> dict:
                 "gained": gained, "lost": lost, "mcnemar_p": round(p, 6),
             }
         if "injected" in entry and "heldout" in entry:
-            entry["PRIMARY_did_pp"] = round(
-                entry["injected"]["delta_pp"] - entry["heldout"]["delta_pp"], 3)
+            obs, lo, hi = cluster_did(per_parent["injected"], per_parent["heldout"],
+                                      n_boot, seed)
+            entry["PRIMARY_did_pp"] = obs
+            entry["PRIMARY_did_ci95"] = [lo, hi]
+            entry["PRIMARY_excludes_zero"] = bool(lo > 0 or hi < 0)
         res["models"][alias] = entry
     return res
 
@@ -171,13 +204,16 @@ def render(res: dict) -> str:
                      f"{'pass' if c['positive_controls_pass'] else '**FAIL**'} |")
     L += ["", "## PRIMARY - difference in differences on answer recall, 64x against 0x", "",
           "Injected minus held-out, so the 8.4M tokens every arm trains on cancel.", "",
-          "| model | injected delta | held-out delta | difference in differences |",
-          "|---|--:|--:|--:|"]
+          "| model | injected delta | held-out delta | difference in differences | "
+          "95% CI | excludes 0 |", "|---|--:|--:|--:|---|---|"]
     for _, e in res["models"].items():
         if "PRIMARY_did_pp" in e:
+            ci = e["PRIMARY_did_ci95"]
             L.append(f"| {e['label']} | {e['injected']['delta_pp']:+.2f} pp | "
                      f"{e['heldout']['delta_pp']:+.2f} pp | "
-                     f"**{e['PRIMARY_did_pp']:+.2f} pp** |")
+                     f"**{e['PRIMARY_did_pp']:+.2f} pp** | "
+                     f"[{ci[0]:+.2f}, {ci[1]:+.2f}] | "
+                     f"{'**yes**' if e['PRIMARY_excludes_zero'] else 'no'} |")
     L += ["", "## The single differences behind it", "",
           "| model | set | n | recall 0x | recall 64x | delta | gained | lost | McNemar p |",
           "|---|---|--:|--:|--:|--:|--:|--:|--:|"]
@@ -199,9 +235,11 @@ def main() -> int:
     ap.add_argument("--run", default="experiments/runs/replication-v1")
     ap.add_argument("--mixture", default="experiments/runs/ckpt-axis-v1/phase2/mixture")
     ap.add_argument("--items", default="experiments/runs/ckpt-axis-v1/base/gsm8k_test_deletion.jsonl")
+    ap.add_argument("--n-boot", type=int, default=4000)
+    ap.add_argument("--seed", type=int, default=6198)
     args = ap.parse_args()
     run = Path(args.run)
-    res = analyse(run, Path(args.mixture), Path(args.items))
+    res = analyse(run, Path(args.mixture), Path(args.items), args.n_boot, args.seed)
     if not res["models"]:
         print(f"[replication] no complete dose pair under {run}")
         return 1

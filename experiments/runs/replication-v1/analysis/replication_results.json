@@ -1,0 +1,95 @@
+{
+  "run": "experiments/runs/replication-v1",
+  "n_injected": 200,
+  "n_heldout": 200,
+  "n_boot": 4000,
+  "seed": 6198,
+  "models": {
+    "olmo2-1b": {
+      "label": "OLMo-2-1B",
+      "doses": {
+        "0": {
+          "injected_share": 0.0,
+          "verbatim_post": 0.1261,
+          "injected_loss_post": 1.2412,
+          "heldout_loss_post": 1.2945,
+          "positive_controls_pass": false
+        },
+        "64": {
+          "injected_share": 0.267502,
+          "verbatim_post": 0.7266,
+          "injected_loss_post": 0.3224,
+          "heldout_loss_post": 1.3732,
+          "positive_controls_pass": true
+        }
+      },
+      "injected": {
+        "n": 351,
+        "recall_dose0": 0.02849,
+        "recall_dose64": 0.031339,
+        "delta_pp": 0.285,
+        "gained": 5,
+        "lost": 4,
+        "mcnemar_p": 1.0
+      },
+      "heldout": {
+        "n": 371,
+        "recall_dose0": 0.016173,
+        "recall_dose64": 0.016173,
+        "delta_pp": 0.0,
+        "gained": 5,
+        "lost": 5,
+        "mcnemar_p": 1.0
+      },
+      "PRIMARY_did_pp": 0.285,
+      "PRIMARY_did_ci95": [
+        -2.336,
+        2.733
+      ],
+      "PRIMARY_excludes_zero": false
+    },
+    "qwen2.5-1.5b": {
+      "label": "Qwen2.5-1.5B",
+      "doses": {
+        "0": {
+          "injected_share": 0.0,
+          "verbatim_post": 0.2432,
+          "injected_loss_post": 1.254,
+          "heldout_loss_post": 1.2769,
+          "positive_controls_pass": false
+        },
+        "64": {
+          "injected_share": 0.309563,
+          "verbatim_post": 0.9886,
+          "injected_loss_post": 0.0473,
+          "heldout_loss_post": 1.4651,
+          "positive_controls_pass": true
+        }
+      },
+      "injected": {
+        "n": 351,
+        "recall_dose0": 0.045584,
+        "recall_dose64": 0.045584,
+        "delta_pp": 0.0,
+        "gained": 6,
+        "lost": 6,
+        "mcnemar_p": 1.0
+      },
+      "heldout": {
+        "n": 371,
+        "recall_dose0": 0.02965,
+        "recall_dose64": 0.02965,
+        "delta_pp": 0.0,
+        "gained": 7,
+        "lost": 7,
+        "mcnemar_p": 1.0
+      },
+      "PRIMARY_did_pp": 0.0,
+      "PRIMARY_did_ci95": [
+        -2.461,
+        2.519
+      ],
+      "PRIMARY_excludes_zero": false
+    }
+  }
+}
