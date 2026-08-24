@@ -38,34 +38,34 @@
 
 \begin{abstract}
 Automated evaluators are trained artifacts, so a verdict on a benchmark item may depend on
-whether the evaluator itself read that item during training, yet the corpora of models
-normally deployed as judges are closed and the question is usually left open. Instella
-publishes its complete pretraining mixture, and its stage two component derives from the
-GSM8K training split and not the test split, so membership is fixed by exact thirteen gram
-containment instead of estimated: the adopted threshold flags none of 1000 known negative
-test items, and the looser any match rule of Brown et al.\ flags 3, a false positive rate
-of 0.3 percent. Difficulty matched arms of 250 seen and 250 unseen problems expand into
-2017 candidate solutions produced by four Instella checkpoints, and three judges spanning
-a capability range, Instella 3B Instruct, Qwen2.5 7B Instruct and Qwen2.5 14B Instruct,
-return 48{,}408 verdicts at temperature zero under two prompts that differ only in whether
-the gold answer is supplied. Chance corrected agreement is shown to be the wrong statistic
-here and is reported as a cautionary result: Cohen's kappa manufactures a seen minus unseen
-gap of $-0.292$ $[-0.356, -0.228]$ purely from a base rate difference of 77 against 53
-percent, a textbook instance of the Feinstein and Cicchetti paradox, while balanced
-accuracy on the identical verdicts puts the same cell at $+0.054$. Under balanced accuracy
-a dissociation appears. Supplying the reference answer drives the membership gap toward
-zero as judges improve, running $-0.054$, $-0.036$ and $-0.023$, the last spanning zero,
-and toward zero more sharply still on a second generator at $-0.122$, $-0.002$ and
-$+0.008$. Withholding it removes the convergence entirely, at $-0.081$, $-0.200$ and
-$-0.184$, with the effect emerging exactly where a judge first becomes competent, since
-control condition balanced accuracy climbs from 0.514 to 0.937 to 0.946 across the ladder.
-Scale does not repair the reference free gap, which rules out a weak judge artifact.
-Abstention stays between 0.0 and 2.6 percent throughout, so selective non response does not
-generate the pattern. All intervals are cluster bootstraps over parent problems against a
-measured intraclass correlation of 0.48, since resampling rows would contract them by a
-design effect near 2.4. The practical consequence is narrow and testable: reference free
-LLM grading, the configuration used whenever no gold answer exists, degrades on exactly the
-items most likely to sit in a judge's training data, and supplying a reference restores it.
+whether the evaluator read that item during training, yet the corpora of models deployed as
+judges are closed and the question is usually left open. Instella publishes its complete
+pretraining mixture, and its stage two component derives from the GSM8K training split and
+not the test split, so membership is fixed by exact thirteen gram containment rather than
+estimated: the adopted threshold flags none of 1000 known negatives and the looser any match
+rule flags 3, a false positive rate of 0.3 percent. Difficulty matched arms of 250 seen and
+250 unseen problems expand into 2017 candidate solutions from four Instella checkpoints, and
+five judges spanning three model families and 3 to 32 billion parameters grade them at
+temperature zero under two prompts differing only in whether the gold answer is supplied.
+Chance corrected agreement is reported as a cautionary result rather than a metric: Cohen's
+kappa manufactures a seen minus unseen gap of $-0.292$ $[-0.356, -0.228]$ from a base rate
+difference of 77 against 53 percent, a textbook instance of the Feinstein and Cicchetti
+paradox, where balanced accuracy on identical verdicts gives $+0.054$. Under balanced
+accuracy every judge shows the same dissociation. With the reference supplied the membership
+gap stays between $-0.02$ and $-0.07$; withholding it moves every judge to between $-0.08$
+and $-0.24$, a within judge ratio of 1.5 to 8.0, and the gap is present at the 32 billion
+parameter judge whose reference free accuracy is the highest measured. Decomposing it
+locates the effect precisely. Sensitivity is unchanged by membership, $+0.011$
+$[-0.005, +0.034]$ and $-0.004$ $[-0.024, +0.016]$, while specificity collapses, $-0.496$
+$[-0.573, -0.415]$ and $-0.378$ $[-0.472, -0.276]$: one judge rejects 52 percent of wrong
+solutions to unseen problems and 3 percent of wrong solutions to seen ones. Because the same
+solutions are graded under both prompts, the control separates this from the possibility
+that errors on seen problems are simply subtler, which accounts for about a third of the gap
+and no more. On a familiar problem without a reference these judges become credulous rather
+than confused, losing the ability to reject a wrong answer while retaining the ability to
+accept a right one, and the pattern survives a reworded prompt. Reference free grading is
+the configuration used wherever no gold answer exists, and it is least reliable on exactly
+the items most likely to sit in a judge's training data.
 \end{abstract}
 
 \section{Introduction}
@@ -182,33 +182,39 @@ membership effect from nothing.
 \subsection{The dissociation}
 
 Table~\ref{tab:diss} and Figure~\ref{fig:diss} give the membership gap in balanced accuracy
-under both conditions. Supplying the reference answer produces the behaviour a control
-should show: as judges improve the gap contracts toward zero, from $-0.054$ to $-0.036$ to
-$-0.023$, with the strongest judge spanning zero. On candidate solutions from the stage two
-generator the convergence is sharper, running $-0.122$, then $-0.002$, then $+0.008$.
+under both conditions, for five judges spanning three model families and a capability range
+from 3 to 32 billion parameters. The control behaves as a control: with the reference
+supplied the gap stays small everywhere, between $-0.02$ and $-0.07$. Withholding it moves
+every judge to between $-0.08$ and $-0.24$, and the within judge ratio of the two runs from
+1.5 to 8.0. That ratio, rather than any trend across the ladder, is what the design
+identifies, since it compares one judge against itself on identical items and identical
+candidate solutions.
 
 \begin{table}[t]
 \centering
-\caption{Balanced accuracy, seen minus unseen, grading instruct outputs. Intervals are 95
-percent bootstraps over parent problems, 4000 draws. An asterisk marks an interval excluding
-zero.}
+\caption{Balanced accuracy, seen minus unseen, grading instruct outputs, across five judges
+from three model families. Intervals are 95 percent bootstraps over parent problems, 4000
+draws; an asterisk marks an interval excluding zero. The ratio is the reference free gap
+divided by the control gap for that judge.}
 \label{tab:diss}
 \small
-\begin{tabular}{lcc}
+\begin{tabular}{lccc}
 \toprule
-Judge & Reference given (control) & Reference withheld \\
+Judge & Reference given (control) & Reference withheld & Ratio \\
 \midrule
-Instella 3B Instruct  & $-0.054$ [$-0.083$, $-0.026$]$^{*}$ & $-0.081$ [$-0.109$, $-0.054$]$^{*}$ \\
-Qwen2.5 7B Instruct   & $-0.036$ [$-0.068$, $-0.008$]$^{*}$ & $\mathbf{-0.200}$ [$-0.248$, $-0.149$]$^{*}$ \\
-Qwen2.5 14B Instruct  & $-0.023$ [$-0.057$, $+0.006$]       & $\mathbf{-0.184}$ [$-0.231$, $-0.133$]$^{*}$ \\
+Instella 3B Instruct  & $-0.054$ [$-0.083$, $-0.026$]$^{*}$ & $-0.081$ [$-0.109$, $-0.054$]$^{*}$ & 1.5 \\
+Llama 3.1 8B Instruct & $-0.074$ [$-0.116$, $-0.032$]$^{*}$ & $\mathbf{-0.243}$ [$-0.281$, $-0.201$]$^{*}$ & 3.3 \\
+Qwen2.5 7B Instruct   & $-0.036$ [$-0.068$, $-0.008$]$^{*}$ & $\mathbf{-0.200}$ [$-0.248$, $-0.149$]$^{*}$ & 5.6 \\
+Qwen2.5 14B Instruct  & $-0.023$ [$-0.057$, $+0.006$]       & $\mathbf{-0.184}$ [$-0.231$, $-0.133$]$^{*}$ & 8.0 \\
+Qwen2.5 32B Instruct  & $-0.062$ [$-0.103$, $-0.021$]$^{*}$ & $\mathbf{-0.191}$ [$-0.239$, $-0.140$]$^{*}$ & 3.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Withholding the reference removes the convergence. The gap grows once a judge is strong
-enough to show it and then holds, at $-0.081$, $-0.200$ and $-0.184$. A defect of small
-models would shrink as capability rises. This does the opposite between the first and second
-judge and then flattens.
+Scale does not remove the reference free gap. It is present at every judge tested, including
+the 32 billion parameter one, whose reference free balanced accuracy on the seen arm is the
+highest measured at 0.648 and whose gap is still $-0.191$. A defect of weak models would
+shrink with capability; this does not.
 
 \begin{figure}[t]
 \centering
@@ -244,8 +250,10 @@ answer, so its rows describe a noise floor and the substantive claims rest on th
 Judge & Seen & Unseen & Seen & Unseen \\
 \midrule
 Instella 3B Instruct  & 0.514 & 0.568 & 0.502 & 0.583 \\
+Llama 3.1 8B Instruct & 0.860 & 0.934 & 0.511 & 0.754 \\
 Qwen2.5 7B Instruct   & 0.937 & 0.973 & 0.600 & 0.800 \\
 Qwen2.5 14B Instruct  & 0.946 & 0.969 & 0.636 & 0.820 \\
+Qwen2.5 32B Instruct  & 0.951 & 0.968 & 0.648 & 0.839 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -290,19 +298,43 @@ availability is what puts an item in a training corpus in the first place. Suppl
 reference answer, where one exists, removes the effect in these data, which makes it a
 mitigation rather than merely a diagnosis.
 
-\section{Mechanism}
+\subsection{Robustness to the prompt}
+
+The dissociation is not an artifact of one wording. Repeating both judges under a reworded
+prompt carrying the same information, the reference free gap is $-0.254$ $[-0.292, -0.212]$
+for Llama 3.1 8B against $-0.243$ under the original, and $-0.218$ $[-0.262, -0.170]$ for
+Qwen2.5 32B against $-0.191$, with the control gaps staying small at $-0.051$ and $-0.086$.
+
+\section{Where the gap comes from}
 \label{sec:mech}
 
-The pattern fits substitution of recall for verification. Asked to grade a problem present
-in its training data without being told the answer, a judge appears to check the candidate
-solution against the answer it remembers instead of against the reasoning in front of it.
-Two thirds of graded rows are variants, and the answer changing variants have different
-correct answers from their originals, so a remembered answer marks correct solutions wrong.
-Supplying the reference for the variant at hand removes any need to recall, and the gap goes
-with it.
+Balanced accuracy has two components and they behave differently, which narrows what the
+effect can be. Sensitivity, the rate at which genuinely correct solutions are accepted, is
+unchanged by membership: $+0.011$ $[-0.005, +0.034]$ for Llama 3.1 8B and $-0.004$
+$[-0.024, +0.016]$ for Qwen2.5 32B. The entire gap is specificity, the rate at which
+genuinely wrong solutions are rejected, at $-0.496$ $[-0.573, -0.415]$ and $-0.378$
+$[-0.472, -0.276]$. Llama rejects 52.3 percent of wrong solutions to unseen problems and
+2.7 percent of wrong solutions to seen ones.
 
-The account is inferential. Establishing it directly would require attributing a verdict to
-a specific memorized document, which the present data cannot do.
+This rules out the reading that first suggested itself, that the judge compares a candidate
+against a remembered answer instead of checking it. That account predicts correct solutions
+being marked wrong where a variant changed the answer, and therefore a sensitivity loss.
+Sensitivity does not move, and a direct test on the answer changing variants, where a
+remembered answer would be the wrong answer, finds no concentration of false negatives on
+the seen arm. What the judge does on a familiar problem is accept, not misremember.
+
+One confound has to be separated before that means anything about membership. The generator
+is more accurate on seen problems, so its errors there may simply be subtler and harder to
+catch, which would depress specificity with no involvement of the judge's own training data.
+The control settles it, because both conditions grade the same solutions. With the reference
+supplied the specificity gap is $-0.151$ $[-0.236, -0.068]$ and $-0.124$ $[-0.207, -0.042]$,
+so part of the effect is indeed error subtlety. Withholding the reference roughly triples it.
+That excess cannot be a property of the solutions, since the solutions are identical.
+
+The residual account is narrower than a memorisation story and easier to act on. Asked to
+judge a familiar problem without a reference, these judges become credulous rather than
+confused: they lose the ability to reject a wrong answer while retaining the ability to
+accept a right one. Supplying a reference restores most of it.
 
 \section{Limitations}
 \label{sec:limits}
@@ -320,7 +352,16 @@ claim requires a second open corpus model of comparable capability.
 
 \paragraph{One family supplies the candidate solutions.} Every graded output comes from an
 Instella checkpoint. Whether the dissociation reproduces on solutions from other generators
-is untested.
+is untested. The judges are no longer a single family: the effect is present on five judges
+drawn from Instella, Llama and Qwen.
+
+\paragraph{The effect depends on how gradeable the solutions are.} Grading the weaker stage
+two generator, Qwen2.5 32B shows a reference free gap of $-0.035$ $[-0.075, +0.006]$, which
+spans zero, while Llama 3.1 8B on the same target shows $-0.192$. That checkpoint's errors
+are blunt enough for a strong judge to catch without a reference, and its reference free
+specificity is correspondingly high. The effect therefore has a ceiling in solution quality,
+which the account in Section~\ref{sec:mech} predicts but which is measured on one generator
+pair and should be treated as an observation rather than a law.
 
 \paragraph{One checkpoint is unexplained.} The effect concentrates on stage two and instruct
 outputs. Stage one outputs are wrong nearly everywhere and are trivially gradeable in either
@@ -328,9 +369,10 @@ condition, which accounts for that null. The supervised fine tuned checkpoint sh
 either condition despite output quality comparable to instruct, and the present data do not
 explain why.
 
-\paragraph{Mechanism is inferred, and one prompt template is tested.} No attribution evidence
-links a verdict to a training document, and robustness of the dissociation to prompt phrasing
-is untested.
+\paragraph{Attribution is not established.} No evidence links a verdict to a specific
+training document. The decomposition in Section~\ref{sec:mech} narrows the effect to a
+specificity loss that survives the error subtlety control, which is stronger than the
+inference the first version of this work rested on, but it is not attribution.
 
 \section{Conclusion}
 

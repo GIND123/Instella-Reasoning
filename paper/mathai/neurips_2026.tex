@@ -160,16 +160,18 @@ two. Per checkpoint the train arm runs 1.13, 2.83, 3.08 and 3.58 percent against
 
 
 
-No gap opens at the boundary, and what movement there is runs the wrong way. The
-difference in differences comes to $-0.26$ points on an interval of $[-1.66, +1.14]$, and
-it stays flat at every later boundary too, $+0.25$ into SFT and $+0.94$ into Instruct.
-Three variations leave it where it is: restricting to one and two digit answers,
-restricting to rows where both checkpoints terminated, and replacing the train against
-test contrast with a five bin containment gradient inside the train arm alone. That last
-one matters most, since it drops the two arm comparison entirely, and the bins run 3.7,
-1.5, 0.9, 4.3 and 4.1 percent from least to most contained, with no order to them. Over
-891 parent clusters the design resolves 1.89 points at 80 percent power. Every gap
-observed falls under that.
+No gap opens at the boundary, and what movement there is runs the wrong way. The difference
+in differences comes to $-0.26$ points on $[-1.66, +1.14]$, and stays flat at every later
+boundary too, $+0.25$ into SFT and $+0.94$ into Instruct. Those later two are reported for
+completeness rather than as membership contrasts: post training adds further GSM8K derived
+material through \texttt{OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct}, which
+raises exposure on the train arm alone, so if anything they are biased toward the effect and
+still show none. Three variations leave the stage two estimate where it is: restricting to
+one and two digit answers, restricting to rows where both checkpoints terminated, and
+replacing the train against test contrast with a five bin containment gradient inside the
+train arm alone. That last matters most, since it drops the two arm comparison entirely, and
+the bins in panel (c) run non monotonically. Over 891 parent clusters the design resolves
+1.89 points at 80 percent power, and every gap observed falls under that.
 
 \subsection{Procedure and answer under controlled injection}
 

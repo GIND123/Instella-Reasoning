@@ -519,6 +519,94 @@ def g2(judge: str, target: str = "instruct") -> dict:
     return out
 
 
+# An alternate wording of the same task. The JUDGe draft lists robustness of the
+# dissociation to prompt phrasing as untested; this varies the phrasing while holding the
+# information content fixed, so a gap that survives is not an artifact of one template.
+def _judge_prompt_alt(question: str, completion: str, gold, mode: str) -> str:
+    tail = (completion or "").strip()[-1200:]
+    ref = f"\nThe correct answer is {gold}.\n" if mode == "reference_based" and gold else ""
+    return (
+        "A student has answered the following maths question. Decide whether the student "
+        "reached the right final answer.\n\n"
+        f"Question:\n{(question or '').strip()}\n"
+        f"{ref}\n"
+        f"Student's working:\n{tail}\n\n"
+        "Answer with a single word, CORRECT or INCORRECT."
+    )
+
+
+@app.function(gpu=GPU, timeout=6 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g2b(judge: str, target: str = "instruct") -> dict:
+    """Repeat one judge under a reworded prompt carrying the same information."""
+    from huggingface_hub import hf_hub_download
+    from transformers import AutoTokenizer
+    from vllm import LLM, SamplingParams
+
+    t0 = time.time()
+    model = JUDGES[judge]
+    arms = _rebuild_arms()
+    path = hf_hub_download(
+        "GOVINDFROM/Instella-Reasoning",
+        f"experiments/runs/fullscale-S250-v2/generations/{target}__arms.jsonl",
+        repo_type="dataset", token=os.environ.get("HF_TOKEN"))
+    gens = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+    gens = [g for g in gens if g["benchmark_id"] in arms]
+    score_path = hf_hub_download(
+        "GOVINDFROM/Instella-Reasoning",
+        f"experiments/runs/fullscale-S250-v2/scores/{target}__arms.jsonl",
+        repo_type="dataset", token=os.environ.get("HF_TOKEN"))
+    truth = {}
+    for line in open(score_path, encoding="utf-8"):
+        if line.strip():
+            r = json.loads(line)
+            truth[r["benchmark_id"]] = str(r.get("correct")).strip().lower() == "true"
+
+    tok = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
+    llm = LLM(model=model, trust_remote_code=True, dtype="bfloat16",
+              gpu_memory_utilization=0.90, max_model_len=4096)
+    sp = SamplingParams(temperature=0.0, max_tokens=24)
+
+    out = {"judge": judge, "target": target, "template": "alt"}
+    for mode in JUDGE_MODES:
+        dest = (pathlib.Path(RUNS_REMOTE) / "judge-ext-v1/analysis"
+                / f"judgealt_{judge}__{target}__{mode}.jsonl")
+        if dest.exists() and dest.stat().st_size > 0:
+            continue
+        prompts = []
+        for g in gens:
+            a = arms[g["benchmark_id"]]
+            text = _judge_prompt_alt(a["prompt"], g.get("completion", ""), a["answer"], mode)
+            prompts.append(tok.apply_chat_template(
+                [{"role": "user", "content": text}],
+                tokenize=False, add_generation_prompt=True))
+        outs = llm.generate(prompts, sp)
+        rows, n_abstain = [], 0
+        for g, o in zip(gens, outs):
+            a = arms[g["benchmark_id"]]
+            raw = o.outputs[0].text.strip(); upper = raw.upper()
+            has_incorrect = "INCORRECT" in upper
+            has_correct = "CORRECT" in upper.replace("INCORRECT", "")
+            verdict = None if has_incorrect == has_correct else has_correct
+            n_abstain += verdict is None
+            rows.append({"benchmark_id": g["benchmark_id"], "parent_id": a["parent_id"],
+                         "arm": a["arm"], "variant_type": a["variant_type"],
+                         "ground_truth": truth.get(g["benchmark_id"]),
+                         "judge_verdict": verdict, "raw": raw})
+        _write(dest, rows)
+        runs_vol.commit()
+        out[mode] = {"n": len(rows), "unparsed": n_abstain}
+    out["minutes"] = round((time.time() - t0) / 60, 1)
+    out["push"] = _push("judge-ext-v1")
+    print("G2B_RESULT:", json.dumps(out))
+    return out
+
+
+@app.local_entrypoint()
+def g2b_all():
+    for judge in ("llama-3.1-8b-instruct", "qwen2.5-32b-instruct"):
+        print(g2b.remote(judge, "instruct"))
+
+
 @app.local_entrypoint()
 def g2_all():
     for judge in ("llama-3.1-8b-instruct", "qwen2.5-32b-instruct"):

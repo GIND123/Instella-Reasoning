@@ -1,0 +1,59 @@
+{
+ "llama-3.1-8b-instruct": {
+  "sensitivity": {
+   "given": null,
+   "withheld": [
+    0.996,
+    0.985,
+    0.011,
+    -0.005,
+    0.034
+   ]
+  },
+  "specificity": {
+   "given": [
+    0.72,
+    0.871,
+    -0.151,
+    -0.236,
+    -0.068
+   ],
+   "withheld": [
+    0.027,
+    0.523,
+    -0.496,
+    -0.573,
+    -0.415
+   ]
+  }
+ },
+ "qwen2.5-32b-instruct": {
+  "sensitivity": {
+   "given": null,
+   "withheld": [
+    0.974,
+    0.978,
+    -0.004,
+    -0.024,
+    0.016
+   ]
+  },
+  "specificity": {
+   "given": [
+    0.781,
+    0.905,
+    -0.124,
+    -0.207,
+    -0.042
+   ],
+   "withheld": [
+    0.323,
+    0.701,
+    -0.378,
+    -0.472,
+    -0.276
+   ]
+  }
+ },
+ "note": "[seen, unseen, gap, ci_lo, ci_hi]; target=instruct outputs"
+}

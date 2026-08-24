@@ -1,0 +1,82 @@
+{
+ "llama-3.1-8b-instruct|instruct": {
+  "reference_based": {
+   "gap": [
+    -0.0736,
+    -0.1159,
+    -0.0321
+   ],
+   "ba_seen": 0.86,
+   "ba_unseen": 0.9336
+  },
+  "reference_free": {
+   "gap": [
+    -0.2425,
+    -0.2814,
+    -0.2006
+   ],
+   "ba_seen": 0.5114,
+   "ba_unseen": 0.7539
+  }
+ },
+ "qwen2.5-32b-instruct|instruct": {
+  "reference_based": {
+   "gap": [
+    -0.0619,
+    -0.1028,
+    -0.021
+   ],
+   "ba_seen": 0.888,
+   "ba_unseen": 0.9499
+  },
+  "reference_free": {
+   "gap": [
+    -0.1911,
+    -0.239,
+    -0.1398
+   ],
+   "ba_seen": 0.6481,
+   "ba_unseen": 0.8392
+  }
+ },
+ "llama-3.1-8b-instruct|stage2": {
+  "reference_based": {
+   "gap": [
+    -0.0524,
+    -0.0849,
+    -0.0187
+   ],
+   "ba_seen": 0.8859,
+   "ba_unseen": 0.9384
+  },
+  "reference_free": {
+   "gap": [
+    -0.1919,
+    -0.2304,
+    -0.1514
+   ],
+   "ba_seen": 0.5651,
+   "ba_unseen": 0.757
+  }
+ },
+ "qwen2.5-32b-instruct|stage2": {
+  "reference_based": {
+   "gap": [
+    -0.0174,
+    -0.0395,
+    0.0045
+   ],
+   "ba_seen": 0.9505,
+   "ba_unseen": 0.9679
+  },
+  "reference_free": {
+   "gap": [
+    -0.0352,
+    -0.0754,
+    0.0062
+   ],
+   "ba_seen": 0.8539,
+   "ba_unseen": 0.8891
+  }
+ }
+}
