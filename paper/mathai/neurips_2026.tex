@@ -58,9 +58,10 @@ and answer flat throughout. Exposure is legible in the calculation steps and not
 and needs far more repetition than the corpus supplies to any item, where document
 multiplicity reaches four. Two further checks locate what does cost accuracy: appending a
 dependent step to problems the strongest checkpoint already solves leaves 88.0 percent
-correct with zero reversions in 418 trials, while a sentence carrying one unused number costs
-$-6.2$ points $[-10.0, -2.4]$ where paraphrase costs $-0.8$ and a numberless sentence $-0.6$,
-neither distinguishable from zero. Two perturbation designs indicating heavy fragility, an
+correct with zero reversions in 418 trials, while a crossed design holding sentence length, syntax and position fixed finds the
+main effect of an inserted unused number to be null at every checkpoint, $-0.59$
+$[-1.62, +0.45]$, $-0.79$ $[-1.93, +0.31]$ and $-0.42$ $[-1.53, +0.68]$, with topicality null
+too and a residual cost of about two points for any insertion at all. Two perturbation designs indicating heavy fragility, an
 externally authored clause ladder and premise reordering, did not survive verification and
 are reported as withdrawn. Intervals are cluster bootstraps over parent problems, 4000 draws.
 \end{abstract}
@@ -148,8 +149,9 @@ differences between the arms at each training boundary. (c) Recall within the tr
 binned by containment against the consumed corpus, which uses no train against test contrast.
 (d) Verbatim reproduction of injected documents against dose, confirming the intervention took
 effect. (e) Reproduction of the memorized solution procedure and of the final answer, each
-against the never injected control. (f) Paired accuracy change under answer preserving
-perturbations, each variant against its own original. Error bars are 95 percent cluster
+against the never injected control. (f) Crossed design isolating the inserted
+number: four twenty word insertions differing only in an off topic against a problem derived
+noun and a filler word against an unused integer, each against its own untouched problem. Error bars are 95 percent cluster
 bootstraps over parent problems, 4000 draws.}
 \label{fig:main}
 \end{figure}
@@ -200,12 +202,18 @@ already solves and one dependent step appended, it stays correct on 88.0 percent
 and never falls back on the pre extension answer. Panel (f) of Figure~\ref{fig:main} takes the second candidate apart.
 
 
-Paraphrase and a numberless inserted sentence both cost the stage two checkpoint several
-points, and post training takes each down to a margin indistinguishable from zero. The
-sentence carrying one unused number is the exception. It still costs 6.2 points at the
-strongest checkpoint tested, and the effect barely narrows across post training at all.
-One caveat: the two inserted sentence conditions differ in length as well as in whether they
-carry a number, so the number's own contribution is identified but not separated.
+An earlier comparison suggested the inserted number was what mattered, since a sentence
+carrying an unused quantity cost 6.2 points where a plain distractor sentence cost 0.6. Those
+conditions also differed in length and topical relatedness, so a crossed design separates
+them: all four insertions are the same twenty word frame with two words swapped, one choosing
+an off topic or a problem derived noun and one a filler word or a free two digit integer, so
+length, syntax and position are identical across cells. The main effect of the number was
+fixed as the primary endpoint before the run, and it is null at every checkpoint, $-0.59$ on
+$[-1.62, +0.45]$ at stage two, $-0.79$ on $[-1.93, +0.31]$ after fine tuning and $-0.42$ on
+$[-1.53, +0.68]$ at Instruct, over 1764 parents each. Topicality is null too. What survives is
+the cost of insertion itself, in panel (f) of Figure~\ref{fig:main}: all four cells sit near
+$-2$ points with overlapping intervals. The earlier 6.2 point figure was carried by length and
+topicality, not by the quantity.
 
 \subsection{Two withdrawn checks}
 
@@ -239,14 +247,10 @@ items by containment and escapes this entirely.
 \label{sec:limits}
 
 One family, one scale near three billion parameters, one benchmark domain, and a dissociation
-shown at five doses rather than ruled out at any exposure. The unused number result is the
-loose end: its conditions differ in length as well as in carrying a number, and the crossed
-design separating them is built but not run. Abstention on these underdetermined items stays
-under 2.5 percent at every checkpoint, but the prompt demands a number and never licenses
-declining, so that figure is reported without interpretation. Within those bounds, verified
-exposure does not raise how often a specific answer comes back, and does raise how often the
-solution procedure comes back. What costs accuracy under perturbation here is an inserted
-quantity with no role in the problem.
+shown at five doses rather than ruled out at any exposure. The insertion cost is located but
+not explained: a twenty word irrelevant sentence costs about two points and nothing in its
+content predicts how much. Within those bounds, verified exposure does not raise how often a
+specific answer comes back, and does raise how often the solution procedure comes back.
 
 \bibliographystyle{plainnat}
 \bibliography{mathai}

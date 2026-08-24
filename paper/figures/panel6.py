@@ -75,8 +75,8 @@ b.errorbar(
     est,
     yp,
     xerr=[
-        [estimate - lower for estimate, lower in zip(est, blo, strict=False)],
-        [h - e for e, h in zip(est, bhi, strict=False)],
+        [estimate - lower for estimate, lower in zip(est, blo)],
+        [h - e for e, h in zip(est, bhi)],
     ],
     fmt="D",
     color=INK,
@@ -104,8 +104,8 @@ c.errorbar(
     xi,
     rate,
     yerr=[
-        [point - lower for point, lower in zip(rate, clo, strict=False)],
-        [h - r for r, h in zip(rate, chi, strict=False)],
+        [point - lower for point, lower in zip(rate, clo)],
+        [h - r for r, h in zip(rate, chi)],
     ],
     fmt="o",
     color=BLUE,
@@ -151,8 +151,8 @@ e.errorbar(
     [i - off for i in di],
     pro,
     yerr=[
-        [point - lower for point, lower in zip(pro, plo, strict=False)],
-        [h - p for p, h in zip(pro, phi, strict=False)],
+        [point - lower for point, lower in zip(pro, plo)],
+        [h - p for p, h in zip(pro, phi)],
     ],
     fmt="o",
     color=BLUE,
@@ -166,8 +166,8 @@ e.errorbar(
     [i + off for i in di],
     ans,
     yerr=[
-        [point - lower for point, lower in zip(ans, alo, strict=False)],
-        [h - v for v, h in zip(ans, ahi, strict=False)],
+        [point - lower for point, lower in zip(ans, alo)],
+        [h - v for v, h in zip(ans, ahi)],
     ],
     fmt="s",
     color=RED,
@@ -186,53 +186,28 @@ e.yaxis.set_major_locator(MultipleLocator(4))
 e.legend(loc="upper left", handlelength=1.2)
 e.text(-0.04, 1.09, "(e)", transform=e.transAxes, fontweight="bold", fontsize=8)
 
-# (f) answer-preserving perturbations, paired
-names = ["Reword", "Off-topic\nsent.", "Sent. with\nnumber"]
-s2 = [-6.6, -3.6, -8.0]
-s2lo = [-10.7, -7.0, -11.8]
-s2hi = [-2.5, -0.4, -4.2]
-ins = [-0.8, -0.6, -6.2]
-inlo = [-4.1, -3.6, -10.0]
-inhi = [2.2, 2.4, -2.4]
-pi = range(len(names))
-off = 0.13
+# (f) crossed 2x2: does the inserted number matter once length and topicality are fixed?
+names = ["off-topic\nno num.", "domain\nno num.", "off-topic\n+number", "domain\n+number"]
+s2   = [-1.47, -1.76, -2.44, -1.98]
+s2lo = [-3.29, -3.52, -4.31, -3.80]
+s2hi = [+0.34, +0.00, -0.68, -0.17]
+ins   = [-1.76, -1.81, -1.81, -2.61]
+inlo  = [-3.46, -3.52, -3.52, -4.31]
+inhi  = [-0.06, -0.11, -0.11, -0.85]
+pi = range(len(names)); off = 0.13
 f.axhline(0, color=GREY, linewidth=0.7, zorder=0)
-f.errorbar(
-    [i - off for i in pi],
-    s2,
-    yerr=[
-        [point - lower for point, lower in zip(s2, s2lo, strict=False)],
-        [h - v for v, h in zip(s2, s2hi, strict=False)],
-    ],
-    fmt="o",
-    color=BLUE,
-    markersize=3.2,
-    capsize=2,
-    elinewidth=0.65,
-    linestyle="none",
-    label="Instella 3B",
-)
-f.errorbar(
-    [i + off for i in pi],
-    ins,
-    yerr=[
-        [point - lower for point, lower in zip(ins, inlo, strict=False)],
-        [h - v for v, h in zip(ins, inhi, strict=False)],
-    ],
-    fmt="s",
-    color=RED,
-    markersize=3.2,
-    capsize=2,
-    elinewidth=0.65,
-    linestyle="none",
-    label="Instruct",
-)
-f.set_xticks(list(pi))
-f.set_xticklabels(names, fontsize=6.2)
-f.set_ylabel("Accuracy change (pp)")
-f.set_ylim(-13, 4.5)
-f.yaxis.set_major_locator(MultipleLocator(4))
-f.legend(loc="lower left", handlelength=1.2)
+f.errorbar([i-off for i in pi], s2,
+           yerr=[[v-l for v,l in zip(s2,s2lo)],[h-v for v,h in zip(s2,s2hi)]],
+           fmt="o", color=BLUE, markersize=3.2, capsize=2, elinewidth=0.65,
+           linestyle="none", label="Instella 3B")
+f.errorbar([i+off for i in pi], ins,
+           yerr=[[v-l for v,l in zip(ins,inlo)],[h-v for v,h in zip(ins,inhi)]],
+           fmt="s", color=RED, markersize=3.2, capsize=2, elinewidth=0.65,
+           linestyle="none", label="Instruct")
+f.set_xticks(list(pi)); f.set_xticklabels(names, fontsize=5.6)
+f.set_ylabel("Accuracy vs original (pp)"); f.set_ylim(-5.6, 1.8)
+f.yaxis.set_major_locator(MultipleLocator(2))
+f.legend(loc="lower left", handlelength=1.2, fontsize=6.4)
 f.text(-0.04, 1.09, "(f)", transform=f.transAxes, fontweight="bold", fontsize=8)
 
 fig.subplots_adjust(wspace=0.52, hspace=0.78)

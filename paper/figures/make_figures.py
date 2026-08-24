@@ -114,8 +114,8 @@ def fig_trajectory():
         est,
         ypos,
         xerr=[
-            [estimate - lower for estimate, lower in zip(est, lo, strict=False)],
-            [h - e for e, h in zip(est, hi, strict=False)],
+            [estimate - lower for estimate, lower in zip(est, lo)],
+            [h - e for e, h in zip(est, hi)],
         ],
         fmt="D",
         color=INK,
@@ -165,8 +165,8 @@ def fig_dose():
         [i - off for i in xi],
         proc,
         yerr=[
-            [point - lower for point, lower in zip(proc, proc_lo, strict=False)],
-            [h - p for p, h in zip(proc, proc_hi, strict=False)],
+            [point - lower for point, lower in zip(proc, proc_lo)],
+            [h - p for p, h in zip(proc, proc_hi)],
         ],
         fmt="o",
         color=BLUE,
@@ -180,8 +180,8 @@ def fig_dose():
         [i + off for i in xi],
         ans,
         yerr=[
-            [point - lower for point, lower in zip(ans, ans_lo, strict=False)],
-            [h - a for a, h in zip(ans, ans_hi, strict=False)],
+            [point - lower for point, lower in zip(ans, ans_lo)],
+            [h - a for a, h in zip(ans, ans_hi)],
         ],
         fmt="s",
         color=RED,
@@ -224,8 +224,8 @@ def fig_judge_dissociation():
         [i - off for i in xi],
         ctrl,
         yerr=[
-            [point - lower for point, lower in zip(ctrl, ctrl_lo, strict=False)],
-            [h - c for c, h in zip(ctrl, ctrl_hi, strict=False)],
+            [point - lower for point, lower in zip(ctrl, ctrl_lo)],
+            [h - c for c, h in zip(ctrl, ctrl_hi)],
         ],
         fmt="o",
         color=BLUE,
@@ -240,8 +240,8 @@ def fig_judge_dissociation():
         [i + off for i in xi],
         free,
         yerr=[
-            [point - lower for point, lower in zip(free, free_lo, strict=False)],
-            [h - f for f, h in zip(free, free_hi, strict=False)],
+            [point - lower for point, lower in zip(free, free_lo)],
+            [h - f for f, h in zip(free, free_hi)],
         ],
         fmt="s",
         color=RED,
@@ -307,7 +307,7 @@ def fig_judge_kappa():
     w = 0.3
     ax.bar([i - w / 2 for i in xi], seen, w, color=BLUE, label="Seen arm", edgecolor="none")
     ax.bar([i + w / 2 for i in xi], unseen, w, color=RED, label="Unseen arm", edgecolor="none")
-    for i, (s, u) in enumerate(zip(seen, unseen, strict=False)):
+    for i, (s, u) in enumerate(zip(seen, unseen)):
         ax.text(i - w / 2, s + 0.015, f"{s:.3f}", ha="center", fontsize=7)
         ax.text(i + w / 2, u + 0.015, f"{u:.3f}", ha="center", fontsize=7)
     ax.set_xticks(xi)
@@ -377,8 +377,8 @@ def fig_mathai_combined():
         est,
         yp,
         xerr=[
-            [estimate - lower for estimate, lower in zip(est, lo, strict=False)],
-            [h - e for e, h in zip(est, hi, strict=False)],
+            [estimate - lower for estimate, lower in zip(est, lo)],
+            [h - e for e, h in zip(est, hi)],
         ],
         fmt="D",
         color=INK,
@@ -421,8 +421,8 @@ def fig_mathai_combined():
         [i - off for i in xi],
         pro,
         yerr=[
-            [point - lower for point, lower in zip(pro, plo, strict=False)],
-            [h - p for p, h in zip(pro, phi, strict=False)],
+            [point - lower for point, lower in zip(pro, plo)],
+            [h - p for p, h in zip(pro, phi)],
         ],
         fmt="o",
         color=BLUE,
@@ -436,8 +436,8 @@ def fig_mathai_combined():
         [i + off for i in xi],
         ans,
         yerr=[
-            [point - lower for point, lower in zip(ans, alo, strict=False)],
-            [h - a for a, h in zip(ans, ahi, strict=False)],
+            [point - lower for point, lower in zip(ans, alo)],
+            [h - a for a, h in zip(ans, ahi)],
         ],
         fmt="s",
         color=RED,
