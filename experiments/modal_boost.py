@@ -114,6 +114,9 @@ image = (
     .add_local_file(
         str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/base/gsm8k_test_deletion.jsonl"),
         "/items/gsm8k_test_deletion.jsonl", copy=True)
+    .add_local_dir(str(REPO_ROOT / "docs"), "/repo/docs", copy=True)
+    .add_local_dir(str(REPO_ROOT / "outputs/corpus_scan"), "/repo/outputs/corpus_scan", copy=True)
+    .add_local_file(str(REPO_ROOT / "FINDINGS.md"), "/repo/FINDINGS.md", copy=True)
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -820,6 +823,34 @@ def moe_containment(split: str = "train", limit: int = 1_400_000) -> dict:
     print("MOE_CONTAINMENT:", json.dumps(res["per_item_set"], indent=1))
     return res
 
+
+
+@app.function(cpu=1.0, timeout=20 * 60, secrets=SECRETS)
+def sync_docs() -> dict:
+    """Mirror the write-ups and scan artefacts to the HF dataset.
+
+    Analysis outputs live under /runs and reach HF through _push. The prose and the
+    corpus-scan JSON are repo files, so they ride in the image and go up from here, which
+    means no HF token is needed on the laptop.
+    """
+    from huggingface_hub import HfApi
+    tok = os.environ.get("HF_TOKEN")
+    if not tok:
+        return {"ok": False, "error": "no HF_TOKEN in secret"}
+    api, sent = HfApi(token=tok), []
+    for local, remote in (("/repo/docs", "docs"),
+                          ("/repo/outputs/corpus_scan", "outputs/corpus_scan")):
+        if pathlib.Path(local).is_dir():
+            api.upload_folder(repo_id=HF_REPO, repo_type="dataset", folder_path=local,
+                              path_in_repo=remote, commit_message="sync docs and scans")
+            sent.append(remote)
+    if pathlib.Path("/repo/FINDINGS.md").is_file():
+        api.upload_file(path_or_fileobj="/repo/FINDINGS.md", path_in_repo="FINDINGS.md",
+                        repo_id=HF_REPO, repo_type="dataset", commit_message="sync findings")
+        sent.append("FINDINGS.md")
+    res = {"ok": True, "repo": HF_REPO, "uploaded": sent}
+    print("SYNC_DOCS:", json.dumps(res))
+    return res
 
 @app.local_entrypoint()
 def g4_all():
