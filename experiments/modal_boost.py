@@ -898,7 +898,7 @@ def g5_mixture(force: bool = False) -> dict:
            "--parents", "/items/gsm8k_test_parents.jsonl", "--out-dir", str(mix)]
     print("[g5-mix]", " ".join(cmd), flush=True)
     r = subprocess.run(cmd, capture_output=True, text=True,
-                       env={**os.environ, "PYTHONPATH": "/src:/exp"})
+                       env={**os.environ, "PYTHONPATH": "/src:/exp:/arch"})
     if r.returncode != 0:
         return {"ok": False, "stage": "build", "tail": (r.stderr or r.stdout)[-1500:]}
 
@@ -949,7 +949,7 @@ def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
                "--model", model, "--total-tokens", str(total_tokens), "--save"]
         print("[g5]", " ".join(cmd), flush=True)
         r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
-                           "PYTHONPATH": "/src:/exp"})
+                           "PYTHONPATH": "/src:/exp:/arch"})
         train_log.write_text(r.stdout + "\n" + r.stderr, encoding="utf-8")
         if r.returncode != 0:
             runs_vol.commit()
@@ -973,7 +973,7 @@ def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
                "--n-shot", "4", "--no-chat-template"]
         print("[g5]", " ".join(cmd), flush=True)
         r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
-                           "PYTHONPATH": "/src:/exp"})
+                           "PYTHONPATH": "/src:/exp:/arch"})
         (out / "logs" / f"probe_dose{dose}.log").write_text(r.stdout + "\n" + r.stderr,
                                                             encoding="utf-8")
         if r.returncode != 0:
