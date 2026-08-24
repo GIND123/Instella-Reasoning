@@ -318,6 +318,15 @@ instruct, and the present data do not explain why.
 training document. Section~\ref{sec:mech} narrows the effect to a specificity loss, which is
 not attribution.
 
+\paragraph{A second, heavier exposure boundary exists and is untested.} Instella-MoE-16B-A3B,
+released after this study began, consumes the full released pool of 1{,}367{,}882 rows rather
+than the \texttt{train\_119K} subset used here. Measured on identical items through identical
+extraction, 18.52 percent of GSM8K train parents reach containment 0.999 or above against
+that pool, compared with 9.65 percent against \texttt{train\_119K}, so a judge built on the
+newer checkpoint would carry roughly double the verbatim exposure at the same items. Whether
+the specificity loss reported here scales with that heavier exposure is not measured and is
+left to future work.
+
 \section{Conclusion}
 
 Measured against membership fixed by containment rather than estimated, an LLM judge shows a
