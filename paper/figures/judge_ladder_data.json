@@ -1,0 +1,97 @@
+{
+ "instruct_target": {
+  "instella-3b-instruct": {
+   "given": [
+    -0.054,
+    -0.083,
+    -0.026
+   ],
+   "withheld": [
+    -0.081,
+    -0.109,
+    -0.054
+   ],
+   "ba": [
+    0.5137,
+    0.5678,
+    0.5016,
+    0.5825
+   ]
+  },
+  "qwen2.5-7b-instruct": {
+   "given": [
+    -0.036,
+    -0.068,
+    -0.008
+   ],
+   "withheld": [
+    -0.2,
+    -0.248,
+    -0.149
+   ],
+   "ba": [
+    0.937,
+    0.9728,
+    0.5998,
+    0.7998
+   ]
+  },
+  "qwen2.5-14b-instruct": {
+   "given": [
+    -0.023,
+    -0.057,
+    0.006
+   ],
+   "withheld": [
+    -0.184,
+    -0.231,
+    -0.133
+   ],
+   "ba": [
+    0.9459,
+    0.9689,
+    0.6362,
+    0.8202
+   ]
+  },
+  "llama-3.1-8b-instruct": {
+   "given": [
+    -0.0736,
+    -0.1159,
+    -0.0321
+   ],
+   "withheld": [
+    -0.2425,
+    -0.2814,
+    -0.2006
+   ],
+   "ba": [
+    0.86,
+    0.9336,
+    0.5114,
+    0.7539
+   ]
+  }
+ },
+ "stage2_target": {
+  "llama-3.1-8b-instruct": {
+   "given": [
+    -0.0524,
+    -0.0849,
+    -0.0187
+   ],
+   "withheld": [
+    -0.1919,
+    -0.2304,
+    -0.1514
+   ],
+   "ba": [
+    0.8859,
+    0.9384,
+    0.5651,
+    0.757
+   ]
+  }
+ },
+ "note": "given/withheld = [estimate, ci_lo, ci_hi] balanced accuracy seen minus unseen; ba = [given-seen, given-unseen, withheld-seen, withheld-unseen]"
+}
