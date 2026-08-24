@@ -74,6 +74,8 @@ image = (
         "transformers==4.56.0",
         "huggingface-hub>=0.23.0",
         "datasets>=2.19.0",
+        # device_map on the MoE path needs accelerate; vLLM does not pull it in.
+        "accelerate>=0.30.0",
         "numpy>=1.24.0",
         "matplotlib>=3.7.0",
     )
@@ -81,6 +83,7 @@ image = (
         {
             "HF_HOME": f"{CACHE_REMOTE}/hf",
             "HF_HUB_DISABLE_XET": "1",
+            "HF_HUB_DOWNLOAD_TIMEOUT": "60",
             "HF_HUB_DISABLE_PROGRESS_BARS": "1",
             "TOKENIZERS_PARALLELISM": "false",
             "PYTHONUNBUFFERED": "1",
@@ -599,6 +602,229 @@ def g2b(judge: str, target: str = "instruct") -> dict:
     out["push"] = _push("judge-ext-v1")
     print("G2B_RESULT:", json.dumps(out))
     return out
+
+
+# --------------------------------------------------------------------------------------
+# G4: the same design on Instella-MoE.
+#
+# Instella-MoE (released 2026-07-24) publishes every training stage, and its recipe puts
+# Instella-GSM8K-synthetic at exactly one place, long-context extension phase 2, using the
+# FULL `train` split rather than the train_119K subset Instella-3B consumed. So Midtrain ->
+# Base is a second data-entry boundary on a different architecture at roughly eleven times
+# the corpus dose, and the same benchmark item carries very different exposure in the two
+# model families. That comparison exists only because both recipes are published.
+#
+# AMD's own inference stack is a ROCm image and will not run here, and the config declares
+# model_type deepseek_v3 with custom Gated-MLA classes behind auto_map, so vLLM may or may
+# not accept it. The probe tries vLLM, falls back to transformers, and reports throughput
+# so the decision to continue is made on a measurement rather than a hope.
+MOE = {
+    "moe-midtrain": "amd/Instella-MoE-16B-A3B-Midtrain",
+    "moe-base": "amd/Instella-MoE-16B-A3B-Base",
+}
+
+
+def _prefetch(model_id: str, tries: int = 6) -> str:
+    """Resume a partial checkpoint download instead of restarting it.
+
+    The 16B MoE weights are large enough that a single streamed read fails often
+    (a truncated read at 4.94 of 4.99 GB killed the first probe). HF_HOME sits on
+    the persistent cache volume, so each retry resumes rather than refetches.
+    """
+    import time as _t
+
+    from huggingface_hub import snapshot_download
+    last = None
+    for k in range(tries):
+        try:
+            return snapshot_download(model_id, max_workers=4)
+        except Exception as exc:  # noqa: BLE001 - any transport error is retryable here
+            last = exc
+            print(f"[prefetch] attempt {k + 1}/{tries} failed: {type(exc).__name__}: {exc}", flush=True)
+            _t.sleep(10 * (k + 1))
+    raise RuntimeError(f"prefetch failed after {tries} attempts: {last}")
+
+
+def _moe_generate_hf(model_id: str, prompts: list[str], max_new: int, batch: int = 16):
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    tok.padding_side = "left"
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, trust_remote_code=True, dtype=torch.bfloat16, device_map="auto")
+    model.eval()
+    out = []
+    for i in range(0, len(prompts), batch):
+        chunk = prompts[i:i + batch]
+        enc = tok(chunk, return_tensors="pt", padding=True, truncation=True,
+                  max_length=2048).to(model.device)
+        with torch.no_grad():
+            gen = model.generate(**enc, max_new_tokens=max_new, do_sample=False,
+                                 pad_token_id=tok.pad_token_id)
+        for j in range(len(chunk)):
+            new = gen[j][enc["input_ids"].shape[1]:]
+            text = tok.decode(new, skip_special_tokens=True)
+            out.append({"completion": text,
+                        "finished": tok.eos_token_id in new.tolist(),
+                        "n_tokens": int((new != tok.pad_token_id).sum())})
+        if i % (batch * 8) == 0:
+            print(f"    {i + len(chunk)}/{len(prompts)}", flush=True)
+    return out
+
+
+@app.function(gpu="A100-80GB", timeout=90 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g4_probe(alias: str = "moe-midtrain", n: int = 48) -> dict:
+    """Go/no-go. Load, generate a handful, report tokens per second. Kill on failure."""
+    import time as _t
+    from transformers import AutoTokenizer
+    model_id = _prefetch(MOE[alias])
+    items = [json.loads(l) for l in open("/items/gsm8k_test_deletion.jsonl")][:n]
+    tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    prompts = [tok.apply_chat_template(
+        [{"role": "user", "content": it["prompt"] + COT_SUFFIX}],
+        tokenize=False, add_generation_prompt=True) for it in items]
+    t0 = _t.time()
+    try:
+        rows = _moe_generate_hf(model_id, prompts, max_new=512, batch=12)
+    except Exception as exc:  # noqa: BLE001
+        res = {"alias": alias, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        print("G4_PROBE:", json.dumps(res))
+        return res
+    dt = _t.time() - t0
+    toks = sum(r["n_tokens"] for r in rows)
+    res = {"alias": alias, "ok": True, "n": len(rows), "seconds": round(dt, 1),
+           "tokens_per_sec": round(toks / dt, 1),
+           "est_minutes_for_3179": round((3179 / len(rows)) * dt / 60, 1),
+           "finished_rate": round(sum(r["finished"] for r in rows) / len(rows), 3),
+           "sample": (rows[0]["completion"] or "")[:200].replace("\n", " ")}
+    print("G4_PROBE:", json.dumps(res, indent=1))
+    return res
+
+
+@app.function(gpu="A100-80GB", timeout=6 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g4(alias: str) -> dict:
+    """Premise-deletion probe on one Instella-MoE checkpoint, both arms."""
+    from transformers import AutoTokenizer
+    t0 = time.time()
+    out_path = pathlib.Path(RUNS_REMOTE) / "moe-v1/generations" / f"deletion__{alias}.jsonl"
+    if out_path.exists() and out_path.stat().st_size > 0:
+        return {"alias": alias, "skipped": True}
+    model_id = MOE[alias]
+    items = []
+    for arm, path in (("train", "/items/gsm8k_train_deletion.jsonl"),
+                      ("test", "/items/gsm8k_test_deletion.jsonl")):
+        for line in open(path):
+            r = json.loads(line); r["_arm"] = arm; items.append(r)
+    tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    prompts = [tok.apply_chat_template(
+        [{"role": "user", "content": it["prompt"] + COT_SUFFIX}],
+        tokenize=False, add_generation_prompt=True) for it in items]
+    print(f"[g4] {alias}: {len(items)} rows", flush=True)
+    gens = _moe_generate_hf(model_id, prompts, max_new=512, batch=16)
+    rows = [{"benchmark_id": it["id"], "parent_id": it["parent_id"], "arm": it["_arm"],
+             "parent_answer": (it.get("metadata") or {}).get("parent_answer"),
+             "model": model_id, "completion": g["completion"],
+             "metadata": {"finished": g["finished"], "n_tokens": g["n_tokens"],
+                          "engine": "transformers-4.56.0"}}
+            for it, g in zip(items, gens)]
+    _write(out_path, rows)
+    runs_vol.commit()
+    res = {"alias": alias, "n": len(rows),
+           "truncation": round(1 - sum(r["metadata"]["finished"] for r in rows) / len(rows), 4),
+           "minutes": round((time.time() - t0) / 60, 1), "push": _push("moe-v1")}
+    print("G4_RESULT:", json.dumps(res))
+    return res
+
+
+@app.function(cpu=8.0, memory=32768, timeout=3 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def moe_containment(split: str = "train", limit: int = 1_400_000) -> dict:
+    """Containment of GSM8K against the FULL train split, which is what Instella-MoE consumed.
+
+    Instella-3B stage two consumed train_119K; Instella-MoE consumed the full pool. The same
+    benchmark item therefore carries different exposure in the two families, and both figures
+    are needed to say so. Per-document maximum, matching the definition used everywhere else.
+    """
+    import sys, collections
+    sys.path.insert(0, "/src")
+    from datasets import load_dataset
+    from instella_reasoning.records import read_benchmark
+    from instella_reasoning.text import word_ngrams
+
+    sets = {}
+    for tag, path in (("gsm8k_train", "/items/gsm8k_train_deletion.jsonl"),
+                      ("gsm8k_test", "/items/gsm8k_test_deletion.jsonl")):
+        # parents only: one row per problem, taken from the deletion file's parent ids
+        seen, out = set(), []
+        for it in read_benchmark(path):
+            pid = it.parent_id or it.id
+            if pid in seen:
+                continue
+            seen.add(pid)
+            out.append((pid, (it.metadata or {}).get("parent_prompt") or it.prompt))
+        sets[tag] = out
+
+    keys, grams, index = [], [], collections.defaultdict(list)
+    for tag, items in sets.items():
+        for pid, text in items:
+            g = word_ngrams(text, 13)
+            if not g:
+                continue
+            i = len(keys); keys.append((tag, pid)); grams.append(g)
+            for gram in g:
+                index[gram].append(i)
+    print(f"[moe] indexed {len(keys)} items, {len(index):,} distinct 13-grams", flush=True)
+
+    best = [0.0] * len(keys)
+    ds = load_dataset("amd/Instella-GSM8K-synthetic", split=split, streaming=True)
+    scanned = 0
+    for row in ds:
+        if scanned >= limit:
+            break
+        scanned += 1
+        text = " ".join(m.get("content", "") for m in row["messages"]) \
+            if isinstance(row.get("messages"), list) else str(row.get("text") or row.get("problem") or "")
+        if len(text) < 40:
+            continue
+        hits = collections.Counter()
+        for gram in word_ngrams(text, 13):
+            for i in index.get(gram, ()):
+                hits[i] += 1
+        for i, c in hits.items():
+            v = c / len(grams[i])
+            if v > best[i]:
+                best[i] = v
+        if scanned % 200_000 == 0:
+            print(f"[moe] {scanned:,} rows", flush=True)
+
+    BANDS = [0.999, 0.9, 0.8, 0.5, 0.3, 0.1]
+    res = {"corpus": f"amd/Instella-GSM8K-synthetic[{split}]",
+           "rows_scanned": scanned, "definition": "max over individual documents",
+           "per_item_set": {}}
+    for tag in sets:
+        idx = [i for i, (t, _) in enumerate(keys) if t == tag]
+        vals = sorted((best[i] for i in idx), reverse=True)
+        n = len(idx)
+        res["per_item_set"][tag] = {
+            "n_items": n,
+            "bands": {f">={b}": sum(1 for v in vals if v >= b) for b in BANDS},
+            "band_frac": {f">={b}": round(sum(1 for v in vals if v >= b) / n, 6) for b in BANDS},
+            "max": round(vals[0], 6), "median": round(vals[n // 2], 6),
+        }
+    dest = pathlib.Path(RUNS_REMOTE) / f"moe-v1/analysis/containment_{split}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    runs_vol.commit()
+    res["push"] = _push("moe-v1")
+    print("MOE_CONTAINMENT:", json.dumps(res["per_item_set"], indent=1))
+    return res
+
+
+@app.local_entrypoint()
+def g4_all():
+    for alias in ("moe-midtrain", "moe-base"):
+        print(g4.remote(alias))
 
 
 @app.local_entrypoint()

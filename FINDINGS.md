@@ -140,7 +140,29 @@ with no pronoun, temporal connective or back-reference in later premises leaves 
 set, and the effect becomes **+2.2 [−6.5, +10.9]** on 46 problems at Instruct. Manual
 inspection still finds violations surviving the filter. **Do not rebuild this.**
 
-### 2.5 "Stage 2 memorises deleted premise values (+4.15 pp)" — WITHDRAWN
+### 2.5 Arithmetic step validity across the trajectory — NOT USABLE
+
+Tempting and it looks striking, so it will be re-proposed unless recorded. Verifying every
+`a op b = c` the model writes, on 1331 GSM8K test items per checkpoint:
+
+| checkpoint | accuracy | steps/gen | step validity |
+|---|--:|--:|--:|
+| Stage 1 | 0.017 | 1.19 | 0.659 |
+| Instella 3B | 0.512 | 2.23 | 0.838 |
+| SFT | 0.672 | 1.50 | 0.819 |
+| Instruct | 0.716 | 1.13 | 0.811 |
+
+Reads as "post-training raises accuracy 20 points without raising the validity of the
+reasoning it shows". **It does not survive its coverage check.** Generations containing no
+parseable step: 30.7% at stage two, 39.5% at SFT, 46.4% at Instruct, 92.6% at Stage 1. The
+answer format also shifts across post-training, from `####` at 53% of stage-two generations
+to `\boxed{}` at 68-69% after. So validity is computed on a shrinking, non-randomly selected
+subset under a changing output format: different populations, not a trend.
+
+Would need a step extractor robust to prose and to both answer formats, plus a coverage
+matched subsample, before it could be claimed. Not attempted.
+
+### 2.6 "Stage 2 memorises deleted premise values (+4.15 pp)" — WITHDRAWN
 
 Looked like item-specific memorisation at exactly the right boundary. Killed by three
 checks: the Stage2→SFT placebo fires at −4.10 in the opposite direction; it is not an
@@ -229,20 +251,28 @@ verdicts where balanced accuracy gives **+0.054**, purely from a base-rate diffe
 |---|---|---|
 | J1 | Scope "unexposed" to the specific released dataset | **Closed.** "Known negative *with respect to that corpus*"; Stage 1 described as "precedes the corpus". OLMoE-mix scan gives a measured bound: 0 of 7473 GSM8K train and 0 of 1319 test at containment ≥0.3 in 400,000 rows. |
 | J2 | Synthetic-data procedure description correct | **Closed.** Citable as personal communication. |
-| J3 | Use `train_119K`, not the released pool | **Closed.** 7.56% of train items at ≥0.80 against the consumed subset vs 29.75% against the pool. |
+| J3 | Use `train_119K`, not the released pool | **Closed, renumbered 2026-08-23.** Matched rescan of both corpora through one code path on identical items (n=891 train parents): 12.57% at ≥0.80 against the consumed subset vs 23.34% against the full pool. Earlier 7.56%/29.75% pair used two different extraction paths and is withdrawn; see `docs/EXPOSURE_TWO_CORPORA.md`. |
 | J4 | Post-training gets GSM8K via OpenMathInstruct-2 | **Closed 2026-08-23.** The SFT and Instruct boundaries are now flagged as not clean membership contrasts, biased *toward* the effect, and reported for completeness rather than as estimates. |
 
 **Containment definition:** use **max over individual documents**, not union over the
-corpus. `docs/CORPUS_CORRECTION.md` §1 uses the union rule (15.12%) and is superseded;
-`outputs/corpus_scan/train119k_summary.json` uses per-document (7.56%). Calibration holds
-under the per-document rule: GSM8K test 0/1319 at ≥0.8, max 0.538.
+corpus. `docs/CORPUS_CORRECTION.md` §1 uses the union rule (15.12%) and is superseded.
+`outputs/corpus_scan/train119k_summary.json` uses per-document but a different text
+extraction (local JSONL `text` field, 722 parents) and must not be compared against a
+Hub-streamed scan; it is retained for provenance only. The figures the paper uses come from
+the matched rescan in `docs/EXPOSURE_TWO_CORPORA.md`. Calibration holds under the
+per-document rule against the **full 1,367,882-row pool**, the largest corpus either model
+saw: GSM8K test 0/888 at ≥0.5, 1/888 at ≥0.3, max 0.487.
 
 **Instella-MoE (released 2026-07-24):** GSM8K-synthetic enters only at long-context
 extension phase 2 and uses the **full `train` split** (329M tokens), per
 `docs/data_preparation.md` in AMD-AGI/Instella-MoE. So Midtrain→Base is a second data-entry
-boundary at ~11× the dose, and the pool-wide containment that was wrong for Instella-3B is
-correct for the MoE. Not yet run. Risk: AMD's inference stack is ROCm-only; config declares
-`model_type: deepseek_v3` with custom Gated-MLA/FarSkip classes.
+boundary at ~11.5× the corpus. Containment against that pool is now measured (see above and
+`docs/EXPOSURE_TWO_CORPORA.md`): 18.52% of train parents verbatim vs 9.65% under
+`train_119K`, so the MoE boundary carries roughly twice the verbatim exposure at the same
+items. The deletion probe on Midtrain→Base is **not yet run**; a go/no-go load is in
+flight. Risk: AMD's inference stack is ROCm-only; config declares `model_type: deepseek_v3`
+with custom Gated-MLA/FarSkip classes, so generation runs through plain transformers rather
+than vLLM.
 
 ---
 

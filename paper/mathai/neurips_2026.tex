@@ -242,8 +242,8 @@ points over $[-6.5, +10.9]$. Appendix~C gives both in full.
 
 The obvious design contrasts GSM8K train items at high containment against those at low,
 and it was tried first. Two findings closed it off, both in Appendix~B. The subset the model
-actually consumed puts 7.56 percent of train items at containment 0.80 or above against
-29.75 percent computed on the full released pool. More decisively,
+actually consumed puts 12.57 percent of train items at containment 0.80 or above against
+23.34 percent computed on the full released pool. More decisively,
 \texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage two mixture
 and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct} arrives at fine
 tuning, each carrying GSM8K train at containment 0.999 or above on over 97 percent of items
@@ -285,8 +285,12 @@ The within split contamination contrast, high against low containment GSM8K trai
 items, was closed rather than merely complicated by two findings. The corpus subset
 actually consumed during Instella 3B stage two pretraining, \texttt{train\_119K}, is a
 119{,}014 row subset of a 1{,}367{,}882 row released pool; containment computed against
-the pool over counts exposure, since only 7.56 percent of GSM8K train reaches 0.80 or
-higher against the subset actually consumed against 29.75 percent against the pool.
+the pool over counts exposure, since 12.57 percent of GSM8K train reaches 0.80 or
+higher against the subset actually consumed against 23.34 percent against the pool, both
+measured on the same 891 parent problems through one extraction path. No GSM8K test item
+reaches containment 0.50 against either corpus, and the maximum over the full pool is
+0.487, so the released corpus is train derived and the split remains a usable exposure
+contrast.
 Independently, \texttt{allenai/tulu-3-sft-mixture} is itself part of the Instella stage
 two pretraining mixture and \texttt{nvidia/OpenMathInstruct-2} enters at supervised fine
 tuning; both are generated in part from GSM8K train, and both carry it at containment
