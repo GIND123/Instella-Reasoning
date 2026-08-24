@@ -69,3 +69,10 @@ experiments/runs/*/base/*_all.jsonl
 
 # Scan/run logs are reproducible stdout; the artifacts they describe are tracked.
 logs/
+
+# LaTeX build artefacts
+*.aux
+*.out
+*.blg
+*.bbl
+*.log
