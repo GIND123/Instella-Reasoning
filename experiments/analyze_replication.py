@@ -54,7 +54,7 @@ from math import comb
 from pathlib import Path
 
 MODELS = [("olmo2-1b", "OLMo-2-1B"), ("qwen2.5-1.5b", "Qwen2.5-1.5B")]
-DOSES = [0, 64]
+DOSES = [0, 1, 4, 16, 64]
 
 
 def _to_float(x):
@@ -143,7 +143,7 @@ def analyse(run: Path, mix: Path, items_path: Path,
     for alias, label in MODELS:
         base_dir = run / alias
         gens = {d: _load_gens(base_dir / f"probe__dose{d}.jsonl") for d in DOSES}
-        if not all(gens[d] for d in DOSES):
+        if not gens.get(0) or not any(gens[d] for d in DOSES if d):
             continue
         entry = {"label": label, "doses": {}}
         for d in DOSES:
@@ -158,32 +158,36 @@ def analyse(run: Path, mix: Path, items_path: Path,
                     "positive_controls_pass": rep.get("positive_controls_pass"),
                 }
         base = gens[0]
-        per_parent = {"injected": {}, "heldout": {}}
-        for name, member in (("injected", inj), ("heldout", hel)):
-            sel = [b for b in gens[64]
-                   if b in base and (items.get(b, {}).get("parent_id")) in member]
-            if not sel:
-                continue
-            pa = {b: (items[b].get("metadata") or {}).get("parent_answer") for b in sel}
-            cur = {b: _recall(pa[b], gens[64][b].get("completion", "")) for b in sel}
-            ref = {b: _recall(pa[b], base[b].get("completion", "")) for b in sel}
-            gained, lost, p = mcnemar(ref, cur, sel)
-            for b in sel:
-                per_parent[name].setdefault(items[b]["parent_id"], []).append(
-                    int(cur[b]) - int(ref[b]))
-            entry[name] = {
-                "n": len(sel),
-                "recall_dose0": round(sum(ref.values()) / len(sel), 6),
-                "recall_dose64": round(sum(cur.values()) / len(sel), 6),
-                "delta_pp": round(100 * (sum(cur.values()) - sum(ref.values())) / len(sel), 3),
-                "gained": gained, "lost": lost, "mcnemar_p": round(p, 6),
-            }
-        if "injected" in entry and "heldout" in entry:
-            obs, lo, hi = cluster_did(per_parent["injected"], per_parent["heldout"],
-                                      n_boot, seed)
-            entry["PRIMARY_did_pp"] = obs
-            entry["PRIMARY_did_ci95"] = [lo, hi]
-            entry["PRIMARY_excludes_zero"] = bool(lo > 0 or hi < 0)
+        entry["contrasts"] = {}
+        for d in [x for x in DOSES if x and gens.get(x)]:
+            per_parent = {"injected": {}, "heldout": {}}
+            cell = {}
+            for name, member in (("injected", inj), ("heldout", hel)):
+                sel = [b for b in gens[d]
+                       if b in base and (items.get(b, {}).get("parent_id")) in member]
+                if not sel:
+                    continue
+                pa = {b: (items[b].get("metadata") or {}).get("parent_answer") for b in sel}
+                cur = {b: _recall(pa[b], gens[d][b].get("completion", "")) for b in sel}
+                ref = {b: _recall(pa[b], base[b].get("completion", "")) for b in sel}
+                gained, lost, p = mcnemar(ref, cur, sel)
+                for b in sel:
+                    per_parent[name].setdefault(items[b]["parent_id"], []).append(
+                        int(cur[b]) - int(ref[b]))
+                cell[name] = {
+                    "n": len(sel),
+                    "recall_dose0": round(sum(ref.values()) / len(sel), 6),
+                    "recall_dose": round(sum(cur.values()) / len(sel), 6),
+                    "delta_pp": round(100 * (sum(cur.values()) - sum(ref.values())) / len(sel), 3),
+                    "gained": gained, "lost": lost, "mcnemar_p": round(p, 6),
+                }
+            if "injected" in cell and "heldout" in cell:
+                obs, lo, hi = cluster_did(per_parent["injected"], per_parent["heldout"],
+                                          n_boot, seed)
+                cell["did_pp"] = obs
+                cell["did_ci95"] = [lo, hi]
+                cell["excludes_zero"] = bool(lo > 0 or hi < 0)
+            entry["contrasts"][d] = cell
         res["models"][alias] = entry
     return res
 
@@ -192,41 +196,33 @@ def render(res: dict) -> str:
     L = ["# Injection replication on base models outside AMD", "",
          "Same 200 injected documents, same 200 held-out controls, same fixed "
          "8,388,608 token budget, same seed 6198, same four-shot no-chat-template probe. "
-         "Only the base checkpoint changes. Exact two-sided McNemar, paired by item.", "",
-         "## Memorisation actually happened", "",
+         "Only the base checkpoint changes.", "",
+         "## Memorisation against dose", "",
          "| model | dose | injected share | verbatim after | injected loss after | "
          "held-out loss after | controls |", "|---|--:|--:|--:|--:|--:|---|"]
     for _, e in res["models"].items():
-        for d, c in e["doses"].items():
+        for d, c in sorted(e["doses"].items(), key=lambda kv: int(kv[0])):
             L.append(f"| {e['label']} | {d}x | {c['injected_share']:.3f} | "
                      f"{c['verbatim_post']:.3f} | {c['injected_loss_post']:.3f} | "
                      f"{c['heldout_loss_post']:.3f} | "
-                     f"{'pass' if c['positive_controls_pass'] else '**FAIL**'} |")
-    L += ["", "## PRIMARY - difference in differences on answer recall, 64x against 0x", "",
-          "Injected minus held-out, so the 8.4M tokens every arm trains on cancel.", "",
-          "| model | injected delta | held-out delta | difference in differences | "
-          "95% CI | excludes 0 |", "|---|--:|--:|--:|---|---|"]
+                     f"{'pass' if c['positive_controls_pass'] else 'fail (0x, by design)'} |")
+    L += ["", "## PRIMARY - difference in differences on answer recall, each dose against 0x",
+          "", "Injected minus held-out, so the 8.4M tokens every arm trains on cancel. "
+          f"Cluster bootstrap over parent problems, {res['n_boot']} draws, seed {res['seed']}.",
+          "", "| model | dose | injected delta | held-out delta | difference in differences | "
+          "95% CI | excludes 0 |", "|---|--:|--:|--:|--:|---|---|"]
     for _, e in res["models"].items():
-        if "PRIMARY_did_pp" in e:
-            ci = e["PRIMARY_did_ci95"]
-            L.append(f"| {e['label']} | {e['injected']['delta_pp']:+.2f} pp | "
-                     f"{e['heldout']['delta_pp']:+.2f} pp | "
-                     f"**{e['PRIMARY_did_pp']:+.2f} pp** | "
+        for d, c in sorted(e.get("contrasts", {}).items(), key=lambda kv: int(kv[0])):
+            if "did_pp" not in c:
+                continue
+            ci = c["did_ci95"]
+            L.append(f"| {e['label']} | {d}x | {c['injected']['delta_pp']:+.2f} pp | "
+                     f"{c['heldout']['delta_pp']:+.2f} pp | **{c['did_pp']:+.2f} pp** | "
                      f"[{ci[0]:+.2f}, {ci[1]:+.2f}] | "
-                     f"{'**yes**' if e['PRIMARY_excludes_zero'] else 'no'} |")
-    L += ["", "## The single differences behind it", "",
-          "| model | set | n | recall 0x | recall 64x | delta | gained | lost | McNemar p |",
-          "|---|---|--:|--:|--:|--:|--:|--:|--:|"]
-    for _, e in res["models"].items():
-        for name in ("injected", "heldout"):
-            c = e.get(name)
-            if c:
-                L.append(f"| {e['label']} | {name} | {c['n']} | {c['recall_dose0']:.4f} | "
-                         f"{c['recall_dose64']:.4f} | {c['delta_pp']:+.2f} pp | "
-                         f"{c['gained']} | {c['lost']} | {c['mcnemar_p']:.4f} |")
+                     f"{'**yes**' if c['excludes_zero'] else 'no'} |")
     L += ["", "Read the primary table only where controls pass. A model that did not "
               "memorise the dosed documents cannot inform a claim about what memorisation "
-              "does to recall."]
+              "does to recall, which is why the 0x arm is the reference and not a row."]
     return "\n".join(L) + "\n"
 
 

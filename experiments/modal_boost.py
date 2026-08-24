@@ -1005,6 +1005,27 @@ def g5_gonogo():
         for dose in (0, 64):
             print(g5_inject.remote(alias, dose))
 
+
+@app.local_entrypoint()
+def g5_full():
+    """Middle doses on both replication models, so each carries a curve and not two points.
+
+    Instella-3B was measured at 0, 1, 4, 16 and 64. Two points cannot show that recall stays
+    flat while verbatim reproduction climbs, because a straight line fits any two points.
+    Spawned inside one app: launching six separate apps trips the create rate limit.
+    """
+    handles = [(a, d, g5_inject.spawn(a, d))
+               for a in REPLICATION for d in (1, 4, 16)]
+    for alias, dose, h in handles:
+        try:
+            r = h.get()
+            print(f"[{alias} {dose}x] ok={r.get('ok')} verbatim="
+                  f"{(r.get('post') or {}).get('injected_verbatim')} "
+                  f"controls={r.get('controls_pass')}")
+        except Exception as exc:  # noqa: BLE001 - one bad arm must not lose the others
+            print(f"[{alias} {dose}x] FAILED {type(exc).__name__}: {exc}")
+    print("G5_FULL_DONE")
+
 @app.local_entrypoint()
 def g4_all():
     for alias in ("moe-midtrain", "moe-base"):

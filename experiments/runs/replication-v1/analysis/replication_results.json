@@ -15,6 +15,27 @@
           "heldout_loss_post": 1.2945,
           "positive_controls_pass": false
         },
+        "1": {
+          "injected_share": 0.00418,
+          "verbatim_post": 0.128,
+          "injected_loss_post": 1.0976,
+          "heldout_loss_post": 1.1827,
+          "positive_controls_pass": true
+        },
+        "4": {
+          "injected_share": 0.016719,
+          "verbatim_post": 0.1719,
+          "injected_loss_post": 1.0055,
+          "heldout_loss_post": 1.1562,
+          "positive_controls_pass": true
+        },
+        "16": {
+          "injected_share": 0.066875,
+          "verbatim_post": 0.2074,
+          "injected_loss_post": 0.7691,
+          "heldout_loss_post": 1.1518,
+          "positive_controls_pass": true
+        },
         "64": {
           "injected_share": 0.267502,
           "verbatim_post": 0.7266,
@@ -23,30 +44,112 @@
           "positive_controls_pass": true
         }
       },
-      "injected": {
-        "n": 351,
-        "recall_dose0": 0.02849,
-        "recall_dose64": 0.031339,
-        "delta_pp": 0.285,
-        "gained": 5,
-        "lost": 4,
-        "mcnemar_p": 1.0
-      },
-      "heldout": {
-        "n": 371,
-        "recall_dose0": 0.016173,
-        "recall_dose64": 0.016173,
-        "delta_pp": 0.0,
-        "gained": 5,
-        "lost": 5,
-        "mcnemar_p": 1.0
-      },
-      "PRIMARY_did_pp": 0.285,
-      "PRIMARY_did_ci95": [
-        -2.336,
-        2.733
-      ],
-      "PRIMARY_excludes_zero": false
+      "contrasts": {
+        "1": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.019943,
+            "delta_pp": -0.855,
+            "gained": 3,
+            "lost": 6,
+            "mcnemar_p": 0.507812
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.010782,
+            "delta_pp": -0.539,
+            "gained": 1,
+            "lost": 3,
+            "mcnemar_p": 0.625
+          },
+          "did_pp": -0.316,
+          "did_ci95": [
+            -2.38,
+            1.669
+          ],
+          "excludes_zero": false
+        },
+        "4": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.02849,
+            "delta_pp": 0.0,
+            "gained": 4,
+            "lost": 4,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.016173,
+            "delta_pp": 0.0,
+            "gained": 1,
+            "lost": 1,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.0,
+          "did_ci95": [
+            -1.897,
+            1.766
+          ],
+          "excludes_zero": false
+        },
+        "16": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.042735,
+            "delta_pp": 1.425,
+            "gained": 7,
+            "lost": 2,
+            "mcnemar_p": 0.179688
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.024259,
+            "delta_pp": 0.809,
+            "gained": 5,
+            "lost": 2,
+            "mcnemar_p": 0.453125
+          },
+          "did_pp": 0.616,
+          "did_ci95": [
+            -1.564,
+            2.835
+          ],
+          "excludes_zero": false
+        },
+        "64": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.031339,
+            "delta_pp": 0.285,
+            "gained": 5,
+            "lost": 4,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.016173,
+            "delta_pp": 0.0,
+            "gained": 5,
+            "lost": 5,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.285,
+          "did_ci95": [
+            -2.336,
+            2.733
+          ],
+          "excludes_zero": false
+        }
+      }
     },
     "qwen2.5-1.5b": {
       "label": "Qwen2.5-1.5B",
@@ -58,6 +161,27 @@
           "heldout_loss_post": 1.2769,
           "positive_controls_pass": false
         },
+        "1": {
+          "injected_share": 0.004837,
+          "verbatim_post": 0.2504,
+          "injected_loss_post": 0.8506,
+          "heldout_loss_post": 0.9792,
+          "positive_controls_pass": true
+        },
+        "4": {
+          "injected_share": 0.019348,
+          "verbatim_post": 0.2551,
+          "injected_loss_post": 0.6931,
+          "heldout_loss_post": 1.0012,
+          "positive_controls_pass": true
+        },
+        "16": {
+          "injected_share": 0.077391,
+          "verbatim_post": 0.4055,
+          "injected_loss_post": 0.2545,
+          "heldout_loss_post": 1.2638,
+          "positive_controls_pass": true
+        },
         "64": {
           "injected_share": 0.309563,
           "verbatim_post": 0.9886,
@@ -66,30 +190,112 @@
           "positive_controls_pass": true
         }
       },
-      "injected": {
-        "n": 351,
-        "recall_dose0": 0.045584,
-        "recall_dose64": 0.045584,
-        "delta_pp": 0.0,
-        "gained": 6,
-        "lost": 6,
-        "mcnemar_p": 1.0
-      },
-      "heldout": {
-        "n": 371,
-        "recall_dose0": 0.02965,
-        "recall_dose64": 0.02965,
-        "delta_pp": 0.0,
-        "gained": 7,
-        "lost": 7,
-        "mcnemar_p": 1.0
-      },
-      "PRIMARY_did_pp": 0.0,
-      "PRIMARY_did_ci95": [
-        -2.461,
-        2.519
-      ],
-      "PRIMARY_excludes_zero": false
+      "contrasts": {
+        "1": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.045584,
+            "recall_dose": 0.048433,
+            "delta_pp": 0.285,
+            "gained": 4,
+            "lost": 3,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.02965,
+            "recall_dose": 0.02965,
+            "delta_pp": 0.0,
+            "gained": 6,
+            "lost": 6,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.285,
+          "did_ci95": [
+            -1.992,
+            2.595
+          ],
+          "excludes_zero": false
+        },
+        "4": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.045584,
+            "recall_dose": 0.05698,
+            "delta_pp": 1.14,
+            "gained": 11,
+            "lost": 7,
+            "mcnemar_p": 0.480682
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.02965,
+            "recall_dose": 0.021563,
+            "delta_pp": -0.809,
+            "gained": 3,
+            "lost": 6,
+            "mcnemar_p": 0.507812
+          },
+          "did_pp": 1.948,
+          "did_ci95": [
+            -0.855,
+            4.841
+          ],
+          "excludes_zero": false
+        },
+        "16": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.045584,
+            "recall_dose": 0.051282,
+            "delta_pp": 0.57,
+            "gained": 9,
+            "lost": 7,
+            "mcnemar_p": 0.803619
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.02965,
+            "recall_dose": 0.026954,
+            "delta_pp": -0.27,
+            "gained": 6,
+            "lost": 7,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.839,
+          "did_ci95": [
+            -2.133,
+            3.707
+          ],
+          "excludes_zero": false
+        },
+        "64": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.045584,
+            "recall_dose": 0.045584,
+            "delta_pp": 0.0,
+            "gained": 6,
+            "lost": 6,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.02965,
+            "recall_dose": 0.02965,
+            "delta_pp": 0.0,
+            "gained": 7,
+            "lost": 7,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.0,
+          "did_ci95": [
+            -2.461,
+            2.519
+          ],
+          "excludes_zero": false
+        }
+      }
     }
   }
 }
