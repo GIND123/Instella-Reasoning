@@ -194,7 +194,7 @@ identical items and identical solutions, so it needs no assumption about the lad
 Absolute balanced accuracy (given seen / given unseen / withheld seen / withheld unseen):
 Instella 3B 0.514 / 0.568 / 0.502 / 0.583 · Llama 8B 0.860 / 0.934 / 0.511 / 0.754 ·
 Qwen 7B 0.937 / 0.973 / 0.600 / 0.800 · Qwen 14B 0.946 / 0.969 / 0.636 / 0.820 ·
-Qwen 32B 0.951 / 0.968 / 0.648 / 0.839.
+Qwen 32B 0.888 / 0.950 / 0.648 / 0.839. (Corrected 2026-08-24: the first two cells previously read 0.951 / 0.968, which are the **stage2** target's control cells, not instruct's. Table 1 of the manuscript was unaffected, its 32B control gap of $-0.062$ being the instruct figure throughout.)
 
 ### 3.2 The effect is specificity, not sensitivity (new, 2026-08-23)
 

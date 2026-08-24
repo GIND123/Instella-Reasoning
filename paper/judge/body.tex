@@ -1,45 +1,3 @@
-\documentclass{article}
-
-\usepackage[dblblindworkshop]{neurips_2026}
-\workshoptitle{Can We Trust the Judge? Reliability and Validity of LLM Evaluators
-               (JUDGe), NeurIPS 2026}
-
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{hyperref}
-\usepackage{url}
-\usepackage{booktabs}
-\usepackage{amsmath}
-\usepackage{amsfonts}
-\usepackage{nicefrac}
-\usepackage{microtype}
-\usepackage{xcolor}
-\usepackage{graphicx}
-\usepackage{placeins}
-\renewcommand{\arraystretch}{0.94}
-\setlength{\abovecaptionskip}{4pt}
-\setlength{\belowcaptionskip}{2pt}
-\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
-\setlength{\intextsep}{8pt plus 2pt minus 2pt}
-
-
-% Set \cameraready to 1 only for the non anonymous camera ready version.
-\newcommand{\cameraready}{0}
-
-\title{Reference Free Grading of Reasoning Degrades on Problems Inside the
-       Instella Pretraining Corpus}
-
-\author{%
-  Anonymous Author(s) \\
-  Affiliation \\
-  Address \\
-  \texttt{email} \\
-}
-
-\begin{document}
-
-\maketitle
-
 \begin{abstract}
 Automated evaluators are trained artifacts, so a verdict on a benchmark item may depend on
 whether the evaluator encountered that item during training, yet the corpora of models
@@ -96,18 +54,6 @@ in which a judge compares a candidate against a remembered answer. Chance correc
 agreement inflates the effect substantially on identical verdicts, for reasons that follow
 from the marginals and not from the judging.
 
-\paragraph{Related work.} Judge reliability is normally studied through agreement with
-human raters~\citep{zheng2023judging}. Contamination work runs in parallel and asks whether a
-benchmark score is inflated by training exposure, either by detecting membership from model
-behaviour~\citep{shi2024detecting}, by rephrasing items so that surface overlap
-fails~\citep{yang2023rephrased}, or by rebuilding a benchmark from scratch to see how much of
-a reported score survives~\citep{zhang2024careful}. That literature almost always concerns
-the model under test rather than the model doing the grading, and memorisation is quantified
-for generation rather than for judgement~\citep{carlini2023quantifying}. The contribution
-here sits at the join of the two. Membership is fixed by a published corpus rather than
-estimated from behaviour, and the quantity measured is the evaluator's reliability rather
-than the generator's score.
-
 \section{Design}
 
 \paragraph{Membership.} Containment is computed as the fraction of an item's thirteen grams
@@ -134,20 +80,9 @@ rows rather than problems would understate the interval.
 
 \begin{figure}[t]
 \centering
-\IfFileExists{pipeline.pdf}{\includegraphics[width=0.96\linewidth]{pipeline.pdf}}{%
-\fbox{\begin{minipage}{0.94\linewidth}\vspace{6pt}\centering
-\small
-\textbf{Instella stage two corpus} $\rightarrow$ thirteen gram containment $\rightarrow$
-\textbf{seen} (988 rows) against \textbf{unseen} (1029 rows)\\[3pt]
-$\downarrow$\\[3pt]
-Instella checkpoint generates a candidate solution, exact match fixes ground truth\\[3pt]
-$\downarrow$\\[3pt]
-identical items and solutions graded twice:
-\textbf{reference given} against \textbf{reference withheld}\\[3pt]
-$\downarrow$\\[3pt]
-five judges $\rightarrow$ balanced accuracy, sensitivity, specificity, seen minus unseen
-$\rightarrow$ cluster bootstrap over parent problems
-\vspace{6pt}\end{minipage}}}
+\fbox{\begin{minipage}{0.94\linewidth}\vspace{34pt}\centering
+\textit{Pipeline diagram placeholder. Render \texttt{pipeline.mmd} and include as
+\texttt{pipeline.pdf}.}\vspace{34pt}\end{minipage}}
 \caption{Membership is fixed by containment against a published corpus, candidate solutions
 are held identical across conditions, and the single manipulated variable is whether the
 gold answer accompanies the judging prompt.}
@@ -330,72 +265,3 @@ roughly doubles the apparent effect on identical verdicts and should not be used
 where arms differ in base rate. The operational reading is specific: reference free grading
 is the configuration deployed wherever no gold answer exists, and it is the configuration in
 which the items most likely to sit in a judge's training data are graded least reliably.
-
-\if\cameraready1
-\section*{Acknowledgements}
-Jiang Liu confirmed the composition and generation procedure of the Instella
-pretraining mixture and identified an error in an earlier corpus definition,
-which corrected the membership measurement used throughout. Responsibility for
-the analysis and for any remaining error rests with the authors.
-\fi
-
-\bibliographystyle{plainnat}
-\bibliography{judge}
-
-\newpage
-\appendix
-
-\section{Related work in full}
-
-Zheng et al.~\citep{zheng2023judging} introduce the LLM as judge paradigm at scale and
-document position bias, verbosity bias and self preference, reporting agreement with human
-preference above 80 percent for strong judges. Their audits characterize the judge and the
-prompt; membership of the graded item in the judge's corpus is outside reach for the closed
-models they study, which is the gap the present design addresses for one open family.
-
-On the detection side, containment based overlap rules originate with
-Brown et al.~\citep{brown2020fewshot}, and membership inference from model confidence is
-developed by Carlini et al.~\citep{carlini2023quantifying} and
-Shi et al.~\citep{shi2024detecting}. Yang et al.~\citep{yang2023rephrased} show that
-rephrasing defeats overlap based detection outright, which is why a study that needs a
-trustworthy treatment label cannot rely on an estimated one.
-
-Two lines of work establish the value of released intermediate checkpoints.
-Biderman et al.~\citep{biderman2023pythia} release the Pythia suite specifically to make
-training dynamics analyzable, and Biderman et al.~\citep{biderman2023emergent} use such
-checkpoints to study when memorization emerges during training. The present work applies the
-same logic to an evaluator rather than to a generator.
-
-\section{Containment method and calibration}
-
-Item text is normalized to lowercase alphanumeric tokens and decomposed into every window of
-13 consecutive tokens. Containment against a corpus is the fraction of an item's windows
-found in it, computed in one streaming pass with an inverted index from window to source
-item, so cost is linear in corpus size and independent of how many item sets are indexed
-together. Because the corpus is generated only from the GSM8K training split, every test item
-is a verified negative: the any match rule flags 3 of 1000, a rate of 0.3 percent, and the
-adopted threshold flags none.
-
-Identifier namespacing is load bearing. GSM8K train and test share an index scheme, so
-loading both without namespacing collides items and produces containment values above unity,
-which is impossible for a fraction. Anyone reproducing this design will meet the same trap.
-
-\section{Reproducibility controls}
-
-Several controls are load bearing rather than incidental. The transformers version is pinned
-exactly, since a version range places different checkpoints on different minor versions and
-that difference enters the estimate as though it were a model difference. Batch size is fixed
-across all generation, because greedy decoding in reduced precision is sensitive to padding
-and a batch size change alters tie breaking. Variants are seeded per pair of item and
-perturbation type, so variant text is stable regardless of call order and generations stay
-valid when the item set changes. Every generation batch is flushed to disk and resume is
-keyed on item identifier, so an interrupted run continues instead of restarting.
-
-All generation records, containment values, judge verdicts and analysis code are released for
-audit at a public repository and dataset mirror, both anonymized for review. Random seeds are
-fixed across arm selection, variant construction and every bootstrap. An assistant helped
-implement generation, containment and analysis code under the direction of the authors, who
-verified every reported number against the underlying verdict files; the assistant did not
-design the conditions or choose which results to report.
-
-\end{document}

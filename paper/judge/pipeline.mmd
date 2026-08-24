@@ -1,0 +1,28 @@
+%% JUDGe pipeline diagram. Render to pipeline.pdf and the manuscript picks it up.
+%%   mmdc -i pipeline.mmd -o pipeline.pdf -b transparent
+flowchart LR
+  subgraph MEM["Membership fixed, not estimated"]
+    C["Instella stage two corpus<br/>train_119K, 119,014 rows"]
+    G1["GSM8K train split"]
+    G2["GSM8K test split"]
+    C -- "13 gram containment" --> SEEN["Seen arm<br/>988 graded rows"]
+    G1 --> SEEN
+    G2 --> UNSEEN["Unseen arm<br/>1,029 graded rows"]
+  end
+
+  subgraph GEN["Candidate solutions"]
+    P["Instella checkpoint<br/>stage two or instruct"] --> S["Solution plus<br/>exact match label"]
+  end
+
+  SEEN --> S
+  UNSEEN --> S
+
+  subgraph JUD["Same items, same solutions, one difference"]
+    S --> A["Reference given<br/>gold answer in prompt"]
+    S --> B["Reference withheld<br/>no gold answer"]
+  end
+
+  A --> J["Five judges<br/>Instella 3B, Llama 3.1 8B,<br/>Qwen2.5 7B, 14B, 32B"]
+  B --> J
+  J --> M["Balanced accuracy,<br/>sensitivity, specificity<br/>seen minus unseen"]
+  M --> R["Cluster bootstrap<br/>over parent problems"]
