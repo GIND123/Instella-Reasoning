@@ -48,8 +48,7 @@ finds no rise in answer reproduction where the corpus enters training: a differe
 differences of $-0.26$ points on $[-1.66, +1.14]$, holding at $+0.25$ and $+0.94$ across the
 later boundaries, and unchanged under restriction to small answers, to terminated
 generations, and to a five bin containment gradient within the train arm that runs 3.7, 1.5,
-0.9, 4.3 and 4.1 percent with no monotone order, against a design resolution of 1.89 points
-at 80 percent power. Continued pretraining at five doses under a fixed token budget explains
+0.9, 4.3 and 4.1 percent with no monotone order. Continued pretraining at five doses under a fixed token budget explains
 the null and separates two quantities usually conflated: at 64 repetitions the model
 reproduces 94.6 percent of injected text verbatim, yet against a never injected control the
 memorized solution procedure returns at $+4.76$ points $[+1.30, +8.23]$ while the final
@@ -199,58 +198,62 @@ one item, where document repetition tops out at four.
 If remembering is not the constraint, two candidates remain: the model cannot chain an extra
 step, or any change to a problem's surface throws it. Neither holds. Given a problem Instruct
 already solves and one dependent step appended, it stays correct on 88.0 percent, 368 of 418,
-and never falls back on the pre extension answer. Panel (f) of Figure~\ref{fig:main} takes the second candidate apart.
-
+and never falls back on the pre extension answer.
 
 An earlier comparison suggested the inserted number was what mattered, since a sentence
-carrying an unused quantity cost 6.2 points where a plain distractor sentence cost 0.6. Those
-conditions also differed in length and topical relatedness, so a crossed design separates
-them: all four insertions are the same twenty word frame with two words swapped, one choosing
-an off topic or a problem derived noun and one a filler word or a free two digit integer, so
-length, syntax and position are identical across cells. The main effect of the number was
-fixed as the primary endpoint before the run, and it is null at every checkpoint, $-0.59$ on
+carrying an unused quantity cost 6.2 points where a plain distractor cost 0.6. Those
+conditions also differed in length and topicality, so a crossed design separates the three,
+holding length, syntax and position fixed across all four cells. The main effect of the
+number, fixed as the primary endpoint before the run, is null everywhere: $-0.59$ on
 $[-1.62, +0.45]$ at stage two, $-0.79$ on $[-1.93, +0.31]$ after fine tuning and $-0.42$ on
-$[-1.53, +0.68]$ at Instruct, over 1764 parents each. Topicality is null too. What survives is
-the cost of insertion itself, in panel (f) of Figure~\ref{fig:main}: all four cells sit near
-$-2$ points with overlapping intervals. The earlier 6.2 point figure was carried by length and
-topicality, not by the quantity.
+$[-1.53, +0.68]$ at Instruct, over 1764 parents each. Topicality is null too. What survives
+is the cost of insertion itself, in panel (f) of Figure~\ref{fig:main}, where all four cells
+sit near $-2$ points with overlapping intervals at stage two and at Instruct. The supervised
+fine tuned checkpoint is the exception and shows no insertion cost at all.
+
+\subsection{Recognising an unanswerable problem}
+
+Every deletion item is underdetermined by construction, so declining is correct, but the
+prompt used above demands a number and offers no alternative. Repeating the identical items
+under a prompt differing only in naming \texttt{\#\#\#\# unanswerable} as an option changes
+the picture. Abstention runs 7.5, 11.1, 42.4 and 53.2 percent across Stage 1, Instella 3B,
+SFT and Instruct, against roughly 0.1, 0.0, 0.4 and 2.1 percent when the option is withheld,
+so the near zero figure measures compliance rather than competence and post training buys a
+steadily growing ability to recognise insufficiency. The strongest checkpoint still answers 44
+percent of problems that provably have none, every detected abstention is an explicit
+refusal rather than an unparseable generation, and train and test are indistinguishable
+throughout.
 
 \subsection{Two withdrawn checks}
 
-Two designs looked at first like heavy evidence of fragility, and neither held up. A
-perturbation ladder written elsewhere seemed to drop accuracy by over 30 points under two
-added clauses; its later rungs are independently generated problems, harder and structurally
-different, not the same items with clauses bolted on, so part of the drop is difficulty.
-Ivanova~\citep{ivanova2024fixable} makes the general form of the point, that an estimated
-difference wants an interval before an interpretation. The second was premise reordering,
-apparently worth over 12 points at every checkpoint, whose generator permutes premises with
-no check on whether a later sentence depends on an earlier one, leaving many variants simply
-broken. Restricted to items free of such dependency, 24 percent of the set, the effect lands
-on $+2.2$ points over $[-6.5, +10.9]$ across 46 problems. Neither supports anything here.
+Two designs looked at first like heavy evidence of fragility and neither held up, so both
+are reported as withdrawn rather than dropped. An externally authored clause ladder appeared
+to cost over 30 points, but its later rungs are independently generated harder problems
+rather than the same items with clauses added, so part of the drop is difficulty; Ivanova
+\citep{ivanova2024fixable} makes the general form of the point. Premise reordering appeared
+to cost over 12 points, but its generator permutes premises without checking cross sentence
+dependency, and restricted to items free of such dependency the effect lands on $+2.2$
+points over $[-6.5, +10.9]$. Appendix~C gives both in full.
 
 \section{The unavailable contrast}
 
-The obvious design contrasts GSM8K train items at high containment against those at low, and
-it was tried first. Two findings closed it off. The subset the model actually consumed,
-\texttt{train\_119K}, puts 7.56 percent of train items at containment 0.80 or above against
-29.75 percent computed on the full released pool, so a pool defined arm draws about half its
-items from text the model never read. The second is decisive:
-\texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage two mixture
-and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct} arrives at fine
-tuning, each carrying GSM8K train at containment 0.999 or above on over 97 percent of items
-against under 0.1 percent for test. Every train item therefore reached the model after stage
-one by some route, so a high against low split on the Instella corpus alone compares two
-saturated groups. Appendix~B gives the per corpus figures. The checkpoint design never sorts
-items by containment and escapes this entirely.
+The obvious design contrasts GSM8K train items at high containment against those at low,
+and it was tried first. Two findings closed it off, both in Appendix~B. The subset the
+model actually consumed, \texttt{train\_119K}, puts 7.56 percent of train items at
+containment 0.80 or above against 29.75 percent computed on the full released pool. More
+decisively, \texttt{allenai/tulu-3-sft-mixture}~\citep{lambert2024tulu3} sits in the stage
+two mixture and \texttt{nvidia/OpenMathInstruct-2}~\citep{toshniwal2024openmathinstruct}
+arrives at fine tuning, each carrying GSM8K train at containment 0.999 or above on over 97
+percent of items against under 0.1 percent for test, one of the Tulu 3 subsets involved
+being labelled decontaminated. Every train item therefore reached the model after stage one
+by some route, so a high against low split on the Instella corpus alone compares two
+saturated groups. The checkpoint design never sorts items by containment and escapes this.
 
-\section{Limitations and conclusion}
-\label{sec:limits}
-
-One family, one scale near three billion parameters, one benchmark domain, and a dissociation
-shown at five doses rather than ruled out at any exposure. The insertion cost is located but
-not explained: a twenty word irrelevant sentence costs about two points and nothing in its
-content predicts how much. Within those bounds, verified exposure does not raise how often a
-specific answer comes back, and does raise how often the solution procedure comes back.
+\paragraph{Limitations and conclusion.}
+One family, one scale near three billion parameters, one benchmark domain, and a
+dissociation shown at five doses rather than ruled out at any exposure. Within those bounds
+verified exposure does not raise how often an answer returns, and does raise how often the
+procedure does.
 
 \bibliographystyle{plainnat}
 \bibliography{mathai}
@@ -311,6 +314,21 @@ and through \texttt{wildchat} conversation logs, 4 items from 100{,}000 rows, an
 route in which users pasted benchmark problems into chat. Every scan reports rows
 examined alongside items found, since a sampled prefix bounds containment from below and
 a zero means absent from the rows scanned rather than absent from the corpus.
+
+\section{The two withdrawn checks in full}
+
+The clause ladder is an externally authored perturbation suite whose rungs share template
+identifiers, which invites pairing each perturbed item against its own template head. The
+instances at each rung are independently generated rather than derived from one another, so
+a later rung is a different and harder problem set rather than the same problems with
+clauses appended, and an accuracy difference across rungs therefore mixes added content with
+added difficulty. Premise reordering permutes the non question sentences of a problem and
+preserves the gold answer by construction, but a narrative word problem often carries
+pronouns, temporal connectives and back references across sentences, so a permutation can
+leave text that no reader could solve. Filtering to items where no premise after the first
+carries such a dependency retains 24 percent of the set, and on that subset the effect is
+$+2.2$ points on $[-6.5, +10.9]$ over 46 problems. Manual inspection finds violations that
+survive the filter, so even that residual is a spot check rather than an estimate.
 
 \section{Reproduction}
 

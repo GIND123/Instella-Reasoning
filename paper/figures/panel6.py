@@ -33,7 +33,7 @@ labels = ["Stage 1", "Instella 3B", "SFT", "Instruct"]
 short = ["Stage 1", "Inst 3B", "SFT", "Instruct"]
 x = range(len(labels))
 
-fig, axes = plt.subplots(2, 3, figsize=(5.5, 3.35))
+fig, axes = plt.subplots(2, 3, figsize=(5.5, 3.05))
 (a, b, c), (dd, e, f) = axes
 
 # (a) trajectory
