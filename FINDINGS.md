@@ -269,8 +269,15 @@ extension phase 2 and uses the **full `train` split** (329M tokens), per
 boundary at ~11.5× the corpus. Containment against that pool is now measured (see above and
 `docs/EXPOSURE_TWO_CORPORA.md`): 18.52% of train parents verbatim vs 9.65% under
 `train_119K`, so the MoE boundary carries roughly twice the verbatim exposure at the same
-items. The deletion probe on Midtrain→Base is **not yet run**; a go/no-go load is in
-flight. Risk: AMD's inference stack is ROCm-only; config declares `model_type: deepseek_v3`
+items. The deletion probe on Midtrain→Base is **not run and will not be for this
+submission**. The go/no-go loaded the model successfully and it reasons correctly on GSM8K,
+so the architecture is not the obstacle; throughput is. Measured on A100-80GB through plain
+transformers at batch 12: **30.2 tokens/sec aggregate**, giving ~15.0 h for one checkpoint
+over 3,179 items and ~29.9 h for the Midtrain/Base pair, against a remaining budget of
+~9.5 h. All 48 probe generations also ran the full 512 tokens without emitting a stop
+token, so that estimate is a floor rather than a worst case. vLLM is not an escape: the
+config declares `model_type: deepseek_v3` but ships custom Gated-MLA/FarSkip classes via
+`trust_remote_code`, so vLLM's native DeepSeek-V3 path does not apply. Risk: AMD's inference stack is ROCm-only; config declares `model_type: deepseek_v3`
 with custom Gated-MLA/FarSkip classes, so generation runs through plain transformers rather
 than vLLM.
 

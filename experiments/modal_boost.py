@@ -117,6 +117,10 @@ image = (
     .add_local_dir(str(REPO_ROOT / "docs"), "/repo/docs", copy=True)
     .add_local_dir(str(REPO_ROOT / "outputs/corpus_scan"), "/repo/outputs/corpus_scan", copy=True)
     .add_local_file(str(REPO_ROOT / "FINDINGS.md"), "/repo/FINDINGS.md", copy=True)
+    .add_local_dir(str(REPO_ROOT / "experiments"), "/exp", copy=True,
+                   ignore=["**/__pycache__", "**/__pycache__/**", "**/*.pyc", "runs/**"])
+    .add_local_dir(str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/phase2/mixture"),
+                   "/mixture", copy=True)
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -851,6 +855,98 @@ def sync_docs() -> dict:
     res = {"ok": True, "repo": HF_REPO, "uploaded": sent}
     print("SYNC_DOCS:", json.dumps(res))
     return res
+
+
+#: Replication targets for the injection result. Both are open base checkpoints with
+#: published pretraining corpora, near Instella-3B's scale, and neither is an AMD model:
+#: the point is that the dissociation is not a property of one lab's data pipeline.
+REPLICATION = {
+    "olmo2-1b": "allenai/OLMo-2-0425-1B",
+    "qwen2.5-1.5b": "Qwen/Qwen2.5-1.5B",
+}
+
+
+@app.function(gpu="A100-80GB", timeout=5 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
+    """One arm of the injection replication on a non-Instella base model.
+
+    Same mixture, same fixed token budget, same seed, same probe as the Instella-3B run,
+    with only the base model changed. Holding total tokens constant across doses is what
+    keeps dose from being confounded with training longer, so it is not parameterised per
+    model.
+
+    The positive controls travel with the arm: injected-document loss must fall and the
+    model must continue an injected document verbatim, otherwise a flat dose response is
+    reporting a broken harness rather than an absence of memorisation.
+    """
+    import subprocess
+
+    model = REPLICATION[alias]
+    out = pathlib.Path(RUNS_REMOTE) / f"replication-v1/{alias}"
+    (out / "logs").mkdir(parents=True, exist_ok=True)
+    ckpt = out / f"dose{dose}"
+
+    train_log = out / "logs" / f"train_dose{dose}.log"
+    if not (ckpt / "config.json").exists():
+        cmd = ["python", "/exp/inject_pretrain.py", "--dose", str(dose),
+               "--mixture-dir", "/mixture", "--out-dir", str(out),
+               "--model", model, "--total-tokens", str(total_tokens), "--save"]
+        print("[g5]", " ".join(cmd), flush=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
+                           "PYTHONPATH": "/src:/exp"})
+        train_log.write_text(r.stdout + "\n" + r.stderr, encoding="utf-8")
+        if r.returncode != 0:
+            runs_vol.commit()
+            tail = (r.stderr or r.stdout)[-1500:]
+            res = {"alias": alias, "dose": dose, "ok": False, "stage": "train", "tail": tail}
+            print("G5:", json.dumps(res)[:2000])
+            return res
+        runs_vol.commit()
+
+    report_path = out / f"dose{dose}_report.json"
+    report = json.loads(report_path.read_text()) if report_path.exists() else {}
+
+    # Probed exactly as Phase 1 probed Instella-3B: four-shot, no chat template, because
+    # these are base checkpoints and a chat template would measure instruction following.
+    gen = out / f"probe__dose{dose}.jsonl"
+    if not gen.exists():
+        cmd = ["python", "/exp/vllm_generate.py",
+               "--benchmark", "/items/gsm8k_test_deletion.jsonl",
+               "--model", str(ckpt), "--output", str(gen),
+               "--max-new-tokens", "1024", "--temperature", "0.0",
+               "--n-shot", "4", "--no-chat-template"]
+        print("[g5]", " ".join(cmd), flush=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
+                           "PYTHONPATH": "/src:/exp"})
+        (out / "logs" / f"probe_dose{dose}.log").write_text(r.stdout + "\n" + r.stderr,
+                                                            encoding="utf-8")
+        if r.returncode != 0:
+            runs_vol.commit()
+            res = {"alias": alias, "dose": dose, "ok": False, "stage": "probe",
+                   "tail": (r.stderr or r.stdout)[-1500:]}
+            print("G5:", json.dumps(res)[:2000])
+            return res
+        runs_vol.commit()
+
+    res = {"alias": alias, "model": model, "dose": dose, "ok": True,
+           "controls_pass": report.get("positive_controls_pass"),
+           "pre": report.get("pre"), "post": report.get("post"),
+           "injected_loss_drop": report.get("injected_loss_drop"),
+           "heldout_loss_drop": report.get("heldout_loss_drop"),
+           "wall_clock_sec": report.get("wall_clock_sec"),
+           "peak_mem_gb": report.get("peak_mem_gb"),
+           "n_generations": sum(1 for _ in open(gen)) if gen.exists() else 0}
+    res["push"] = _push("replication-v1")
+    print("G5:", json.dumps(res, indent=1))
+    return res
+
+
+@app.local_entrypoint()
+def g5_gonogo():
+    """The extremes first on both models. Middle doses only if 0x and 64x separate."""
+    for alias in REPLICATION:
+        for dose in (0, 64):
+            print(g5_inject.remote(alias, dose))
 
 @app.local_entrypoint()
 def g4_all():
