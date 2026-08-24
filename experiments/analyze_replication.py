@@ -11,27 +11,31 @@ This scores the same contrast on OLMo-2-1B and Qwen2.5-1.5B. Same 200 injected d
 same 200 held-out controls, same fixed 8,388,608 token budget, same seed, same four-shot
 no-chat-template probe. Only the base checkpoint changes.
 
-What Instella-3B actually showed, which is the thing to be replicated
-    From 0x to 64x, verbatim continuation of the dosed documents went 0.133 -> 0.946, while
-    recall of the deleted parent's answer on those same items went 0.0427 -> 0.0741. That
-    recall rise is real, not a null: exact McNemar gives p = 0.035, 17 gained against 6
-    lost. The held-out contrast moved less and did not separate, 0.0270 -> 0.0431 at
-    p = 0.238.
+What Instella-3B showed, and why the controlled contrast is the only readable one
+    From 0x to 64x, verbatim continuation of the dosed documents went 0.133 -> 0.946.
+    Recall of the deleted parent's answer on those same injected items went
+    0.0427 -> 0.0741, which taken alone is significant at exact McNemar p = 0.035.
 
-    So the claim is a dissociation of magnitude, not an absence of effect. A model that
-    reproduces a document verbatim roughly nineteen times in twenty recovers the deleted
-    answer three points more often than one that never saw it. Near-total memorisation buys
-    almost no recall.
+    That within-arm number must not be read as an injection effect. Every arm trains on
+    8,388,608 tokens, so a model at 64x differs from one at 0x by all of that training and
+    not only by the injection. The never-injected held-out parents move too, 0.0270 ->
+    0.0431, and subtracting them leaves +1.52 points on [-1.93, +5.08]: the injection
+    specific effect on answer recall does not separate from zero. Held-out controls exist
+    precisely to absorb the shared training, and the uncontrolled contrast is what they
+    correct.
 
 PRIMARY ENDPOINT, fixed before the arms were run
-    Within each model, recall on injected parents at 64x minus recall at 0x, paired by item
-    and tested with exact McNemar, with the held-out contrast as the control.
+    Difference in differences within each model: (injected recall at 64x minus injected
+    recall at 0x) minus (held-out recall at 64x minus held-out recall at 0x). This matches
+    the estimand the paper reports for Instella-3B and is the contrast the design supports.
 
-    The dissociation replicates if verbatim continuation at 64x is high while the injected
-    recall gain stays in single digits of percentage points on a comparable base. It fails
-    to replicate if injected recall climbs toward the verbatim rate, which would mean the
-    Instella result understated what memorisation does and the gap was a property of that
-    model rather than of the mechanism.
+    The dissociation replicates if verbatim continuation at 64x is high while that
+    difference in differences stays indistinguishable from zero. It fails to replicate if
+    answer recall tracks the verbatim rate once the shared training is removed, which would
+    mean the Instella null was a property of that model rather than of the mechanism.
+
+    Both single differences are reported alongside it, because a reader who sees only the
+    difference in differences cannot tell a genuine null from two large effects cancelling.
 
 A read of this table is only meaningful where positive_controls_pass is true. An arm whose
 injected loss did not fall has not memorised anything, and its flat recall measures a
@@ -144,6 +148,9 @@ def analyse(run: Path, mix: Path, items_path: Path) -> dict:
                 "delta_pp": round(100 * (sum(cur.values()) - sum(ref.values())) / len(sel), 3),
                 "gained": gained, "lost": lost, "mcnemar_p": round(p, 6),
             }
+        if "injected" in entry and "heldout" in entry:
+            entry["PRIMARY_did_pp"] = round(
+                entry["injected"]["delta_pp"] - entry["heldout"]["delta_pp"], 3)
         res["models"][alias] = entry
     return res
 
@@ -162,7 +169,16 @@ def render(res: dict) -> str:
                      f"{c['verbatim_post']:.3f} | {c['injected_loss_post']:.3f} | "
                      f"{c['heldout_loss_post']:.3f} | "
                      f"{'pass' if c['positive_controls_pass'] else '**FAIL**'} |")
-    L += ["", "## PRIMARY - recall of the deleted parent's answer, 64x against 0x", "",
+    L += ["", "## PRIMARY - difference in differences on answer recall, 64x against 0x", "",
+          "Injected minus held-out, so the 8.4M tokens every arm trains on cancel.", "",
+          "| model | injected delta | held-out delta | difference in differences |",
+          "|---|--:|--:|--:|"]
+    for _, e in res["models"].items():
+        if "PRIMARY_did_pp" in e:
+            L.append(f"| {e['label']} | {e['injected']['delta_pp']:+.2f} pp | "
+                     f"{e['heldout']['delta_pp']:+.2f} pp | "
+                     f"**{e['PRIMARY_did_pp']:+.2f} pp** |")
+    L += ["", "## The single differences behind it", "",
           "| model | set | n | recall 0x | recall 64x | delta | gained | lost | McNemar p |",
           "|---|---|--:|--:|--:|--:|--:|--:|--:|"]
     for _, e in res["models"].items():
