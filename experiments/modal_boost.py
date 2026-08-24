@@ -121,6 +121,9 @@ image = (
                    ignore=["**/__pycache__", "**/__pycache__/**", "**/*.pyc", "runs/**"])
     .add_local_dir(str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/phase2/mixture"),
                    "/mixture", copy=True)
+    .add_local_file(
+        str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/base/gsm8k_test_parents.jsonl"),
+        "/items/gsm8k_test_parents.jsonl", copy=True)
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -866,6 +869,59 @@ REPLICATION = {
 }
 
 
+
+#: Rebuilt filler lives on the volume: 40 MB of tulu-3 text is gitignored, so the image
+#: carries only the 200 injected and 200 held-out documents that must not drift.
+MIX_REMOTE = f"{RUNS_REMOTE}/replication-v1/mixture"
+
+
+@app.function(cpu=8.0, memory=32768, timeout=2 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g5_mixture(force: bool = False) -> dict:
+    """Rebuild the injection mixture, then prove it is the same one Instella-3B saw.
+
+    `filler.jsonl` is 40 MB of scanned tulu-3 and is gitignored, so it has to be
+    regenerated rather than shipped. Regenerating it also regenerates the injected and
+    held-out sets, and those must not move: a replication that dosed different documents
+    would not be a replication. Both are therefore hashed against the committed copies and
+    the build fails loudly on any mismatch.
+    """
+    import hashlib
+    import shutil
+    import subprocess
+
+    mix = pathlib.Path(MIX_REMOTE)
+    if (mix / "filler.jsonl").exists() and not force:
+        return {"ok": True, "cached": True, "path": str(mix)}
+
+    mix.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["python", "/exp/build_injection_mixture.py",
+           "--parents", "/items/gsm8k_test_parents.jsonl", "--out-dir", str(mix)]
+    print("[g5-mix]", " ".join(cmd), flush=True)
+    r = subprocess.run(cmd, capture_output=True, text=True,
+                       env={**os.environ, "PYTHONPATH": "/src:/exp"})
+    if r.returncode != 0:
+        return {"ok": False, "stage": "build", "tail": (r.stderr or r.stdout)[-1500:]}
+
+    def sha(path):
+        return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()[:16]
+
+    drift = {}
+    for name in ("injected.jsonl", "heldout.jsonl", "injected_docs.jsonl"):
+        want, got = sha(f"/mixture/{name}"), sha(mix / name)
+        if want != got:
+            drift[name] = {"committed": want, "rebuilt": got}
+    if drift:
+        # Prefer the committed documents: they are what the Instella arms actually saw.
+        for name in drift:
+            shutil.copyfile(f"/mixture/{name}", mix / name)
+
+    runs_vol.commit()
+    res = {"ok": True, "cached": False, "path": str(mix),
+           "drift_repaired": drift or None,
+           "filler_bytes": (mix / "filler.jsonl").stat().st_size}
+    print("G5_MIX:", json.dumps(res, indent=1))
+    return res
+
 @app.function(gpu="A100-80GB", timeout=5 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
 def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
     """One arm of the injection replication on a non-Instella base model.
@@ -889,7 +945,7 @@ def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
     train_log = out / "logs" / f"train_dose{dose}.log"
     if not (ckpt / "config.json").exists():
         cmd = ["python", "/exp/inject_pretrain.py", "--dose", str(dose),
-               "--mixture-dir", "/mixture", "--out-dir", str(out),
+               "--mixture-dir", MIX_REMOTE, "--out-dir", str(out),
                "--model", model, "--total-tokens", str(total_tokens), "--save"]
         print("[g5]", " ".join(cmd), flush=True)
         r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ,
@@ -944,6 +1000,7 @@ def g5_inject(alias: str, dose: int, total_tokens: int = 8_388_608) -> dict:
 @app.local_entrypoint()
 def g5_gonogo():
     """The extremes first on both models. Middle doses only if 0x and 64x separate."""
+    print(g5_mixture.remote())
     for alias in REPLICATION:
         for dose in (0, 64):
             print(g5_inject.remote(alias, dose))
