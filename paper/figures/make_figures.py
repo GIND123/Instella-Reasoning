@@ -263,17 +263,24 @@ def fig_judge_dissociation():
 
 # ---------------------------------------------------------------- JUDGe Figure 2
 def fig_judge_ladder():
-    judges = ["Instella 3B\nInstruct", "Qwen2.5 7B\nInstruct", "Qwen2.5 14B\nInstruct"]
+    # Qwen2.5 32B cells are computed from
+    # judge-ext-v1/analysis/judge_qwen2.5-32b-instruct__instruct__reference_{based,free}.jsonl,
+    # excluding the 3 and 17 verdicts that did not parse, which is the convention the rest of
+    # the ladder and Table 1 already use. Counting an unparsed verdict as INCORRECT instead
+    # moves the withheld gap from -0.191 to -0.183 and would put this figure at odds with the
+    # table. The resulting gaps, -0.062 and -0.191, match Table 1 and figure 1 panel (a).
+    judges = ["Instella 3B\nInstruct", "Qwen2.5 7B\nInstruct", "Qwen2.5 14B\nInstruct",
+              "Qwen2.5 32B\nInstruct"]
     xi = range(len(judges))
     series = [
-        ("Reference given, seen", [0.5137, 0.9370, 0.9459], BLUE, "o", "-"),
-        ("Reference given, unseen", [0.5678, 0.9728, 0.9689], BLUE, "^", "--"),
-        ("Reference withheld, seen", [0.5016, 0.5998, 0.6362], RED, "s", "-"),
-        ("Reference withheld, unseen", [0.5825, 0.7998, 0.8202], RED, "v", "--"),
+        ("Reference given, seen", [0.5137, 0.9370, 0.9459, 0.8880], BLUE, "o", "-"),
+        ("Reference given, unseen", [0.5678, 0.9728, 0.9689, 0.9499], BLUE, "^", "--"),
+        ("Reference withheld, seen", [0.5016, 0.5998, 0.6362, 0.6481], RED, "s", "-"),
+        ("Reference withheld, unseen", [0.5825, 0.7998, 0.8202, 0.8392], RED, "v", "--"),
     ]
-    fig, ax = plt.subplots(figsize=(3.4, 2.3))
+    fig, ax = plt.subplots(figsize=(3.9, 2.3))
     ax.axhline(0.5, color=GREY, linewidth=0.7, linestyle=":", zorder=0)
-    ax.text(2.42, 0.512, "chance", fontsize=7, color=GREY, style="italic", ha="right")
+    ax.text(3.45, 0.512, "chance", fontsize=7, color=GREY, style="italic", ha="right")
     for name, y, colour, marker, ls in series:
         ax.plot(
             xi,
@@ -290,9 +297,11 @@ def fig_judge_ladder():
     ax.set_xticks(list(xi))
     ax.set_xticklabels(judges)
     ax.set_ylabel("Balanced accuracy")
-    ax.set_ylim(0.45, 1.03)
+    # Floor dropped below chance so the legend sits under every series: the steep rise
+    # from the 3B judge fills the upper left and no data falls below 0.50.
+    ax.set_ylim(0.38, 1.03)
     ax.yaxis.set_major_locator(MultipleLocator(0.1))
-    ax.legend(loc="upper left", handlelength=1.9, ncol=1, labelspacing=0.25)
+    ax.legend(loc="lower right", handlelength=1.9, ncol=1, labelspacing=0.22, fontsize=7)
     save(fig, "judge_fig2_ladder")
 
 

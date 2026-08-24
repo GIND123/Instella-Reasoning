@@ -223,9 +223,10 @@ shrink with capability; this does not.
 \includegraphics[width=0.48\linewidth]{judge_fig2_ladder.pdf}
 \caption{Left: membership gap in balanced accuracy across the judge ladder under both
 conditions, grading instruct outputs. Right: absolute balanced accuracy for all four cells
-of the design. The control condition confirms the two larger judges are competent
-instruments, reaching 0.94 to 0.97, so the reference free result is not read off a judge
-that cannot grade.}
+of the design across the capability ladder. The control condition confirms the three larger
+judges are competent instruments, reaching 0.89 to 0.97 on the seen arm, so the reference
+free result is not read off a judge that cannot grade. The two control series converge as
+capability rises while the two reference free series stay apart.}
 \label{fig:diss}
 \end{figure}
 
@@ -233,10 +234,11 @@ that cannot grade.}
 
 A null or an effect from an incompetent judge says nothing, so absolute performance is
 reported alongside the gaps. Table~\ref{tab:ladder} gives every cell. Given the reference
-answer, the 7 and 14 billion parameter judges reach 0.937 to 0.973, which is the regime in
-which their reference free numbers become interpretable. The 3 billion parameter judge sits
-within 0.04 of chance on the seen arm in every configuration, including when handed the
-answer, so its rows describe a noise floor and the substantive claims rest on the larger two.
+answer, the 7, 14 and 32 billion parameter judges reach 0.888 to 0.973, which is the regime
+in which their reference free numbers become interpretable. The 3 billion parameter judge
+sits within 0.04 of chance on the seen arm in every configuration, including when handed the
+answer, so its rows describe a noise floor and the substantive claims rest on the larger
+three.
 
 \begin{table}[t]
 \centering
@@ -340,39 +342,33 @@ accept a right one. Supplying a reference restores most of it.
 \label{sec:limits}
 
 \paragraph{Membership is verified for one judge, and it is not the judge carrying the
-result.} Containment is measured against the Instella corpus. The Instella judge therefore
-has verified membership but sits at chance. The Qwen judges show the effect, and their
-corpora are unknown, so for them the partition is GSM8K train against test rather than
-verified seen against unseen. This asymmetry is real and is the main reason the primary
-claim is stated as a within judge contrast between two conditions over identical items and
-identical candidate solutions, which holds whatever the arm label means for a given judge.
-What the Qwen results establish is that a competent judge grades this partition differently
-depending on whether a reference is supplied. Closing the gap between that and a membership
-claim requires a second open corpus model of comparable capability.
+result.} Containment is measured against the Instella corpus, so the Instella judge has
+verified membership but sits at chance. The Qwen judges show the effect and their corpora
+are unknown, so for them the partition is GSM8K train against test rather than verified seen
+against unseen. That asymmetry is why the primary claim is stated as a within judge contrast
+between two conditions over identical items and identical candidate solutions, which holds
+whatever the arm label means for a given judge. Closing the gap to a membership claim
+requires a second open corpus model of comparable capability.
 
 \paragraph{One family supplies the candidate solutions.} Every graded output comes from an
-Instella checkpoint. Whether the dissociation reproduces on solutions from other generators
-is untested. The judges are no longer a single family: the effect is present on five judges
-drawn from Instella, Llama and Qwen.
+Instella checkpoint, and whether the dissociation reproduces on other generators is
+untested. The judges span Instella, Llama and Qwen.
 
 \paragraph{The effect depends on how gradeable the solutions are.} Grading the weaker stage
 two generator, Qwen2.5 32B shows a reference free gap of $-0.035$ $[-0.075, +0.006]$, which
-spans zero, while Llama 3.1 8B on the same target shows $-0.192$. That checkpoint's errors
-are blunt enough for a strong judge to catch without a reference, and its reference free
-specificity is correspondingly high. The effect therefore has a ceiling in solution quality,
-which the account in Section~\ref{sec:mech} predicts but which is measured on one generator
-pair and should be treated as an observation rather than a law.
+spans zero, while Llama 3.1 8B on the same target shows $-0.192$. Blunt errors are catchable
+without a reference, and reference free specificity is correspondingly high. The ceiling in
+solution quality that Section~\ref{sec:mech} predicts is therefore measured on one generator
+pair and is an observation rather than a law.
 
-\paragraph{One checkpoint is unexplained.} The effect concentrates on stage two and instruct
-outputs. Stage one outputs are wrong nearly everywhere and are trivially gradeable in either
-condition, which accounts for that null. The supervised fine tuned checkpoint shows no gap in
-either condition despite output quality comparable to instruct, and the present data do not
-explain why.
+\paragraph{One checkpoint is unexplained.} Stage one outputs are wrong nearly everywhere and
+trivially gradeable in either condition, which accounts for that null. The supervised fine
+tuned checkpoint shows no gap in either condition despite output quality comparable to
+instruct, and the present data do not explain why.
 
 \paragraph{Attribution is not established.} No evidence links a verdict to a specific
 training document. The decomposition in Section~\ref{sec:mech} narrows the effect to a
-specificity loss that survives the error subtlety control, which is stronger than the
-inference the first version of this work rested on, but it is not attribution.
+specificity loss surviving the error subtlety control, which is not attribution.
 
 \section{Conclusion}
 
