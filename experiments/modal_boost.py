@@ -866,6 +866,10 @@ def sync_docs() -> dict:
 REPLICATION = {
     "olmo2-1b": "allenai/OLMo-2-0425-1B",
     "qwen2.5-1.5b": "Qwen/Qwen2.5-1.5B",
+    # Matched to Instella-3B's scale on purpose. Procedure reproduction appears at 3B on
+    # Instella and not at 1B or 1.5B elsewhere, which leaves family and capacity confounded.
+    # A non-AMD model at the same scale separates them.
+    "qwen2.5-3b": "Qwen/Qwen2.5-3B",
 }
 
 
@@ -1026,6 +1030,40 @@ def g5_full():
             print(f"[{alias} {dose}x] FAILED {type(exc).__name__}: {exc}")
     print("G5_FULL_DONE")
 
+
+@app.function(cpu=1.0, timeout=15 * 60, secrets=SECRETS)
+def hf_ls(prefix: str = "") -> dict:
+    """List what the HF dataset mirror actually holds, so a claim can be traced to a file."""
+    from huggingface_hub import HfApi
+    tok = os.environ.get("HF_TOKEN")
+    api = HfApi(token=tok)
+    files = api.list_repo_files(repo_id=HF_REPO, repo_type="dataset")
+    hit = sorted(f for f in files if prefix in f)
+    print(f"HF_LS: {len(hit)} of {len(files)} files match {prefix!r}")
+    for f in hit[:80]:
+        print("   ", f)
+    return {"n_total": len(files), "n_match": len(hit), "sample": hit[:80]}
+
+
+@app.function(cpu=2.0, timeout=30 * 60, volumes=VOLUMES, secrets=SECRETS)
+def hf_pull(paths: str) -> dict:
+    """Copy files from the HF mirror onto the runs volume so they can be scored locally."""
+    from huggingface_hub import hf_hub_download
+    tok = os.environ.get("HF_TOKEN")
+    got = []
+    for rel in paths.split(","):
+        rel = rel.strip()
+        if not rel:
+            continue
+        src = hf_hub_download(repo_id=HF_REPO, repo_type="dataset", filename=rel, token=tok)
+        dest = pathlib.Path(RUNS_REMOTE) / "pulled" / pathlib.Path(rel).name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(pathlib.Path(src).read_bytes())
+        got.append({"file": dest.name, "bytes": dest.stat().st_size})
+    runs_vol.commit()
+    print("HF_PULL:", json.dumps(got))
+    return {"pulled": got}
+
 @app.local_entrypoint()
 def g4_all():
     for alias in ("moe-midtrain", "moe-base"):
@@ -1043,3 +1081,18 @@ def g2_all():
     for judge in ("llama-3.1-8b-instruct", "qwen2.5-32b-instruct"):
         for target in JUDGE_TARGETS:
             print(g2.remote(judge, target))
+
+
+@app.local_entrypoint()
+def g6_scale():
+    """Qwen2.5-3B at the doses that separate a flat curve from a rising one."""
+    handles = [(d, g5_inject.spawn("qwen2.5-3b", d)) for d in (0, 16, 64)]
+    for dose, h in handles:
+        try:
+            r = h.get()
+            print(f"[qwen2.5-3b {dose}x] ok={r.get('ok')} "
+                  f"verbatim={(r.get('post') or {}).get('injected_verbatim')} "
+                  f"controls={r.get('controls_pass')}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[qwen2.5-3b {dose}x] FAILED {type(exc).__name__}: {exc}")
+    print("G6_DONE")

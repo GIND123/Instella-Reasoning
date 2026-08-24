@@ -1,0 +1,243 @@
+{
+  "n_boot": 4000,
+  "seed": 6198,
+  "models": {
+    "instella-3b": {
+      "label": "Instella 3B",
+      "doses": {
+        "0": {
+          "injected": {
+            "score": 0.300537,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.289787,
+            "n": 356
+          }
+        },
+        "1": {
+          "injected": {
+            "score": 0.290883,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.276726,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 0.341,
+          "raw_gap_pp": 1.416,
+          "raw_gap_ci95": [
+            -3.553,
+            6.472
+          ]
+        },
+        "4": {
+          "injected": {
+            "score": 0.300232,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.282183,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 0.73,
+          "raw_gap_pp": 1.805,
+          "raw_gap_ci95": [
+            -3.18,
+            6.973
+          ]
+        },
+        "16": {
+          "injected": {
+            "score": 0.321719,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.283186,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 2.778,
+          "raw_gap_pp": 3.853,
+          "raw_gap_ci95": [
+            -1.125,
+            8.956
+          ]
+        },
+        "64": {
+          "injected": {
+            "score": 0.347423,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.282236,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 5.444,
+          "raw_gap_pp": 6.519,
+          "raw_gap_ci95": [
+            1.129,
+            12.056
+          ]
+        }
+      }
+    },
+    "olmo2-1b": {
+      "label": "OLMo-2-1B",
+      "doses": {
+        "0": {
+          "injected": {
+            "score": 0.267051,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.257858,
+            "n": 356
+          }
+        },
+        "1": {
+          "injected": {
+            "score": 0.257702,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.262493,
+            "n": 356
+          },
+          "did_vs_dose0_pp": -1.398,
+          "raw_gap_pp": -0.479,
+          "raw_gap_ci95": [
+            -5.431,
+            4.448
+          ]
+        },
+        "4": {
+          "injected": {
+            "score": 0.261012,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.256969,
+            "n": 356
+          },
+          "did_vs_dose0_pp": -0.515,
+          "raw_gap_pp": 0.404,
+          "raw_gap_ci95": [
+            -4.598,
+            5.539
+          ]
+        },
+        "16": {
+          "injected": {
+            "score": 0.251416,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.239667,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 0.256,
+          "raw_gap_pp": 1.175,
+          "raw_gap_ci95": [
+            -3.703,
+            5.955
+          ]
+        },
+        "64": {
+          "injected": {
+            "score": 0.244839,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.238664,
+            "n": 356
+          },
+          "did_vs_dose0_pp": -0.301,
+          "raw_gap_pp": 0.618,
+          "raw_gap_ci95": [
+            -4.268,
+            5.548
+          ]
+        }
+      }
+    },
+    "qwen2.5-1.5b": {
+      "label": "Qwen2.5-1.5B",
+      "doses": {
+        "0": {
+          "injected": {
+            "score": 0.305531,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.283347,
+            "n": 356
+          }
+        },
+        "1": {
+          "injected": {
+            "score": 0.296951,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.296475,
+            "n": 356
+          },
+          "did_vs_dose0_pp": -2.17,
+          "raw_gap_pp": 0.048,
+          "raw_gap_ci95": [
+            -4.944,
+            5.174
+          ]
+        },
+        "4": {
+          "injected": {
+            "score": 0.299398,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.284209,
+            "n": 356
+          },
+          "did_vs_dose0_pp": -0.699,
+          "raw_gap_pp": 1.519,
+          "raw_gap_ci95": [
+            -3.639,
+            6.78
+          ]
+        },
+        "16": {
+          "injected": {
+            "score": 0.304501,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.27401,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 0.831,
+          "raw_gap_pp": 3.049,
+          "raw_gap_ci95": [
+            -1.772,
+            8.223
+          ]
+        },
+        "64": {
+          "injected": {
+            "score": 0.306206,
+            "n": 328
+          },
+          "heldout": {
+            "score": 0.280772,
+            "n": 356
+          },
+          "did_vs_dose0_pp": 0.325,
+          "raw_gap_pp": 2.543,
+          "raw_gap_ci95": [
+            -2.447,
+            7.594
+          ]
+        }
+      }
+    }
+  }
+}
