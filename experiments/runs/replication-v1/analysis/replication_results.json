@@ -5,42 +5,42 @@
   "n_boot": 4000,
   "seed": 6198,
   "models": {
-    "olmo2-1b": {
-      "label": "OLMo-2-1B",
+    "instella-3b": {
+      "label": "Instella-3B",
       "doses": {
         "0": {
           "injected_share": 0.0,
-          "verbatim_post": 0.1261,
-          "injected_loss_post": 1.2412,
-          "heldout_loss_post": 1.2945,
+          "verbatim_post": 0.133,
+          "injected_loss_post": 1.2843,
+          "heldout_loss_post": 1.3425,
           "positive_controls_pass": false
         },
         "1": {
-          "injected_share": 0.00418,
-          "verbatim_post": 0.128,
-          "injected_loss_post": 1.0976,
-          "heldout_loss_post": 1.1827,
+          "injected_share": 0.00403,
+          "verbatim_post": 0.1532,
+          "injected_loss_post": 1.005,
+          "heldout_loss_post": 1.1495,
           "positive_controls_pass": true
         },
         "4": {
-          "injected_share": 0.016719,
-          "verbatim_post": 0.1719,
-          "injected_loss_post": 1.0055,
-          "heldout_loss_post": 1.1562,
+          "injected_share": 0.01612,
+          "verbatim_post": 0.18,
+          "injected_loss_post": 0.8031,
+          "heldout_loss_post": 1.1627,
           "positive_controls_pass": true
         },
         "16": {
-          "injected_share": 0.066875,
-          "verbatim_post": 0.2074,
-          "injected_loss_post": 0.7691,
-          "heldout_loss_post": 1.1518,
+          "injected_share": 0.06448,
+          "verbatim_post": 0.4915,
+          "injected_loss_post": 0.3386,
+          "heldout_loss_post": 1.3345,
           "positive_controls_pass": true
         },
         "64": {
-          "injected_share": 0.267502,
-          "verbatim_post": 0.7266,
-          "injected_loss_post": 0.3224,
-          "heldout_loss_post": 1.3732,
+          "injected_share": 0.257919,
+          "verbatim_post": 0.9456,
+          "injected_loss_post": 0.1559,
+          "heldout_loss_post": 1.4057,
           "positive_controls_pass": true
         }
       },
@@ -48,104 +48,184 @@
         "1": {
           "injected": {
             "n": 351,
-            "recall_dose0": 0.02849,
-            "recall_dose": 0.019943,
-            "delta_pp": -0.855,
-            "gained": 3,
-            "lost": 6,
-            "mcnemar_p": 0.507812
+            "recall_dose0": 0.042735,
+            "recall_dose": 0.054131,
+            "delta_pp": 1.14,
+            "gained": 9,
+            "lost": 5,
+            "mcnemar_p": 0.42395
           },
           "heldout": {
             "n": 371,
-            "recall_dose0": 0.016173,
-            "recall_dose": 0.010782,
-            "delta_pp": -0.539,
-            "gained": 1,
-            "lost": 3,
-            "mcnemar_p": 0.625
+            "recall_dose0": 0.026954,
+            "recall_dose": 0.037736,
+            "delta_pp": 1.078,
+            "gained": 10,
+            "lost": 6,
+            "mcnemar_p": 0.454498
           },
-          "did_pp": -0.316,
+          "did_pp": 0.061,
           "did_ci95": [
-            -2.38,
-            1.669
+            -2.993,
+            3.17
           ],
           "excludes_zero": false
         },
         "4": {
           "injected": {
             "n": 351,
-            "recall_dose0": 0.02849,
-            "recall_dose": 0.02849,
-            "delta_pp": 0.0,
-            "gained": 4,
-            "lost": 4,
-            "mcnemar_p": 1.0
+            "recall_dose0": 0.042735,
+            "recall_dose": 0.059829,
+            "delta_pp": 1.709,
+            "gained": 9,
+            "lost": 3,
+            "mcnemar_p": 0.145996
           },
           "heldout": {
             "n": 371,
-            "recall_dose0": 0.016173,
-            "recall_dose": 0.016173,
-            "delta_pp": 0.0,
-            "gained": 1,
+            "recall_dose0": 0.026954,
+            "recall_dose": 0.043127,
+            "delta_pp": 1.617,
+            "gained": 7,
             "lost": 1,
-            "mcnemar_p": 1.0
+            "mcnemar_p": 0.070312
           },
-          "did_pp": 0.0,
+          "did_pp": 0.092,
           "did_ci95": [
-            -1.897,
-            1.766
+            -2.485,
+            2.677
           ],
           "excludes_zero": false
         },
         "16": {
           "injected": {
             "n": 351,
-            "recall_dose0": 0.02849,
-            "recall_dose": 0.042735,
-            "delta_pp": 1.425,
-            "gained": 7,
-            "lost": 2,
-            "mcnemar_p": 0.179688
+            "recall_dose0": 0.042735,
+            "recall_dose": 0.051282,
+            "delta_pp": 0.855,
+            "gained": 12,
+            "lost": 9,
+            "mcnemar_p": 0.663624
           },
           "heldout": {
             "n": 371,
-            "recall_dose0": 0.016173,
-            "recall_dose": 0.024259,
-            "delta_pp": 0.809,
-            "gained": 5,
-            "lost": 2,
-            "mcnemar_p": 0.453125
+            "recall_dose0": 0.026954,
+            "recall_dose": 0.037736,
+            "delta_pp": 1.078,
+            "gained": 10,
+            "lost": 6,
+            "mcnemar_p": 0.454498
           },
-          "did_pp": 0.616,
+          "did_pp": -0.223,
           "did_ci95": [
-            -1.564,
-            2.835
+            -3.562,
+            3.103
           ],
           "excludes_zero": false
         },
         "64": {
           "injected": {
             "n": 351,
-            "recall_dose0": 0.02849,
-            "recall_dose": 0.031339,
-            "delta_pp": 0.285,
-            "gained": 5,
-            "lost": 4,
-            "mcnemar_p": 1.0
+            "recall_dose0": 0.042735,
+            "recall_dose": 0.074074,
+            "delta_pp": 3.134,
+            "gained": 17,
+            "lost": 6,
+            "mcnemar_p": 0.03469
           },
           "heldout": {
             "n": 371,
-            "recall_dose0": 0.016173,
-            "recall_dose": 0.016173,
-            "delta_pp": 0.0,
+            "recall_dose0": 0.026954,
+            "recall_dose": 0.043127,
+            "delta_pp": 1.617,
+            "gained": 12,
+            "lost": 6,
+            "mcnemar_p": 0.237885
+          },
+          "did_pp": 1.517,
+          "did_ci95": [
+            -2.116,
+            5.205
+          ],
+          "excludes_zero": false
+        }
+      }
+    },
+    "qwen2.5-3b": {
+      "label": "Qwen2.5-3B",
+      "doses": {
+        "0": {
+          "injected_share": 0.0,
+          "verbatim_post": 0.2768,
+          "injected_loss_post": 1.2248,
+          "heldout_loss_post": 1.2435,
+          "positive_controls_pass": false
+        },
+        "16": {
+          "injected_share": 0.077391,
+          "verbatim_post": 0.7129,
+          "injected_loss_post": 0.1237,
+          "heldout_loss_post": 1.4049,
+          "positive_controls_pass": true
+        },
+        "64": {
+          "injected_share": 0.309563,
+          "verbatim_post": 1.0,
+          "injected_loss_post": 0.0445,
+          "heldout_loss_post": 1.4798,
+          "positive_controls_pass": true
+        }
+      },
+      "contrasts": {
+        "16": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.048433,
+            "recall_dose": 0.059829,
+            "delta_pp": 1.14,
+            "gained": 14,
+            "lost": 10,
+            "mcnemar_p": 0.541256
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.032345,
+            "recall_dose": 0.02965,
+            "delta_pp": -0.27,
             "gained": 5,
-            "lost": 5,
+            "lost": 6,
             "mcnemar_p": 1.0
           },
-          "did_pp": 0.285,
+          "did_pp": 1.409,
           "did_ci95": [
-            -2.336,
-            2.733
+            -1.706,
+            4.604
+          ],
+          "excludes_zero": false
+        },
+        "64": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.048433,
+            "recall_dose": 0.071225,
+            "delta_pp": 2.279,
+            "gained": 17,
+            "lost": 9,
+            "mcnemar_p": 0.168638
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.032345,
+            "recall_dose": 0.032345,
+            "delta_pp": 0.0,
+            "gained": 7,
+            "lost": 7,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 2.279,
+          "did_ci95": [
+            -1.214,
+            5.77
           ],
           "excludes_zero": false
         }
@@ -292,6 +372,152 @@
           "did_ci95": [
             -2.461,
             2.519
+          ],
+          "excludes_zero": false
+        }
+      }
+    },
+    "olmo2-1b": {
+      "label": "OLMo-2-1B",
+      "doses": {
+        "0": {
+          "injected_share": 0.0,
+          "verbatim_post": 0.1261,
+          "injected_loss_post": 1.2412,
+          "heldout_loss_post": 1.2945,
+          "positive_controls_pass": false
+        },
+        "1": {
+          "injected_share": 0.00418,
+          "verbatim_post": 0.128,
+          "injected_loss_post": 1.0976,
+          "heldout_loss_post": 1.1827,
+          "positive_controls_pass": true
+        },
+        "4": {
+          "injected_share": 0.016719,
+          "verbatim_post": 0.1719,
+          "injected_loss_post": 1.0055,
+          "heldout_loss_post": 1.1562,
+          "positive_controls_pass": true
+        },
+        "16": {
+          "injected_share": 0.066875,
+          "verbatim_post": 0.2074,
+          "injected_loss_post": 0.7691,
+          "heldout_loss_post": 1.1518,
+          "positive_controls_pass": true
+        },
+        "64": {
+          "injected_share": 0.267502,
+          "verbatim_post": 0.7266,
+          "injected_loss_post": 0.3224,
+          "heldout_loss_post": 1.3732,
+          "positive_controls_pass": true
+        }
+      },
+      "contrasts": {
+        "1": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.019943,
+            "delta_pp": -0.855,
+            "gained": 3,
+            "lost": 6,
+            "mcnemar_p": 0.507812
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.010782,
+            "delta_pp": -0.539,
+            "gained": 1,
+            "lost": 3,
+            "mcnemar_p": 0.625
+          },
+          "did_pp": -0.316,
+          "did_ci95": [
+            -2.38,
+            1.669
+          ],
+          "excludes_zero": false
+        },
+        "4": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.02849,
+            "delta_pp": 0.0,
+            "gained": 4,
+            "lost": 4,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.016173,
+            "delta_pp": 0.0,
+            "gained": 1,
+            "lost": 1,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.0,
+          "did_ci95": [
+            -1.897,
+            1.766
+          ],
+          "excludes_zero": false
+        },
+        "16": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.042735,
+            "delta_pp": 1.425,
+            "gained": 7,
+            "lost": 2,
+            "mcnemar_p": 0.179688
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.024259,
+            "delta_pp": 0.809,
+            "gained": 5,
+            "lost": 2,
+            "mcnemar_p": 0.453125
+          },
+          "did_pp": 0.616,
+          "did_ci95": [
+            -1.564,
+            2.835
+          ],
+          "excludes_zero": false
+        },
+        "64": {
+          "injected": {
+            "n": 351,
+            "recall_dose0": 0.02849,
+            "recall_dose": 0.031339,
+            "delta_pp": 0.285,
+            "gained": 5,
+            "lost": 4,
+            "mcnemar_p": 1.0
+          },
+          "heldout": {
+            "n": 371,
+            "recall_dose0": 0.016173,
+            "recall_dose": 0.016173,
+            "delta_pp": 0.0,
+            "gained": 5,
+            "lost": 5,
+            "mcnemar_p": 1.0
+          },
+          "did_pp": 0.285,
+          "did_ci95": [
+            -2.336,
+            2.733
           ],
           "excludes_zero": false
         }

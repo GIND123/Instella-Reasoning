@@ -53,8 +53,19 @@ import random
 from math import comb
 from pathlib import Path
 
-MODELS = [("olmo2-1b", "OLMo-2-1B"), ("qwen2.5-1.5b", "Qwen2.5-1.5B")]
+#: Instella runs through the same scorer as the replication models so all four are treated
+#: identically. Its generations sit under a different run directory and filename pattern,
+#: which SOURCES absorbs.
+MODELS = [("instella-3b", "Instella-3B"), ("qwen2.5-3b", "Qwen2.5-3B"),
+          ("qwen2.5-1.5b", "Qwen2.5-1.5B"), ("olmo2-1b", "OLMo-2-1B")]
 DOSES = [0, 1, 4, 16, 64]
+SOURCES = {
+    "instella-3b": ("experiments/runs/ckpt-axis-v1/generations",
+                    "phase2__dose{d}__test__T0.0__k1__vllm.jsonl"),
+    "qwen2.5-3b": ("experiments/runs/replication-v1/qwen2.5-3b", "probe__dose{d}.jsonl"),
+    "qwen2.5-1.5b": ("experiments/runs/replication-v1/qwen2.5-1.5b", "probe__dose{d}.jsonl"),
+    "olmo2-1b": ("experiments/runs/replication-v1/olmo2-1b", "probe__dose{d}.jsonl"),
+}
 
 
 def _to_float(x):
@@ -141,13 +152,15 @@ def analyse(run: Path, mix: Path, items_path: Path,
     res = {"run": str(run), "n_injected": len(inj), "n_heldout": len(hel),
        "n_boot": n_boot, "seed": seed, "models": {}}
     for alias, label in MODELS:
-        base_dir = run / alias
-        gens = {d: _load_gens(base_dir / f"probe__dose{d}.jsonl") for d in DOSES}
+        d_, pat = SOURCES[alias]
+        base_dir = Path(d_)
+        gens = {d: _load_gens(base_dir / pat.format(d=d)) for d in DOSES}
         if not gens.get(0) or not any(gens[d] for d in DOSES if d):
             continue
         entry = {"label": label, "doses": {}}
         for d in DOSES:
-            rp = base_dir / f"dose{d}_report.json"
+            rp = (Path("experiments/runs/ckpt-axis-v1/phase2") if alias == "instella-3b"
+                  else base_dir) / f"dose{d}_report.json"
             if rp.exists():
                 rep = json.loads(rp.read_text())
                 entry["doses"][d] = {

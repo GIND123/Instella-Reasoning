@@ -60,7 +60,7 @@ checkpoint improves. Controlled injection at a fixed 8{,}388{,}608 token budget 
 what heavy exposure returns from what it does not: at sixty four repetitions, verbatim
 reproduction of injected documents reaches 0.946 and the memorised calculation chain returns
 at $+5.44$ points on $[+1.46, +9.38]$, while the final answer does not, at $+1.52$ on
-$[-2.12, +5.20]$. The answer result replicates on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B
+$[-2.12, +5.21]$. The answer result replicates on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B
 across fifteen dose points, including a model driven to verbatim 1.000. Competent procedure
 execution and verification of premise sufficiency are therefore separable capabilities, the
 second emerging later in training and decaying with the depth of the chain being tracked.
@@ -169,10 +169,11 @@ difference of slopes is $-5.11$ on $[-6.36, -3.82]$.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{mathai_fig_abstention.pdf}
-\caption{Left: discrimination between underdetermined and answerable problems across the
-training pipeline. Right: abstention against solution chain length at the instruct
-checkpoint, with the answerable control on the same axes. The control is flat, so the decay
-is specific to detecting that premises are missing.}
+\caption{(a) balanced accuracy of the decline decision across the training pipeline, on
+GSM8K and on an independently built MATH probe, where 0.500 is chance. (b) decline rate
+against solution chain length at the instruct checkpoint, with the answerable control on the
+same axes; the control is flat, so the decay is specific to detecting that premises are
+missing. (c) the same decision quality for instruct checkpoints of three further families.}
 \label{fig:abstain}
 \end{figure}
 
@@ -228,7 +229,7 @@ rather than the task.
 
 Against a never injected control at the same dose, reproduction of the memorised calculation
 chain reaches $+5.44$ points on $[+1.46, +9.38]$ at sixty four repetitions and rises with
-dose, while reproduction of the final answer reaches $+1.52$ on $[-2.12, +5.20]$, an interval
+dose, while reproduction of the final answer reaches $+1.52$ on $[-2.12, +5.21]$, an interval
 containing zero. The model reproduces the source text almost exactly and still does not
 recover the deleted quantity or the answer it determines. Repeating the identical mixture,
 budget, seed and probe on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B gives $+0.28$, $+0.00$ and
