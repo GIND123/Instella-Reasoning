@@ -124,6 +124,9 @@ image = (
     .add_local_file(
         str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/base/gsm8k_test_parents.jsonl"),
         "/items/gsm8k_test_parents.jsonl", copy=True)
+    .add_local_file(
+        str(REPO_ROOT / "experiments/runs/ckpt-axis-v1/base/gsm8k_train_parents.jsonl"),
+        "/items/gsm8k_train_parents.jsonl", copy=True)
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -1063,6 +1066,65 @@ def hf_pull(paths: str) -> dict:
     runs_vol.commit()
     print("HF_PULL:", json.dumps(got))
     return {"pulled": got}
+
+
+@app.function(gpu=GPU, timeout=5 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g3_control(alias: str) -> dict:
+    """The control the abstention result needs: the same licence, on answerable problems.
+
+    Every item in abstain-v1 has a premise removed, so a high abstention rate there is
+    consistent with two very different things. The model may be detecting that the problem no
+    longer determines an answer, which is a claim about reasoning. Or it may simply be taking
+    an escape hatch the prompt offered, which is a claim about instruction following and says
+    nothing about reasoning at all.
+
+    Running the identical prompt over the untouched parent problems separates them. These are
+    answerable, so declining is wrong. A model that abstains often on pruned items and rarely
+    here is discriminating; one that abstains at similar rates on both is just complying.
+    """
+    from transformers import AutoTokenizer
+    t0 = time.time()
+    out_path = (pathlib.Path(RUNS_REMOTE) / "abstain-v1/generations"
+                / f"abstain_control__{alias}.jsonl")
+    if out_path.exists() and out_path.stat().st_size > 0:
+        print(f"[g3c] {alias}: already present, skipping")
+        return {"alias": alias, "skipped": True}
+
+    items = []
+    for arm, path in (("train", "/items/gsm8k_train_parents.jsonl"),
+                      ("test", "/items/gsm8k_test_parents.jsonl")):
+        for line in open(path):
+            r = json.loads(line)
+            r["_arm"] = arm
+            items.append(r)
+    tok = None if IS_BASE[alias] else AutoTokenizer.from_pretrained(
+        MODELS[alias], trust_remote_code=True)
+    llm = _load(alias, MAX_TOKENS[alias])
+    print(f"[g3c] {alias}: {len(items)} answerable rows", flush=True)
+    gens = _generate(llm, _prompts(items, alias, ABSTAIN_SUFFIX, tok), MAX_TOKENS[alias])
+
+    rows = [{"benchmark_id": it["id"], "parent_id": it.get("parent_id") or it["id"],
+             "arm": it["_arm"], "parent_answer": it.get("answer"),
+             "model": MODELS[alias], "completion": g["completion"],
+             "metadata": {"finished": g["finished"], "n_tokens": g["n_tokens"],
+                          "prompt_condition": "abstain_licensed",
+                          "items": "answerable_parents",
+                          "engine": "vllm-0.8.5.post1"}}
+            for it, g in zip(items, gens)]
+    _write(out_path, rows)
+    runs_vol.commit()
+    res = {"alias": alias, "n": len(rows),
+           "truncation": round(1 - sum(r["metadata"]["finished"] for r in rows) / len(rows), 4),
+           "minutes": round((time.time() - t0) / 60, 1),
+           "push": _push("abstain-v1")}
+    print("G3C_RESULT:", json.dumps(res))
+    return res
+
+
+@app.local_entrypoint()
+def g3_control_all():
+    for alias in ("stage1", "stage2", "sft", "instruct"):
+        print(g3_control.remote(alias))
 
 @app.local_entrypoint()
 def g4_all():
