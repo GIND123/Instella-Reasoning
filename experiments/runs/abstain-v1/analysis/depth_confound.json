@@ -1,0 +1,25 @@
+{
+  "checkpoint": "instruct",
+  "n_parents": 1666,
+  "solvable_rate": 0.764,
+  "n_boot": 4000,
+  "seed": 6198,
+  "strata": {
+    "solvable": {
+      "slope_pp_per_step": -4.934,
+      "ci95": [
+        -6.514,
+        -3.363
+      ],
+      "excludes_zero": true
+    },
+    "unsolvable": {
+      "slope_pp_per_step": -4.358,
+      "ci95": [
+        -6.542,
+        -2.191
+      ],
+      "excludes_zero": true
+    }
+  }
+}

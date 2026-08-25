@@ -73,23 +73,15 @@ Instella~\citep{instella2025} removes the obstacle. Its complete pretraining mix
 released, and the stage two synthetic component is generated from the GSM8K training
 split~\citep{cobbe2021gsm8k} rather than the test split, so exposure is measurable per item.
 
-That measurement comes first because everything after it depends on the answer. Against the
-full released pool of 1{,}367{,}882 rows, no GSM8K test item reaches thirteen gram
-containment 0.50, and the highest value observed anywhere is 0.487. Performance on the test
-split is therefore not recovered text, and the split can be used as an exposure contrast
-rather than merely a difficulty contrast.
-
-With that established, the question becomes what the reasoning consists of. A premise
-deletion probe removes exactly one premise that the reference solution consumes, leaving a
-problem whose stated answer is no longer derivable. Two things can then be measured on the
-same items: whether the model notices, and whether exposure to the original changes what it
-produces.
-
-Both answers are informative and they point in different directions. The model does detect
-insufficiency, the ability strengthens through every stage of training, and it decays
-predictably as the reasoning chain lengthens. Heavy exposure returns the memorised
-calculation chain but not the final answer, a dissociation that holds under a controlled
-intervention and replicates across three further model families.
+That measurement comes first because everything after depends on it. Against the full
+released pool of 1{,}367{,}882 rows, no GSM8K test item reaches thirteen gram containment
+0.50 and the highest value observed is 0.487, so performance on that split is not recovered
+text. A premise deletion probe then removes exactly one premise the reference solution
+consumes, leaving a problem whose stated answer is no longer derivable, and asks two things
+of the same items: whether the model notices, and whether exposure to the original changes
+what it produces. The model does detect insufficiency, increasingly well across training, and
+loses that detection as the reasoning chain lengthens. Heavy exposure returns the memorised
+calculation chain without returning the answer.
 
 \section{Setup}
 
@@ -188,6 +180,14 @@ overall and lose that detection faster as the chain they must track grows longer
 Truncation does not explain it: truncation never exceeds 0.7 percent at any chain length and
 restricting to terminated generations reproduces the rates exactly.
 
+Difficulty does not explain it either. Longer chains belong to harder problems, so the decay
+could reflect general weakness on hard items rather than anything about premise tracking.
+Splitting parents by whether the model answers the intact problem correctly, which it does
+for 76.4 percent of them, and estimating the slope inside each stratum gives $-4.93$ points
+per step on $[-6.51, -3.36]$ where the model can solve the problem and $-4.36$ on
+$[-6.54, -2.19]$ where it cannot. Both exclude zero, so chain depth carries information that
+difficulty does not account for.
+
 \section{What exposure returns}
 
 \subsection{Continued pretraining at controlled doses}
@@ -230,21 +230,15 @@ capacity that a one billion parameter model lacks is open.
 Two capabilities that a single accuracy number conflates come apart here. Executing a
 solution procedure is present early and improves smoothly. Verifying that the premises
 support a solution at all appears later, improves sharply through instruction tuning, and
-degrades with the depth of the chain being tracked. A model can be competent at the first
-while failing the second, and standard benchmark scoring cannot see the difference because
-every item it scores is answerable.
-
-The practical consequence is narrow. Benchmarks built entirely from well posed problems
-measure procedure execution and are silent about premise verification, yet deployment
-routinely presents underspecified problems. Reporting abstention under a prompt that permits
-it, against an answerable control, costs one extra evaluation pass and makes the second
-capability visible.
+degrades with the depth of the chain being tracked. Standard benchmark scoring cannot see the
+difference, because every item it scores is answerable. Reporting abstention under a prompt
+that permits it, against an answerable control, costs one extra evaluation pass and makes the
+second capability visible.
 
 \paragraph{Limitations.} One benchmark domain and one problem generator. Detection is
 measured through an explicit abstention option, so a model that recognises insufficiency but
-lacks the vocabulary to say so is scored as failing. Chain length correlates with problem
-difficulty, and the answerable control rules out a general length effect but not every
-difficulty confound. Chain reproduction under injection is established on one model, and the
+lacks the vocabulary to say so is scored as failing. Difficulty is stratified by the model's own
+accuracy on intact problems rather than by an independent measure. Chain reproduction under injection is established on one model, and the
 replication is underpowered for it. Attribution to specific training documents is not
 established anywhere.
 
