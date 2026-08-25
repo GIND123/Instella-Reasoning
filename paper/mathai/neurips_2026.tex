@@ -155,6 +155,14 @@ precedes the synthetic corpus entirely, discriminates by less than two points. E
 subsequent stage improves it, and wrong refusals on answerable problems never exceed 3.5
 percent, so the gain does not come from a growing willingness to decline.
 
+A second control rules out the remaining reading, that a pruned problem simply reads oddly
+and the model is responding to perturbed text. Inserting an irrelevant twenty word sentence
+carrying an unused number into an otherwise intact problem leaves it fully answerable while
+perturbing its surface and adding a spare quantity. Abstention moves from 0.0113 on the clean
+version to 0.0170 with an off topic insertion and 0.0125 with an in domain one, against 0.538
+when a premise is actually removed. Roughly half a point for perturbed text against forty
+three points for genuine insufficiency.
+
 \subsection{Discrimination decays with reasoning depth}
 
 The capability is not uniform over problems. Figure~\ref{fig:abstain} plots abstention

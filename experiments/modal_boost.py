@@ -1126,6 +1126,53 @@ def g3_control_all():
     for alias in ("stage1", "stage2", "sft", "instruct"):
         print(g3_control.remote(alias))
 
+
+@app.function(gpu=GPU, timeout=3 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g3_perturb(alias: str = "instruct") -> dict:
+    """Second control: is abstention triggered by odd text rather than by missing premises?
+
+    Deleting a premise leaves a problem that reads slightly wrong, so a model might decline
+    because the text is perturbed rather than because the remaining premises fail to
+    determine an answer. The answerable control cannot separate those, since its problems are
+    both answerable and untouched.
+
+    The quantity ablation items separate them. An irrelevant twenty word sentence carrying an
+    unused number is inserted into an otherwise intact problem: the text is perturbed, an
+    unused quantity is present, and the problem remains fully answerable. Abstention here
+    should stay at the answerable floor. If it rises toward the pruned rate, the abstention
+    result is about surface perturbation and not about premise sufficiency.
+    """
+    from transformers import AutoTokenizer
+    t0 = time.time()
+    out_path = (pathlib.Path(RUNS_REMOTE) / "abstain-v1/generations"
+                / f"abstain_perturb__{alias}.jsonl")
+    if out_path.exists() and out_path.stat().st_size > 0:
+        return {"alias": alias, "skipped": True}
+
+    keep = {"orig", "offtopic_qty", "domain_qty"}
+    items = [r for r in (json.loads(x) for x in open("/items/qty_ablation.jsonl"))
+             if (r.get("metadata") or {}).get("condition") in keep]
+    tok = None if IS_BASE[alias] else AutoTokenizer.from_pretrained(
+        MODELS[alias], trust_remote_code=True)
+    llm = _load(alias, MAX_TOKENS[alias])
+    print(f"[g3p] {alias}: {len(items)} answerable rows, perturbed and clean", flush=True)
+    gens = _generate(llm, _prompts(items, alias, ABSTAIN_SUFFIX, tok), MAX_TOKENS[alias])
+
+    rows = [{"benchmark_id": it["id"], "parent_id": it["parent_id"],
+             "condition": (it.get("metadata") or {}).get("condition"),
+             "parent_answer": it.get("answer"), "model": MODELS[alias],
+             "completion": g["completion"],
+             "metadata": {"finished": g["finished"], "n_tokens": g["n_tokens"],
+                          "prompt_condition": "abstain_licensed",
+                          "items": "answerable_perturbed", "engine": "vllm-0.8.5.post1"}}
+            for it, g in zip(items, gens)]
+    _write(out_path, rows)
+    runs_vol.commit()
+    res = {"alias": alias, "n": len(rows),
+           "minutes": round((time.time() - t0) / 60, 1), "push": _push("abstain-v1")}
+    print("G3P_RESULT:", json.dumps(res))
+    return res
+
 @app.local_entrypoint()
 def g4_all():
     for alias in ("moe-midtrain", "moe-base"):

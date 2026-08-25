@@ -245,6 +245,38 @@ verdicts where balanced accuracy gives **+0.054**, purely from a base-rate diffe
 
 ---
 
+## 3.7 Premise verification, with three controls (new, 2026-08-25)
+
+Under a prompt naming `#### unanswerable`, abstention on provably underdetermined items
+against the **answerable control** (untouched parents, where declining is an error):
+
+| checkpoint | underdetermined | answerable | discrimination | 95% CI |
+|---|--:|--:|--:|---|
+| Stage 1 | 0.043 | 0.025 | +1.84 | [+0.97, +2.70] |
+| Instella 3B | 0.110 | 0.008 | +10.10 | [+8.94, +11.30] |
+| SFT | 0.416 | 0.035 | +38.08 | [+36.06, +40.02] |
+| Instruct | 0.538 | 0.011 | **+52.63** | [+50.77, +54.57] |
+
+**Graded by chain length.** Slope per extra calculator step, pruned vs answerable control:
+
+| checkpoint | pruned | control | difference |
+|---|--:|--:|---|
+| Instella 3B | −2.55 | −0.21 (spans 0) | −2.34 [−3.12, −1.57] |
+| SFT | −4.06 | −0.42 (spans 0) | −3.64 [−5.08, −2.15] |
+| Instruct | −5.22 | −0.11 (spans 0) | −5.11 [−6.36, −3.82] |
+
+**Perturbation control** (all answerable, instruct): clean 0.0113, off-topic distractor with
+unused number 0.0170, in-domain distractor 0.0125, against 0.538 for genuine deletion. Rules
+out "the text reads oddly" as the trigger.
+
+**Truncation** never exceeds 0.7% at any chain length; restricting to finished generations
+reproduces every rate exactly.
+
+`depth_delta` is constant at −1 across all probe items, so gradation by amount removed is not
+available. Chain length is the usable axis.
+
+---
+
 ## 4. Jiang Liu's four comments — status
 
 | | comment | status |
