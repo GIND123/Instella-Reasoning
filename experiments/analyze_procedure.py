@@ -152,10 +152,30 @@ def analyse(model: str, items: dict, inj: set, hel: set, n_boot: int, seed: int)
         if k == 0 or (k, "injected") not in per:
             continue
         cur = cluster_did(per[(k, "injected")], per[(k, "heldout")], n_boot, seed)
-        b0 = cluster_did(per[(0, "injected")], per[(0, "heldout")], n_boot, seed)
-        res["doses"][k]["did_vs_dose0_pp"] = round(cur[0] - b0[0], 3)
         res["doses"][k]["raw_gap_pp"] = cur[0]
         res["doses"][k]["raw_gap_ci95"] = [cur[1], cur[2]]
+        # The quantity the manuscript reports is the dose contrast against the 0x arm, so it
+        # needs its own interval rather than the raw gap's. Resampling parents once per draw
+        # and differencing inside the draw keeps the two arms paired.
+        parents = sorted(set(per[(k, "injected")]) | set(per[(k, "heldout")])
+                         | set(per[(0, "injected")]) | set(per[(0, "heldout")]))
+
+        def gap(inj, hel, sample):
+            a = [v for q in sample for v in inj.get(q, ())]
+            b = [v for q in sample for v in hel.get(q, ())]
+            return 100 * (sum(a) / len(a) - sum(b) / len(b)) if a and b else 0.0
+
+        def did(sample, kk=k):
+            return (gap(per[(kk, "injected")], per[(kk, "heldout")], sample)
+                    - gap(per[(0, "injected")], per[(0, "heldout")], sample))
+
+        obs = did(parents)
+        rng2 = random.Random(seed)
+        draws = sorted(did([rng2.choice(parents) for _ in parents]) for _ in range(n_boot))
+        lo, hi = draws[int(0.025 * n_boot)], draws[int(0.975 * n_boot)]
+        res["doses"][k]["did_vs_dose0_pp"] = round(obs, 3)
+        res["doses"][k]["did_vs_dose0_ci95"] = [round(lo, 3), round(hi, 3)]
+        res["doses"][k]["did_excludes_zero"] = bool(lo > 0 or hi < 0)
     return res
 
 
@@ -186,19 +206,20 @@ def main() -> int:
              "generation, excluding the final answer. Difference in differences against the "
              "never injected control, each dose measured against the 0x arm. Cluster "
              f"bootstrap over parent problems, {args.n_boot} draws, seed {args.seed}.", "",
-             "| model | dose | injected | held out | gap | 95% CI | vs 0x |",
-             "|---|--:|--:|--:|--:|---|--:|"]
+             "| model | dose | injected | held out | vs 0x | 95% CI | excludes 0 |",
+             "|---|--:|--:|--:|--:|---|---|"]
     for m, r in out["models"].items():
         for k in DOSES:
             c = r["doses"].get(k)
             if not c or c["injected"]["score"] is None:
                 continue
-            ci = c.get("raw_gap_ci95")
+            ci = c.get("did_vs_dose0_ci95")
             lines.append(
                 f"| {r['label']} | {k}x | {c['injected']['score']:.4f} | "
-                f"{c['heldout']['score']:.4f} | {c.get('raw_gap_pp', 0):+.2f} pp | "
+                f"{c['heldout']['score']:.4f} | "
+                f"{('%+.2f pp' % c['did_vs_dose0_pp']) if 'did_vs_dose0_pp' in c else '-'} | "
                 f"{'[%+.2f, %+.2f]' % (ci[0], ci[1]) if ci else 'reference'} | "
-                f"{('%+.2f pp' % c['did_vs_dose0_pp']) if 'did_vs_dose0_pp' in c else '-'} |")
+                f"{'**yes**' if c.get('did_excludes_zero') else 'no'} |")
     md = "\n".join(lines) + "\n"
 
     dest = Path("experiments/runs/replication-v1/analysis")

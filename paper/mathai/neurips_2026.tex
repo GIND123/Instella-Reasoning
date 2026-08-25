@@ -44,12 +44,15 @@ one. Against the full released pool of 1{,}367{,}882 rows no GSM8K test item rea
 containment 0.50 and the maximum observed is 0.487, establishing that benchmark performance
 on that split is not recovered text. A premise deletion probe over 3179 variants across 1779
 parent problems then asks what the model does when a problem no longer determines an answer.
-Under the standard answer forcing prompt it emits a confident number on 92.5 percent of
-provably underdetermined items. Under a prompt differing only in naming abstention as an
+Under the answer forcing prompt used for benchmark scoring it emits a number on 97.6 percent
+of provably underdetermined items. Under a prompt differing only in naming abstention as an
 option it declines on 53.8 percent of them while declining on 1.1 percent of the untouched
 answerable parents, a discrimination of $+52.63$ points on $[+50.77, +54.57]$ that grows
 monotonically across the training pipeline from $+1.84$ at stage one through $+10.10$ and
-$+38.08$ to instruct, with wrong refusals never exceeding 3.5 percent at any stage.
+$+38.08$ to instruct, with wrong refusals never exceeding 3.5 percent at any stage. An
+independently built probe on MATH reproduces the ladder, decision quality running 0.516,
+0.557, 0.611 and 0.675 against 0.509, 0.550, 0.690 and 0.763 on GSM8K, and three further
+instruct checkpoints spanning Qwen2.5 and OLMo-2 all discriminate.
 Discrimination is graded by reasoning depth: abstention on underdetermined problems falls
 $5.22$ points per additional calculator step while the answerable control stays flat at
 $-0.11$, a difference of $-5.11$ on $[-6.36, -3.82]$, and the decay steepens as the
@@ -111,8 +114,9 @@ would understate the interval.
 
 \subsection{The capability exists and is not prompt compliance}
 
-Under the answer forcing prompt used for benchmark scoring, the model emits a number on 92.5
-percent of items that provably do not determine one. Naming \texttt{\#\#\#\# unanswerable} as
+Under the answer forcing prompt used for benchmark scoring, the instruct checkpoint emits a
+number on 97.6 percent of items that provably do not determine one, and the three earlier
+checkpoints on 99.5 percent or more. Naming \texttt{\#\#\#\# unanswerable} as
 an available response, and changing nothing else, raises declining to 53.8 percent at the
 instruct checkpoint. That rate alone is ambiguous, since every probe item is underdetermined
 and a model offered an escape hatch may simply take it. Running the identical prompt over the
@@ -243,12 +247,11 @@ sets out.
 \section{Discussion}
 
 Two capabilities that a single accuracy number conflates come apart here. Executing a
-solution procedure is present early and improves smoothly. Verifying that the premises
-support a solution at all appears later, improves sharply through instruction tuning, and
-degrades with the depth of the chain being tracked. Standard benchmark scoring cannot see the
-difference, because every item it scores is answerable. Reporting abstention under a prompt
-that permits it, against an answerable control, costs one extra evaluation pass and makes the
-second capability visible.
+solution procedure is present early and improves smoothly; verifying that the premises
+support a solution at all appears later and degrades with the depth of the chain being
+tracked. Benchmark scoring cannot see the difference, because every item it scores is
+answerable. Reporting declining under a prompt that permits it, against an answerable
+control, costs one evaluation pass and makes the second capability visible.
 
 \paragraph{Limitations.} One problem generator for the injection arm. Detection is
 measured through an explicit abstention option, so a model that recognises insufficiency but
