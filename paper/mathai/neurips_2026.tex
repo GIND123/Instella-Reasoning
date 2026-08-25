@@ -89,11 +89,10 @@ calculation chain without returning the answer.
 \section{Setup}
 
 \paragraph{Exposure.} Containment is the fraction of an item's thirteen grams appearing in a
-single corpus document, taking the maximum over documents. The subset consumed during stage
-two, \texttt{train\_119K}, holds 119{,}014 rows; the full released pool holds 1{,}367{,}882.
-Measured on identical items through one extraction path, 9.65 percent of GSM8K train parents
-reach containment 0.999 or above against the consumed subset and 18.52 percent against the
-pool, so the pool overstates exposure and the consumed subset is the correct reference.
+single corpus document, taking the maximum over documents. Measured on identical items
+through one extraction path, 9.65 percent of GSM8K train parents reach containment 0.999 or
+above against the 119{,}014 row subset consumed during stage two and 18.52 percent against
+the full pool, so the pool overstates exposure and the subset is the correct reference.
 
 \paragraph{The probe.} Each item removes one premise the reference solution consumes,
 verified by requiring the annotated calculator chain to depend on it. The result is 3179
@@ -178,18 +177,13 @@ is specific to detecting that premises are missing.}
 \end{figure}
 
 The decay steepens as the checkpoint improves, running $-2.34$, $-3.64$ and $-5.11$ for
-stage two, supervised fine tuning and instruct. Better models detect insufficiency more often
-overall and lose that detection faster as the chain they must track grows longer.
-Truncation does not explain it: truncation never exceeds 0.7 percent at any chain length and
-restricting to terminated generations reproduces the rates exactly.
-
-Difficulty does not explain it either. Longer chains belong to harder problems, so the decay
-could reflect general weakness on hard items rather than anything about premise tracking.
-Splitting parents by whether the model answers the intact problem correctly, which it does
-for 76.4 percent of them, and estimating the slope inside each stratum gives $-4.93$ points
-per step on $[-6.51, -3.36]$ where the model can solve the problem and $-4.36$ on
-$[-6.54, -2.19]$ where it cannot. Both exclude zero, so chain depth carries information that
-difficulty does not account for.
+stage two, supervised fine tuning and instruct. Two alternatives are ruled out. Truncation
+never exceeds 0.7 percent at any chain length and restricting to terminated generations
+reproduces the rates exactly. Difficulty is separated by splitting parents on whether the
+model answers the intact problem correctly, which it does for 76.4 percent: the slope is
+$-4.93$ points per step on $[-6.51, -3.36]$ where it can solve the problem and $-4.36$ on
+$[-6.54, -2.19]$ where it cannot, so chain depth carries information difficulty does not
+account for.
 
 \subsection{Both results hold on a second domain and in other families}
 
