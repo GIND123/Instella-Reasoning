@@ -277,6 +277,26 @@ available. Chain length is the usable axis.
 
 ---
 
+## 3.8 Sentence-splitting edge case, measured and immaterial (2026-08-25)
+
+The probe splits premises on `(?<=[.!?])\s+`, which also splits after an honorific. Where
+the fragment after the honorific is the one deleted, the stem is malformed
+(`Mr. After three years...`). Strictly affected: **22 of 3088** GSM8K deletion items (0.71%)
+and **5 of 1091** MATH items (0.46%).
+
+Excluding them shifts the discrimination headline by at most **0.05 pp**:
+
+| checkpoint | all items | mangled excluded | shift |
+|---|--:|--:|--:|
+| Instella 3B | +10.10 | +10.12 | +0.02 |
+| SFT | +38.08 | +38.03 | −0.05 |
+| Instruct | +52.63 | +52.61 | −0.02 |
+
+No rerun performed; the GPU cost is not justified by a 0.05 pp shift. The MATH builder is
+guarded going forward. Reportable as a robustness check rather than a defect.
+
+---
+
 ## 4. Jiang Liu's four comments — status
 
 | | comment | status |
