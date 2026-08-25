@@ -200,15 +200,18 @@ answerable rate and shrinks the measured gap. The depth decay reproduces there t
 $-7.11$ points per additional sentence on $[-9.87, -4.67]$ against a control slope containing
 zero.
 
-Across families, three further instruct checkpoints graded the same GSM8K items. Decision
-quality reaches 0.795 for Qwen2.5 3B Instruct, 0.763 for Instella 3B Instruct, 0.759 for
-Qwen2.5 1.5B Instruct and 0.573 for OLMo-2 1B Instruct. Premise verification is therefore a
-property of instruction tuned small language models rather than of one pipeline, and Instella
-is competitive rather than exceptional. OLMo-2 is the informative case: its discrimination of
-$+14.68$ points on $[+12.13, +17.23]$ clears zero comfortably, yet it declines 29.2 percent of
-answerable problems, so its decisions sit near chance. A difference of rates would call that a
-weaker version of the same capability; the decision metric identifies it as a different
-failure. Instella has the lowest wrong refusal rate of the four at 1.1 percent.
+Across families, three further instruct checkpoints graded the same GSM8K items under the
+same prompt. All four discriminate, with decision quality of 0.763 for Instella 3B Instruct,
+0.795 and 0.759 for Qwen2.5 at 3B and 1.5B, and 0.573 for OLMo-2 1B Instruct, so premise
+verification is a property of instruction tuned small language models rather than of one
+pipeline. The spread is not a ranking, since the models differ in pretraining corpus,
+instruction tuning recipe and training compute, and nothing in the design attributes a few
+points to any of those. OLMo-2 is the informative case: its discrimination of $+14.68$ points
+on $[+12.13, +17.23]$ clears zero, yet it declines 29.2 percent of answerable problems, so its
+decisions sit near chance. A difference of rates would call that a weaker version of the same
+capability; the decision metric identifies it as declining freely rather than selectively.
+Wrong refusal rates span 1.1 percent to 29.2 percent across models whose discrimination
+differs far less, so the two quantities are reported separately.
 
 \section{What exposure returns}
 
