@@ -297,6 +297,42 @@ guarded going forward. Reportable as a robustness check rather than a defect.
 
 ---
 
+## 3.9 Second domain and cross-family replication (2026-08-25)
+
+**Balanced accuracy of the decline decision** (0.500 = chance):
+
+| checkpoint | GSM8K | MATH |
+|---|--:|--:|
+| Stage 1 | 0.509 | 0.516 |
+| Instella 3B | 0.550 | 0.557 |
+| SFT | 0.690 | 0.611 |
+| Instruct | **0.763** | **0.675** |
+
+MATH probe built independently: 818 parents, 1091 variants, all 7 subjects, necessity check
+passes 1091/1091. Same shape, lower level — expected, since harder problems the model cannot
+solve inflate the answerable-decline rate and shrink the measured gap (conservative bias).
+
+**Depth decay replicates on MATH**: −7.11 pp per extra sentence [−9.87, −4.67], control slope
+spans zero. (GSM8K: −5.11 per calculator step [−6.36, −3.82].)
+
+**Across families**, same GSM8K items, instruct checkpoints:
+
+| model | declines pruned | declines answerable | discrimination | bal acc |
+|---|--:|--:|--:|--:|
+| Qwen2.5-3B Instruct | 0.632 | 0.043 | +58.92 | **0.795** |
+| Instella-3B Instruct | 0.538 | **0.011** | +52.63 | 0.763 |
+| Qwen2.5-1.5B Instruct | 0.609 | 0.090 | +51.88 | 0.759 |
+| OLMo-2-1B Instruct | 0.439 | 0.292 | +14.68 | 0.573 |
+
+**Instella is second, not first.** Qwen2.5-3B beats it 0.795 vs 0.763. Instella does have the
+lowest false-decline rate of the four (1.1%). Do not claim Instella is best — it is
+competitive, and far ahead of OLMo-2-1B.
+
+OLMo-2 shows why balanced accuracy is needed: discrimination +14.68 clears zero, but it
+declines 29.2% of answerable problems, so its decisions sit near chance.
+
+---
+
 ## 4. Jiang Liu's four comments — status
 
 | | comment | status |

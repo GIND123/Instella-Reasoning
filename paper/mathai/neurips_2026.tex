@@ -112,32 +112,33 @@ would understate the interval.
 \subsection{The capability exists and is not prompt compliance}
 
 Under the answer forcing prompt used for benchmark scoring, the model emits a number on 92.5
-percent of items that provably do not determine one. Changing only one thing, naming
-\texttt{\#\#\#\# unanswerable} as an available response, raises abstention on those items to
-53.8 percent at the instruct checkpoint.
-
-That rate alone is ambiguous, because every probe item is underdetermined and a model
-offered an escape hatch may simply take it. The control resolves it. Running the identical
-prompt and decoding over the untouched parent problems, which are answerable and where
-declining is an error, gives an abstention rate of 1.1 percent. The difference,
-$+52.63$ points on $[+50.77, +54.57]$, is the quantity of interest: abstention tracks whether
-the problem can actually be answered.
+percent of items that provably do not determine one. Naming \texttt{\#\#\#\# unanswerable} as
+an available response, and changing nothing else, raises declining to 53.8 percent at the
+instruct checkpoint. That rate alone is ambiguous, since every probe item is underdetermined
+and a model offered an escape hatch may simply take it. Running the identical prompt over the
+untouched parent problems, which are answerable and where declining is an error, gives 1.1
+percent. The difference of $+52.63$ points on $[+50.77, +54.57]$ is the quantity of interest:
+declining tracks whether the problem can actually be answered.
 
 \begin{table}[t]
 \centering
-\caption{Abstention with its control, under a prompt that names abstention as an option.
+\caption{Declining with its control, under a prompt that names abstention as an option.
 Pruned items are underdetermined so declining is correct; parent problems are answerable so
-declining is an error. Cluster bootstrap over parent problems, 4000 draws, seed 6198.}
+declining is an error. The last two columns give balanced accuracy of the decline decision,
+where 0.500 is chance, measured on the GSM8K probe and on an independently built MATH probe
+of 818 parents. Cluster bootstrap over parent problems, 4000 draws, seed 6198.}
 \label{tab:abstain}
 \small
-\begin{tabular}{lcccc}
+\begin{tabular}{lcccccc}
 \toprule
-Checkpoint & Declines, underdetermined & Declines, answerable & Discrimination & 95\% CI \\
+& \multicolumn{4}{c}{GSM8K probe} & \multicolumn{2}{c}{Decision quality} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-7}
+Checkpoint & Declines, und. & Declines, ans. & Discrimination & 95\% CI & GSM8K & MATH \\
 \midrule
-Stage 1     & 0.043 & 0.025 & $+1.84$  & $[+0.97, +2.70]$ \\
-Instella 3B & 0.110 & 0.008 & $+10.10$ & $[+8.94, +11.30]$ \\
-SFT         & 0.416 & 0.035 & $+38.08$ & $[+36.06, +40.02]$ \\
-Instruct    & 0.538 & 0.011 & $\mathbf{+52.63}$ & $[+50.77, +54.57]$ \\
+Stage 1     & 0.043 & 0.025 & $+1.84$  & $[+0.97, +2.70]$ & 0.509 & 0.516 \\
+Instella 3B & 0.110 & 0.008 & $+10.10$ & $[+8.94, +11.30]$ & 0.550 & 0.557 \\
+SFT         & 0.416 & 0.035 & $+38.08$ & $[+36.06, +40.02]$ & 0.690 & 0.611 \\
+Instruct    & 0.538 & 0.011 & $\mathbf{+52.63}$ & $[+50.77, +54.57]$ & \textbf{0.763} & \textbf{0.675} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -147,13 +148,11 @@ precedes the synthetic corpus entirely, discriminates by less than two points. E
 subsequent stage improves it, and wrong refusals on answerable problems never exceed 3.5
 percent, so the gain does not come from a growing willingness to decline.
 
-A second control rules out the remaining reading, that a pruned problem simply reads oddly
-and the model is responding to perturbed text. Inserting an irrelevant twenty word sentence
-carrying an unused number into an otherwise intact problem leaves it fully answerable while
-perturbing its surface and adding a spare quantity. Abstention moves from 0.0113 on the clean
-version to 0.0170 with an off topic insertion and 0.0125 with an in domain one, against 0.538
-when a premise is actually removed. Roughly half a point for perturbed text against forty
-three points for genuine insufficiency.
+A second control rules out the remaining reading, that a pruned problem reads oddly and the
+model responds to perturbed text. Inserting an irrelevant twenty word sentence carrying an
+unused number leaves a problem fully answerable while perturbing its surface. Declining moves
+from 0.0113 clean to 0.0170 with an off topic insertion and 0.0125 with an in domain one,
+against 0.538 when a premise is actually removed.
 
 \subsection{Discrimination decays with reasoning depth}
 
@@ -188,42 +187,55 @@ per step on $[-6.51, -3.36]$ where the model can solve the problem and $-4.36$ o
 $[-6.54, -2.19]$ where it cannot. Both exclude zero, so chain depth carries information that
 difficulty does not account for.
 
+\subsection{Both results hold on a second domain and in other families}
+
+The findings above are measured on one benchmark and one model family, which two further
+sweeps address. A premise deletion probe built independently on
+MATH~\citep{hendrycks2021math}, 818 parents and 1091 variants drawn from all seven subjects
+under the same two validity checks, reproduces the developmental ladder: decision quality
+runs 0.516, 0.557, 0.611 and 0.675 across the same checkpoints, against 0.509, 0.550, 0.690
+and 0.763 on GSM8K. The shape is the same and the level is lower, which is expected, since
+competition problems are harder and a model declining one it simply cannot solve inflates the
+answerable rate and shrinks the measured gap. The depth decay reproduces there too, at
+$-7.11$ points per additional sentence on $[-9.87, -4.67]$ against a control slope containing
+zero.
+
+Across families, three further instruct checkpoints graded the same GSM8K items. Decision
+quality reaches 0.795 for Qwen2.5 3B Instruct, 0.763 for Instella 3B Instruct, 0.759 for
+Qwen2.5 1.5B Instruct and 0.573 for OLMo-2 1B Instruct. Premise verification is therefore a
+property of instruction tuned small language models rather than of one pipeline, and Instella
+is competitive rather than exceptional. OLMo-2 is the informative case: its discrimination of
+$+14.68$ points on $[+12.13, +17.23]$ clears zero comfortably, yet it declines 29.2 percent of
+answerable problems, so its decisions sit near chance. A difference of rates would call that a
+weaker version of the same capability; the decision metric identifies it as a different
+failure. Instella has the lowest wrong refusal rate of the four at 1.1 percent.
+
 \section{What exposure returns}
 
 \subsection{Continued pretraining at controlled doses}
 
-Whether exposure supplies the answer is a causal question, and observation cannot settle it,
-so selected items were injected by continued pretraining at five doses under a fixed
-8{,}388{,}608 token budget, held constant so that a higher dose displaces filler rather than
-buying extra compute. Every arm carries positive controls evaluated before and after: loss on
-the injected documents must fall, and the model must continue an injected document verbatim.
-A flat dose response with failed controls would measure a broken training run rather than an
-absence of memorisation.
-
-Injection worked. Verbatim reproduction climbs from 0.133 with no injection to 0.946 at
-sixty four repetitions, while held out document loss rises, confirming the mixture taught
-those specific documents rather than the task in general.
+Whether exposure supplies the answer is causal, and observation cannot settle it, so selected
+items were injected by continued pretraining at five doses under a fixed 8{,}388{,}608 token
+budget, held constant so a higher dose displaces filler rather than buying compute. Every arm
+carries positive controls evaluated before and after: injected document loss must fall and
+the model must continue an injected document verbatim, since a flat dose response with failed
+controls would measure a broken training run. Injection worked, verbatim reproduction
+climbing from 0.133 to 0.946 while held out loss rises, so the mixture taught those documents
+rather than the task.
 
 \subsection{The chain returns, the answer does not}
 
 Against a never injected control at the same dose, reproduction of the memorised calculation
-chain reaches $+5.44$ points on $[+1.46, +9.38]$ at sixty four repetitions and rises
-monotonically with dose. Reproduction of the final answer reaches $+1.52$ on
-$[-2.12, +5.20]$, an interval containing zero. The model reproduces the source text almost
-exactly and still does not recover the deleted quantity or the answer it determines.
-
-The answer result is not specific to Instella. Repeating the identical mixture, budget, seed
-and probe on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B gives $+0.28$, $+0.00$ and $+2.28$
-points at the top dose, every interval containing zero, across fifteen dose points in total.
-Qwen2.5-3B is the sharpest case: driven to verbatim reproduction of 1.000, complete
-reproduction of the injected documents, it recovers the deleted answer no more often than a
-model that never saw them.
-
-Reproduction of the chain is established on Instella and not yet established elsewhere. The
-three replication models give $+2.42$, $+0.32$ and $-0.30$ points, and testing each against
-Instella on shared parent problems fails to separate them in two of three cases, so the
-comparison is underpowered rather than contradictory. Whether chain reproduction requires
-capacity that a one billion parameter model lacks is open.
+chain reaches $+5.44$ points on $[+1.46, +9.38]$ at sixty four repetitions and rises with
+dose, while reproduction of the final answer reaches $+1.52$ on $[-2.12, +5.20]$, an interval
+containing zero. The model reproduces the source text almost exactly and still does not
+recover the deleted quantity or the answer it determines. Repeating the identical mixture,
+budget, seed and probe on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B gives $+0.28$, $+0.00$ and
+$+2.28$ points at the top dose, every interval containing zero, across fifteen dose points.
+Qwen2.5-3B is the sharpest case, driven to verbatim reproduction of 1.000 and still
+recovering the deleted answer no more often than a model that never saw the documents. Chain
+reproduction is established on Instella and underpowered elsewhere, as Appendix~\ref{app:dose}
+sets out.
 
 \section{Discussion}
 
@@ -235,10 +247,12 @@ difference, because every item it scores is answerable. Reporting abstention und
 that permits it, against an answerable control, costs one extra evaluation pass and makes the
 second capability visible.
 
-\paragraph{Limitations.} One benchmark domain and one problem generator. Detection is
+\paragraph{Limitations.} One problem generator for the injection arm. Detection is
 measured through an explicit abstention option, so a model that recognises insufficiency but
 lacks the vocabulary to say so is scored as failing. Difficulty is stratified by the model's own
-accuracy on intact problems rather than by an independent measure. Chain reproduction under injection is established on one model, and the
+accuracy on intact problems rather than by an independent measure, and depth on MATH is
+sentence count rather than a verified calculation chain, which that benchmark does not
+annotate. Chain reproduction under injection is established on one model, and the
 replication is underpowered for it. Attribution to specific training documents is not
 established anywhere.
 
@@ -347,7 +361,8 @@ such: it accounts for the size of the stage two effect and does not account for 
 residual two points at Instruct, which neither the number, nor topicality, nor the marker
 explains.
 
-\section{The two withdrawn checks in full}
+\section{The two withdrawn checks, and the dose response in full}
+\label{app:dose}
 
 The clause ladder is an externally authored perturbation suite whose rungs share template
 identifiers, which invites pairing each perturbed item against its own template head. The
