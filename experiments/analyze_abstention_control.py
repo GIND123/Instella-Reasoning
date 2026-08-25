@@ -36,6 +36,15 @@ from pathlib import Path
 TAGS = [("stage1", "Stage 1"), ("stage2", "Instella 3B"),
         ("sft", "SFT"), ("instruct", "Instruct")]
 
+#: Instruct checkpoints from other families, used to ask whether premise verification is a
+#: property of small language models or of Instella specifically.
+FAMILY_TAGS = [("instruct", "Instella 3B Instruct"),
+               ("olmo2-1b-it", "OLMo-2-1B Instruct"),
+               ("qwen2.5-1.5b-it", "Qwen2.5-1.5B Instruct"),
+               ("qwen2.5-3b-it", "Qwen2.5-3B Instruct")]
+
+TAGSETS = {"ladder": TAGS, "families": FAMILY_TAGS}
+
 _ABSTAIN = re.compile(
     r"####\s*unanswerable"
     r"|\bunanswerable\b"
@@ -91,15 +100,21 @@ def rate(d: dict) -> float:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="experiments/runs/abstain-v1")
+    ap.add_argument("--tagset", default="ladder", choices=sorted(TAGSETS),
+                    help="ladder = the four Instella checkpoints; families = instruct "
+                         "checkpoints across model families")
+    ap.add_argument("--pruned-pat", default="abstain__{tag}.jsonl")
+    ap.add_argument("--control-pat", default="abstain_control__{tag}.jsonl")
+    ap.add_argument("--title", default="Abstention, with the answerable control")
     ap.add_argument("--n-boot", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=6198)
     args = ap.parse_args()
     gen = Path(args.run) / "generations"
 
     res = {"n_boot": args.n_boot, "seed": args.seed, "checkpoints": {}}
-    for tag, label in TAGS:
-        pruned = load(gen / f"abstain__{tag}.jsonl")
-        control = load(gen / f"abstain_control__{tag}.jsonl")
+    for tag, label in TAGSETS[args.tagset]:
+        pruned = load(gen / args.pruned_pat.format(tag=tag))
+        control = load(gen / args.control_pat.format(tag=tag))
         if not pruned or not control:
             continue
         p, c = by_parent(pruned), by_parent(control)
@@ -116,7 +131,7 @@ def main() -> int:
         print(f"[control] need both abstain__*.jsonl and abstain_control__*.jsonl under {gen}")
         return 1
 
-    lines = ["# Abstention, with the answerable control", "",
+    lines = [f"# {args.title}", "",
              "Identical prompt licensing `#### unanswerable`, identical decoding. Pruned "
              "items are underdetermined so declining is correct; parent problems are "
              "answerable so declining is an error. Cluster bootstrap over parent problems, "
@@ -137,8 +152,9 @@ def main() -> int:
 
     out = Path(args.run) / "analysis"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "abstain_control_results.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
-    (out / "CONTROL.md").write_text(md, encoding="utf-8")
+    stem = "abstain_control" if args.tagset == "ladder" else f"abstain_{args.tagset}"
+    (out / f"{stem}_results.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
+    (out / f"{stem.upper()}.md").write_text(md, encoding="utf-8")
     print(md)
     return 0
 
