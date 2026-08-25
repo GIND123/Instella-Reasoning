@@ -92,6 +92,25 @@ def boot_diff(a: dict, b: dict, n_boot: int, seed: int):
             round(draws[int(0.975 * n_boot)], 3))
 
 
+def boot_balacc(pruned: dict, control: dict, n_boot: int, seed: int):
+    """Balanced accuracy of the decline decision: declining correctly against declining wrongly."""
+    parents = sorted(set(pruned) | set(control))
+
+    def stat(sample):
+        x = [v for q in sample for v in pruned.get(q, ())]
+        y = [v for q in sample for v in control.get(q, ())]
+        if not x or not y:
+            return 0.0
+        sens = sum(x) / len(x)
+        spec = 1 - sum(y) / len(y)
+        return (sens + spec) / 2
+
+    obs = stat(parents)
+    rng = random.Random(seed)
+    d = sorted(stat([rng.choice(parents) for _ in parents]) for _ in range(n_boot))
+    return (round(obs, 4), round(d[int(0.025 * n_boot)], 4), round(d[int(0.975 * n_boot)], 4))
+
+
 def rate(d: dict) -> float:
     flat = [v for vs in d.values() for v in vs]
     return sum(flat) / len(flat) if flat else float("nan")
@@ -119,6 +138,11 @@ def main() -> int:
             continue
         p, c = by_parent(pruned), by_parent(control)
         obs, lo, hi = boot_diff(p, c, args.n_boot, args.seed)
+        # Balanced accuracy of the decision itself. A raw difference of rates hides how
+        # often a model wrongly refuses an answerable problem, and models differ sharply on
+        # that: treating "should decline" against "should answer" as a classification makes
+        # a trigger happy model and a discriminating one distinguishable.
+        bal, blo, bhi = boot_balacc(p, c, args.n_boot, args.seed)
         res["checkpoints"][tag] = {
             "label": label,
             "abstain_pruned": round(rate(p), 4), "n_pruned": len(pruned),
@@ -126,6 +150,8 @@ def main() -> int:
             "PRIMARY_discrimination_pp": obs,
             "PRIMARY_ci95": [lo, hi],
             "excludes_zero": bool(lo > 0 or hi < 0),
+            "balanced_accuracy": bal,
+            "balanced_accuracy_ci95": [blo, bhi],
         }
     if not res["checkpoints"]:
         print(f"[control] need both abstain__*.jsonl and abstain_control__*.jsonl under {gen}")
@@ -137,14 +163,14 @@ def main() -> int:
              "answerable so declining is an error. Cluster bootstrap over parent problems, "
              f"{args.n_boot} draws, seed {args.seed}.", "",
              "| checkpoint | abstains, pruned | abstains, answerable | discrimination | "
-             "95% CI | excludes 0 |", "|---|--:|--:|--:|---|---|"]
+             "95% CI | balanced accuracy |", "|---|--:|--:|--:|---|--:|"]
     for _, e in res["checkpoints"].items():
         ci = e["PRIMARY_ci95"]
         lines.append(
             f"| {e['label']} | {e['abstain_pruned']:.3f} | {e['abstain_answerable']:.3f} | "
             f"**{e['PRIMARY_discrimination_pp']:+.2f} pp** | "
             f"[{ci[0]:+.2f}, {ci[1]:+.2f}] | "
-            f"{'**yes**' if e['excludes_zero'] else 'no'} |")
+            f"{e['balanced_accuracy']:.3f} |")
     lines += ["", "A large positive discrimination means abstention tracks whether the "
                   "problem is actually answerable. A value near zero would mean the rate "
                   "measures willingness to use the offered option and nothing more."]
