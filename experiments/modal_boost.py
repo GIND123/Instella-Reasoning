@@ -1261,6 +1261,200 @@ def g3_family_all():
     for alias in ABSTAIN_FAMILIES:
         print(g3_family.remote(alias))
 
+
+@app.function(cpu=4.0, memory=16384, timeout=40 * 60, secrets=SECRETS)
+def probe_feasibility(limit: int = 4000) -> dict:
+    """How many items in candidate second domains actually admit a verified premise removal?
+
+    The GSM8K probe works because each item ships a worked solution whose numbers identify
+    which premises the solution consumes, and because a removal only counts when the consumed
+    value disappears from the whole remaining prompt. A second domain is usable only if it
+    supports the same two checks. Reporting the yield before building anything avoids
+    shipping a probe whose validity cannot be established.
+    """
+    import re
+    from datasets import load_dataset
+
+    def yield_rate(rows, qkey, skey, name):
+        ok = short = no_nums = no_removable = 0
+        for row in rows:
+            q = str(row.get(qkey) or "").strip()
+            sol = str(row.get(skey) or "")
+            parts = re.split(r"(?<=[.!?])\s+", q)
+            if len(parts) < 3:
+                short += 1
+                continue
+            used = {int(t) for t in re.findall(r"\d+", sol)}
+            if not used:
+                no_nums += 1
+                continue
+            found = False
+            for i, sent in enumerate(parts[:-1]):
+                here = {int(t) for t in re.findall(r"\d+", sent)} & used
+                if not here:
+                    continue
+                rest = " ".join(p for j, p in enumerate(parts) if j != i)
+                if here - {int(t) for t in re.findall(r"\d+", rest)}:
+                    found = True
+                    break
+            ok += found
+            no_removable += (not found)
+        n = ok + short + no_nums + no_removable
+        return {"dataset": name, "scanned": n, "usable": ok,
+                "rate": round(ok / n, 4) if n else 0.0,
+                "rejected_too_short": short, "rejected_no_numbers": no_nums,
+                "rejected_no_removable": no_removable}
+
+    out = []
+    for name, path, cfg, split, qk, sk in (
+        ("MATH (algebra)", "EleutherAI/hendrycks_math", "algebra", "test", "problem", "solution"),
+        ("ASDiv", "MU-NLPC/Calc-asdiv_a", None, "train", "question", "chain"),
+        ("SVAMP", "ChilleD/SVAMP", None, "train", "Body", "Equation"),
+    ):
+        try:
+            ds = load_dataset(path, cfg, split=split) if cfg else load_dataset(path, split=split)
+            rows = list(ds.select(range(min(limit, len(ds)))))
+            out.append(yield_rate(rows, qk, sk, name))
+        except Exception as exc:  # noqa: BLE001 - a missing dataset must not kill the sweep
+            out.append({"dataset": name, "error": f"{type(exc).__name__}: {str(exc)[:160]}"})
+    print("FEASIBILITY:", json.dumps(out, indent=1))
+    return {"results": out}
+
+
+MATH_SUBJECTS = ("algebra", "counting_and_probability", "geometry", "intermediate_algebra",
+                 "number_theory", "prealgebra", "precalculus")
+
+
+@app.function(cpu=4.0, memory=16384, timeout=60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def build_math_probe(k: int = 2, seed: int = 6198) -> dict:
+    """A premise deletion probe on competition mathematics, built by the GSM8K rules.
+
+    The GSM8K probe is one domain, which is the study's sharpest scope limit. MATH is a
+    genuinely different distribution: competition problems rather than grade school word
+    problems, and harder. The two validity checks carry over unchanged. A premise counts as
+    consumed when the worked solution mentions a number the sentence introduces, and a
+    removal counts only when that value disappears from the entire remaining prompt, so a
+    model answering correctly afterwards would be reasoning rather than recalling.
+
+    Problems shorter than three sentences cannot lose a premise and still pose a question, so
+    they are dropped. That is most of MATH, which is why the yield is reported.
+    """
+    import random
+    import re
+    from datasets import load_dataset
+
+    rng = random.Random(seed)
+    parents, variants = [], []
+    stats = {"scanned": 0, "too_short": 0, "no_removable": 0, "kept": 0}
+
+    for subj in MATH_SUBJECTS:
+        try:
+            ds = load_dataset("EleutherAI/hendrycks_math", subj, split="test")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[math] {subj}: {type(exc).__name__}", flush=True)
+            continue
+        for row in ds:
+            stats["scanned"] += 1
+            q = str(row.get("problem") or "").strip()
+            sol = str(row.get("solution") or "")
+            parts = re.split(r"(?<=[.!?])\s+", q)
+            if len(parts) < 3:
+                stats["too_short"] += 1
+                continue
+            used = {int(t) for t in re.findall(r"\d+", sol)}
+            removable = []
+            for i, sent in enumerate(parts[:-1]):
+                here = {int(t) for t in re.findall(r"\d+", sent)} & used
+                if not here:
+                    continue
+                rest = " ".join(p for j, p in enumerate(parts) if j != i)
+                if here - {int(t) for t in re.findall(r"\d+", rest)}:
+                    removable.append(i)
+            if not removable:
+                stats["no_removable"] += 1
+                continue
+            pid = f"math_{subj[:4]}_{stats['kept']:05d}"
+            parents.append({"id": pid, "parent_id": pid, "prompt": q,
+                            "answer": None,
+                            "metadata": {"benchmark": "math", "subject": subj,
+                                         "level": row.get("level", ""), "rationale": sol}})
+            for j, drop in enumerate(removable[:k]):
+                pruned = " ".join(p for m, p in enumerate(parts) if m != drop)
+                variants.append({
+                    "id": f"{pid}__del{j}", "parent_id": pid, "prompt": pruned,
+                    "answer": None, "variant_type": "premise_deletion",
+                    "metadata": {"benchmark": "math", "subject": subj,
+                                 "level": row.get("level", ""),
+                                 "removed_premise": parts[drop], "rationale": sol,
+                                 "n_sentences": len(parts)}})
+            stats["kept"] += 1
+
+    rng.shuffle(parents)
+    out = pathlib.Path(RUNS_REMOTE) / "math-probe-v1/base"
+    out.mkdir(parents=True, exist_ok=True)
+    _write(out / "math_parents.jsonl", parents)
+    _write(out / "math_deletion.jsonl", variants)
+    runs_vol.commit()
+    res = {**stats, "n_parents": len(parents), "n_variants": len(variants),
+           "yield": round(stats["kept"] / stats["scanned"], 4) if stats["scanned"] else 0.0,
+           "push": _push("math-probe-v1")}
+    print("MATH_PROBE:", json.dumps(res, indent=1))
+    return res
+
+
+@app.function(gpu=GPU, timeout=4 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g3_math(alias: str) -> dict:
+    """The abstention contrast on the MATH probe, so the result is not one domain deep.
+
+    Same licensing prompt, same decoding, same pairing of pruned items against their intact
+    parents. Only the problem distribution changes, from grade school word problems to
+    competition mathematics.
+    """
+    from transformers import AutoTokenizer
+    t0 = time.time()
+    base = pathlib.Path(RUNS_REMOTE) / "math-probe-v1/base"
+    out_dir = pathlib.Path(RUNS_REMOTE) / "math-probe-v1/generations"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    sets = {"pruned": base / "math_deletion.jsonl", "control": base / "math_parents.jsonl"}
+    todo = {k: out_dir / f"abstain_{k}__{alias}.jsonl" for k in sets}
+    if all(v.exists() and v.stat().st_size > 0 for v in todo.values()):
+        return {"alias": alias, "skipped": True}
+
+    tok = None if IS_BASE[alias] else AutoTokenizer.from_pretrained(
+        MODELS[alias], trust_remote_code=True)
+    llm = _load(alias, MAX_TOKENS[alias])
+    res = {"alias": alias}
+    for kind, src in sets.items():
+        dest = todo[kind]
+        if dest.exists() and dest.stat().st_size > 0:
+            continue
+        items = [json.loads(x) for x in src.read_text(encoding="utf-8").splitlines() if x.strip()]
+        print(f"[g3m] {alias} {kind}: {len(items)} rows", flush=True)
+        gens = _generate(llm, _prompts(items, alias, ABSTAIN_SUFFIX, tok), MAX_TOKENS[alias])
+        rows = [{"benchmark_id": it["id"], "parent_id": it["parent_id"],
+                 "subject": (it.get("metadata") or {}).get("subject"),
+                 "level": (it.get("metadata") or {}).get("level"),
+                 "n_sentences": (it.get("metadata") or {}).get("n_sentences"),
+                 "model": MODELS[alias], "completion": g["completion"],
+                 "metadata": {"finished": g["finished"], "n_tokens": g["n_tokens"],
+                              "prompt_condition": "abstain_licensed", "items": kind,
+                              "benchmark": "math", "engine": "vllm-0.8.5.post1"}}
+                for it, g in zip(items, gens)]
+        _write(dest, rows)
+        runs_vol.commit()
+        res[f"n_{kind}"] = len(rows)
+        res[f"push_{kind}"] = _push("math-probe-v1")
+        print(f"[g3m] {alias} {kind}: written and pushed", flush=True)
+    res["minutes"] = round((time.time() - t0) / 60, 1)
+    print("G3M_RESULT:", json.dumps(res))
+    return res
+
+
+@app.local_entrypoint()
+def g3_math_all():
+    for alias in ("stage1", "stage2", "sft", "instruct"):
+        print(g3_math.remote(alias))
+
 @app.local_entrypoint()
 def g4_all():
     for alias in ("moe-midtrain", "moe-base"):
