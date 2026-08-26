@@ -1,0 +1,147 @@
+{
+  "seed": 6198,
+  "n_boot": 4000,
+  "n_placebo": 2000,
+  "interaction": {
+    "Llama 3.1 8B": {
+      "ba": {
+        "estimate": -0.1689,
+        "ci95": [
+          -0.2209,
+          -0.1169
+        ],
+        "excludes_zero": true
+      },
+      "spec": {
+        "estimate": -0.345,
+        "ci95": [
+          -0.4451,
+          -0.2427
+        ],
+        "excludes_zero": true
+      },
+      "sens": {
+        "estimate": 0.0072,
+        "ci95": [
+          -0.0074,
+          0.0298
+        ],
+        "excludes_zero": false
+      }
+    },
+    "Qwen2.5 32B": {
+      "ba": {
+        "estimate": -0.1292,
+        "ci95": [
+          -0.1777,
+          -0.0813
+        ],
+        "excludes_zero": true
+      },
+      "spec": {
+        "estimate": -0.2539,
+        "ci95": [
+          -0.3493,
+          -0.1598
+        ],
+        "excludes_zero": true
+      },
+      "sens": {
+        "estimate": -0.0044,
+        "ci95": [
+          -0.0225,
+          0.0127
+        ],
+        "excludes_zero": false
+      }
+    }
+  },
+  "placebo": {
+    "Llama 3.1 8B": {
+      "given": {
+        "mean_spec_gap": 0.0012,
+        "ci95": [
+          -0.0749,
+          0.0726
+        ]
+      },
+      "withheld": {
+        "mean_spec_gap": 0.0012,
+        "ci95": [
+          -0.149,
+          0.1542
+        ]
+      }
+    },
+    "Qwen2.5 32B": {
+      "given": {
+        "mean_spec_gap": -0.0004,
+        "ci95": [
+          -0.0743,
+          0.0749
+        ]
+      },
+      "withheld": {
+        "mean_spec_gap": -0.0008,
+        "ci95": [
+          -0.1227,
+          0.1197
+        ]
+      }
+    }
+  },
+  "counts": {
+    "Llama 3.1 8B": {
+      "given": {
+        "seen": {
+          "wrong": 225,
+          "rejected": 162,
+          "specificity": 0.72
+        },
+        "unseen": {
+          "wrong": 488,
+          "rejected": 425,
+          "specificity": 0.8709
+        }
+      },
+      "withheld": {
+        "seen": {
+          "wrong": 225,
+          "rejected": 6,
+          "specificity": 0.0267
+        },
+        "unseen": {
+          "wrong": 488,
+          "rejected": 255,
+          "specificity": 0.5225
+        }
+      }
+    },
+    "Qwen2.5 32B": {
+      "given": {
+        "seen": {
+          "wrong": 224,
+          "rejected": 175,
+          "specificity": 0.7812
+        },
+        "unseen": {
+          "wrong": 486,
+          "rejected": 440,
+          "specificity": 0.9053
+        }
+      },
+      "withheld": {
+        "seen": {
+          "wrong": 217,
+          "rejected": 70,
+          "specificity": 0.3226
+        },
+        "unseen": {
+          "wrong": 481,
+          "rejected": 337,
+          "specificity": 0.7006
+        }
+      }
+    }
+  }
+}

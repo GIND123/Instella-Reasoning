@@ -29,12 +29,12 @@
 \title{Reference Free Grading of Reasoning Degrades on Problems Inside the
        Instella Pretraining Corpus}
 
-\author{%
-  Anonymous Author(s) \\
-  Affiliation \\
-  Address \\
-  \texttt{email} \\
-}
+% \author{%
+%   Anonymous Author(s) \\
+%   Affiliation \\
+%   Address \\
+%   \texttt{email} \\
+% }
 
 \begin{document}
 
@@ -46,7 +46,7 @@ whether the evaluator encountered that item during training, yet the corpora of 
 deployed as judges are closed and the question is normally left open. Instella publishes its
 complete pretraining mixture and its stage two component derives from the GSM8K training
 split rather than the test split, so membership becomes a measured property fixed by exact
-thirteen gram containment instead of an estimated one. Grading 2017 candidate solutions
+thirteen gram containment instead of an estimated one for judges built on that corpus. Grading 2017 candidate solutions
 produced by Instella checkpoints, five judges spanning Instella 3B, Llama 3.1 8B and
 Qwen2.5 at 7, 14 and 32 billion parameters show a membership gap in balanced accuracy that
 depends almost entirely on whether the gold answer accompanies the prompt. Supplied with the
@@ -96,7 +96,7 @@ in which a judge compares a candidate against a remembered answer. Chance correc
 agreement inflates the effect substantially on identical verdicts, for reasons that follow
 from the marginals and not from the judging.
 
-\paragraph{Related work.} Judge reliability is normally studied through agreement with
+\paragraph{Related work:} Judge reliability is normally studied through agreement with
 human raters~\citep{zheng2023judging}. Contamination work runs in parallel and asks whether a
 benchmark score is inflated by training exposure, either by detecting membership from model
 behaviour~\citep{shi2024detecting}, by rephrasing items so that surface overlap
@@ -110,7 +110,7 @@ than the generator's score.
 
 \section{Design}
 
-\paragraph{Membership.} Containment is computed as the fraction of an item's thirteen grams
+\paragraph{Membership:} Containment is computed as the fraction of an item's thirteen grams
 appearing in a single corpus document, taking the maximum over documents. The stage two
 subset the model actually consumed, \texttt{train\_119K}, holds 119{,}014 rows. Calibration
 fixes the threshold: against the full released pool of 1{,}367{,}882 rows, no GSM8K test item
@@ -118,24 +118,24 @@ reaches containment 0.50 and the maximum observed is 0.487, confirming the corpu
 derived and that the train against test partition is a genuine exposure contrast rather than
 a difficulty contrast.
 
-\paragraph{Candidate solutions.} Instella checkpoints generate solutions to both arms under
+\paragraph{Candidate solutions:} Instella checkpoints generate solutions to both arms under
 identical decoding. Ground truth is exact match against the reference answer. Base rates
 differ between arms by construction, 0.772 correct on the seen arm against 0.526 on the
 unseen, which is why balanced accuracy rather than raw agreement is the primary statistic.
 
-\paragraph{Judging.} Each judge grades every solution twice. The reference given condition
+\paragraph{Judging:} Each judge grades every solution twice. The reference given condition
 places the gold answer in the prompt; the reference withheld condition is identical in every
 other respect. Verdicts that fail to parse are excluded throughout, 3 of 2017 and 17 of 2017
 for the largest judge.
 
-\paragraph{Inference.} Intervals are cluster bootstraps over parent problems with 4000 draws
+\paragraph{Inference:} Intervals are cluster bootstraps over parent problems with 4000 draws
 at seed 6198, because several graded variants can descend from one problem and resampling
 rows rather than problems would understate the interval.
 
 \begin{figure}[t]
 \centering
 \IfFileExists{pipeline.pdf}{\includegraphics[width=0.96\linewidth]{pipeline.pdf}}{%
-\fbox{\begin{minipage}{0.94\linewidth}\vspace{6pt}\centering
+\fbox{\begin{minipage}{2\linewidth}\vspace{6pt}\centering
 \small
 \textbf{Instella stage two corpus} $\rightarrow$ thirteen gram containment $\rightarrow$
 \textbf{seen} (988 rows) against \textbf{unseen} (1029 rows)\\[3pt]
@@ -148,9 +148,12 @@ $\downarrow$\\[3pt]
 five judges $\rightarrow$ balanced accuracy, sensitivity, specificity, seen minus unseen
 $\rightarrow$ cluster bootstrap over parent problems
 \vspace{6pt}\end{minipage}}}
-\caption{Membership is fixed by containment against a published corpus, candidate solutions
-are held identical across conditions, and the single manipulated variable is whether the
-gold answer accompanies the judging prompt.}
+\caption{Membership is fixed by exact thirteen gram containment against the released Instella
+stage two corpus, giving 988 seen and 1029 unseen items. Items and candidate solutions are
+then frozen, so the only manipulated variable is whether the gold answer accompanies the
+judging prompt and every property of an item cancels across conditions. Verified membership
+holds for the Instella judge alone; for the others the partition is GSM8K train against test.}
+\label{fig:pipeline}
 \label{fig:pipeline}
 \end{figure}
 
@@ -294,7 +297,7 @@ single agreement number, makes the failure visible at low cost.
 \label{sec:limits}
 
 \paragraph{Membership is verified for one judge, and it is not the judge carrying the
-result.} Containment is measured against the Instella corpus, so the Instella judge has
+result:} Containment is measured against the Instella corpus, so the Instella judge has
 verified membership but sits at chance. The Qwen and Llama judges show the effect and their
 corpora are unknown, so for them the partition is GSM8K train against test rather than
 verified seen against unseen. That asymmetry is why the primary claim is stated as a within
@@ -302,23 +305,23 @@ judge contrast between two conditions over identical items and identical candida
 solutions, which holds whatever the arm label means for a given judge. Closing the gap to a
 membership claim requires a second open corpus model of comparable capability.
 
-\paragraph{One family supplies the candidate solutions.} Every graded output comes from an
+\paragraph{One family supplies the candidate solutions:} Every graded output comes from an
 Instella checkpoint, and whether the dissociation reproduces on other generators is untested.
 The judges span three families.
 
-\paragraph{The effect has a ceiling in solution quality.} The stage two result above is
+\paragraph{The effect has a ceiling in solution quality:} The stage two result above is
 measured on one generator pair and should be treated as an observation rather than a law.
 
-\paragraph{One checkpoint is unexplained.} Stage one outputs are wrong nearly everywhere and
+\paragraph{One checkpoint is unexplained:} Stage one outputs are wrong nearly everywhere and
 trivially gradeable in either condition, which accounts for that null. The supervised fine
 tuned checkpoint shows no gap in either condition despite output quality comparable to
 instruct, and the present data do not explain why.
 
-\paragraph{Attribution is not established.} No evidence links a verdict to a specific
+\paragraph{Attribution is not established:} No evidence links a verdict to a specific
 training document. Section~\ref{sec:mech} narrows the effect to a specificity loss, which is
 not attribution.
 
-\paragraph{A second, heavier exposure boundary exists and is untested.} Instella-MoE-16B-A3B,
+\paragraph{A second, heavier exposure boundary exists and is untested:} Instella-MoE-16B-A3B,
 released after this study began, consumes the full released pool of 1{,}367{,}882 rows rather
 than the \texttt{train\_119K} subset used here. Measured on identical items through identical
 extraction, 18.52 percent of GSM8K train parents reach containment 0.999 or above against
