@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 """Two checks a reviewer asked for, both computed from the committed verdict files.
 
+DIFFICULTY STRATIFIED CONTRAST
+    The generator is more accurate on seen items, so its errors there may be subtler. The
+    interaction below removes main effects of solution properties but not an interaction
+    between them and the condition: if subtle errors are disproportionately harder to catch
+    without a reference, the interaction moves with no membership effect at all. Stratifying
+    on the parent problem's calculator chain length, a difficulty proxy available for every
+    item, tests that directly. A gap surviving inside every stratum is not difficulty.
+
 PLACEBO SPLIT
     The unseen arm is randomly halved and one half relabelled seen, then the contrast is
     recomputed. Nothing distinguishes the two halves, so an effect here would mean the
@@ -105,6 +113,51 @@ def placebo(judge: str, cond: str, stat: str):
     return mean, draws[int(0.025 * NPLACEBO)], draws[int(0.975 * NPLACEBO)]
 
 
+def chain_lengths() -> dict:
+    """Parent chain length as a difficulty proxy, available for every judged item.
+
+    A severity measure, how far a wrong answer lands from the gold one, is not recoverable:
+    most judged items are variants whose own gold answers are in no committed file.
+    """
+    import glob
+    import re
+    calc = re.compile(r"<<([^>]+)>>")
+    out = {}
+    roots = glob.glob(str(HERE.parent.parent / "experiments/runs/ckpt-axis-v1/base/gsm8k_*_parents.jsonl"))
+    for src in roots:
+        for line in open(src, encoding="utf-8"):
+            r = json.loads(line)
+            n = len(calc.findall((r.get("metadata") or {}).get("rationale") or ""))
+            if n:
+                out.setdefault(r["id"], n)
+    return out
+
+
+def stratified(judge: str, cond: str, steps: dict, min_n: int = 15):
+    """Specificity gap within each difficulty stratum, and the stratum weighted total."""
+    rows = [r for r in load(judge, cond) if r["parent_id"] in steps]
+    buckets: dict[int, dict[str, list]] = {}
+    for r in rows:
+        buckets.setdefault(steps[r["parent_id"]], {"seen": [], "unseen": []})[r["arm"]].append(r)
+
+    def spec(rs):
+        wrong = [r for r in rs if not r["ground_truth"]]
+        return (sum(1 for r in wrong if not r["judge_verdict"]) / len(wrong), len(wrong)) \
+            if wrong else (None, 0)
+
+    per, tot_w, tot_g = {}, 0, 0.0
+    for k in sorted(buckets):
+        s, ns = spec(buckets[k]["seen"])
+        u, nu = spec(buckets[k]["unseen"])
+        if s is None or u is None or ns < min_n or nu < min_n:
+            continue
+        per[k] = {"seen_spec": round(s, 4), "n_seen_wrong": ns,
+                  "unseen_spec": round(u, 4), "n_unseen_wrong": nu, "gap": round(s - u, 4)}
+        tot_w += ns + nu
+        tot_g += (ns + nu) * (s - u)
+    return per, (round(tot_g / tot_w, 4) if tot_w else None)
+
+
 def main():
     out = {"seed": SEED, "n_boot": NBOOT, "n_placebo": NPLACEBO,
            "interaction": {}, "placebo": {}, "counts": {}}
@@ -139,6 +192,20 @@ def main():
                 print(f"  {lab:14} {cl:9} {arm:6} rejected {r['n_rejected']:4d} "
                       f"of {r['n_wrong']:4d} wrong  ({r['spec']:.4f})")
             out["counts"].setdefault(lab, {})[cl] = e
+
+    print("\nDIFFICULTY STRATIFIED SPECIFICITY GAP, reference withheld\n")
+    steps = chain_lengths()
+    out["stratified"] = {}
+    for jid, lab in JUDGES:
+        per, tot = stratified(jid, "reference_free", steps)
+        unstrat = gap([r for r in load(jid, "reference_free") if r["parent_id"] in steps], "spec")
+        out["stratified"][lab] = {"per_stratum": per, "weighted_gap": tot,
+                                  "unstratified_gap": round(unstrat, 4)}
+        print(f"  {lab}")
+        for k, e in per.items():
+            print(f"    {k} steps  seen {e['seen_spec']:.3f} (n={e['n_seen_wrong']})  "
+                  f"unseen {e['unseen_spec']:.3f} (n={e['n_unseen_wrong']})  gap {e['gap']:+.3f}")
+        print(f"    weighted {tot:+.4f}   unstratified {unstrat:+.4f}")
 
     dest = HERE / "extra_controls.json"
     dest.write_text(json.dumps(out, indent=2), encoding="utf-8")

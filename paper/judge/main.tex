@@ -26,8 +26,8 @@
 % Set \cameraready to 1 only for the non anonymous camera ready version.
 \newcommand{\cameraready}{0}
 
-\title{Reference Free Grading of Reasoning Degrades on Problems Inside the
-       Instella Pretraining Corpus}
+\title{Withholding the Reference Answer Exposes a Reasoning Judgment Gap
+       on Training Corpus Problems}
 
 % \author{%
 %   Anonymous Author(s) \\
@@ -103,8 +103,10 @@ behaviour~\citep{shi2024detecting}, by rephrasing items so that surface overlap
 fails~\citep{yang2023rephrased}, or by rebuilding a benchmark from scratch to see how much of
 a reported score survives~\citep{zhang2024careful}. That literature almost always concerns
 the model under test rather than the model doing the grading, and memorisation is quantified
-for generation rather than for judgement~\citep{carlini2023quantifying}. The contribution
-here sits at the join of the two. Membership is fixed by a published corpus rather than
+for generation rather than for judgement~\citep{carlini2023quantifying}. Contamination
+inside the judge is studied by Li et al.~\citep{li2025preferenceleakage}, whose axis is model
+lineage between generator and evaluator rather than membership of the graded item. The
+contribution here sits at the join of these lines. Membership is fixed by a published corpus rather than
 estimated from behaviour, and the quantity measured is the evaluator's reliability rather
 than the generator's score.
 
@@ -215,8 +217,22 @@ rate of accepting correct solutions, carries no membership gap anywhere: $+0.011
 $[-0.005, +0.035]$ for Llama 3.1 8B and $-0.004$ $[-0.024, +0.016]$ for Qwen2.5 32B, both
 spanning zero. Specificity, the rate of rejecting wrong solutions, collapses: $-0.496$
 $[-0.572, -0.416]$ and $-0.378$ $[-0.471, -0.281]$ respectively. In absolute terms Llama 3.1
-8B rejects 52.2 percent of wrong solutions to unseen problems and 2.7 percent of wrong
-solutions to seen ones.
+8B rejects 255 of 488 wrong solutions to unseen problems and 6 of 225 to seen ones.
+
+Those same 225 solutions are the control for error subtlety. The generator is more accurate
+on seen items, so its errors there may be subtler and subtler errors are harder to catch
+without a reference. Both conditions grade identical solutions, and supplied with the
+reference the judge rejects 162 of the same 225, a specificity gap of $-0.151$
+$[-0.236, -0.068]$ against $-0.496$ when it is withheld. The interaction, withheld gap minus
+given gap, is $-0.345$ $[-0.445, -0.243]$ for Llama 3.1 8B and $-0.254$ $[-0.349, -0.160]$ for
+Qwen2.5 32B, both excluding zero, while the same interaction on sensitivity contains zero at
+both. An interaction between solution properties and condition would survive that, so the gap
+is also stratified on the parent problem's calculator chain length. It holds inside every
+stratum, from $-0.637$ at two steps to $-0.242$ at five for Llama 3.1 8B, and the stratum
+weighted total of $-0.488$ sits within 0.012 of the unstratified $-0.500$; Qwen2.5 32B gives
+$-0.381$ against $-0.416$. A placebo split closes the last route: halving the unseen arm at
+random and relabelling one half as seen gives a mean specificity gap of $+0.001$ over 2000
+draws.
 
 That asymmetry falsifies the account the design was originally built to test. A judge
 comparing a candidate against a remembered answer would mark correct solutions wrong
@@ -316,6 +332,10 @@ measured on one generator pair and should be treated as an observation rather th
 trivially gradeable in either condition, which accounts for that null. The supervised fine
 tuned checkpoint shows no gap in either condition despite output quality comparable to
 instruct, and the present data do not explain why.
+
+\paragraph{Difficulty is proxied, not measured:} Chain length stands in for difficulty
+because a severity measure, how far a wrong answer lands from the gold one, is not recoverable
+for variants whose gold answers were not retained.
 
 \paragraph{Attribution is not established:} No evidence links a verdict to a specific
 training document. Section~\ref{sec:mech} narrows the effect to a specificity loss, which is

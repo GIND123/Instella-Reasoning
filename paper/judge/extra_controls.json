@@ -143,5 +143,75 @@
         }
       }
     }
+  },
+  "stratified": {
+    "Llama 3.1 8B": {
+      "per_stratum": {
+        "2": {
+          "seen_spec": 0.0294,
+          "n_seen_wrong": 34,
+          "unseen_spec": 0.6667,
+          "n_unseen_wrong": 99,
+          "gap": -0.6373
+        },
+        "3": {
+          "seen_spec": 0.0,
+          "n_seen_wrong": 48,
+          "unseen_spec": 0.5243,
+          "n_unseen_wrong": 103,
+          "gap": -0.5243
+        },
+        "4": {
+          "seen_spec": 0.0333,
+          "n_seen_wrong": 30,
+          "unseen_spec": 0.4627,
+          "n_unseen_wrong": 67,
+          "gap": -0.4294
+        },
+        "5": {
+          "seen_spec": 0.0526,
+          "n_seen_wrong": 19,
+          "unseen_spec": 0.2951,
+          "n_unseen_wrong": 61,
+          "gap": -0.2425
+        }
+      },
+      "weighted_gap": -0.488,
+      "unstratified_gap": -0.5001
+    },
+    "Qwen2.5 32B": {
+      "per_stratum": {
+        "2": {
+          "seen_spec": 0.3235,
+          "n_seen_wrong": 34,
+          "unseen_spec": 0.8061,
+          "n_unseen_wrong": 98,
+          "gap": -0.4826
+        },
+        "3": {
+          "seen_spec": 0.1277,
+          "n_seen_wrong": 47,
+          "unseen_spec": 0.6961,
+          "n_unseen_wrong": 102,
+          "gap": -0.5684
+        },
+        "4": {
+          "seen_spec": 0.4483,
+          "n_seen_wrong": 29,
+          "unseen_spec": 0.6406,
+          "n_unseen_wrong": 64,
+          "gap": -0.1923
+        },
+        "5": {
+          "seen_spec": 0.4444,
+          "n_seen_wrong": 18,
+          "unseen_spec": 0.5246,
+          "n_unseen_wrong": 61,
+          "gap": -0.0801
+        }
+      },
+      "weighted_gap": -0.3811,
+      "unstratified_gap": -0.4158
+    }
   }
 }
