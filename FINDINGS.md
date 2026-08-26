@@ -333,6 +333,63 @@ declines 29.2% of answerable problems, so its decisions sit near chance.
 
 ---
 
+## 3.10 JUDGe: the error-subtlety objection, closed (2026-08-26)
+
+An external reviewer called this reject-level: the generator is more accurate on seen items
+(0.772 vs 0.526), so its errors there may be **subtler**, and subtle errors are harder to
+catch without a reference. That alone could produce the whole result with no membership role.
+
+**Four controls, all in `paper/judge/extra_controls.py` → `extra_controls.json`:**
+
+**1. Raw counts** (Llama 3.1 8B, seen arm, 225 wrong solutions):
+
+| condition | rejected | specificity |
+|---|--:|--:|
+| reference withheld | **6** / 225 | 0.027 |
+| reference given | **162** / 225 | 0.720 |
+
+Same 225 solutions. A judge catching 72% with a reference is not failing on subtlety.
+
+**2. Interaction** (withheld gap − given gap, identical solutions):
+
+| judge | specificity | sensitivity |
+|---|---|---|
+| Llama 3.1 8B | **−0.345 [−0.445, −0.243]*** | +0.007 (spans 0) |
+| Qwen2.5 32B | **−0.254 [−0.349, −0.160]*** | −0.004 (spans 0) |
+
+**NOT sufficient alone** — removes main effects of solution properties but *not* an
+interaction between them and condition. If subtle errors are disproportionately harder to
+catch without a reference, this still moves. Hence control 3.
+
+**3. Difficulty stratification** (parent calculator chain length), reference withheld:
+
+| judge | per stratum | weighted | unstratified |
+|---|---|--:|--:|
+| Llama 3.1 8B | 2st -0.637 · 3st -0.524 · 4st -0.429 · 5st -0.242 | **-0.4880** | -0.5001 |
+| Qwen2.5 32B | 2st -0.483 · 3st -0.568 · 4st -0.192 · 5st -0.080 | **-0.3811** | -0.4158 |
+
+Gap holds inside **every** stratum and moves <0.04 when strata are weighted equally.
+**Difficulty is not the explanation.** This is the control that actually closes the objection.
+
+**4. Placebo split**: halve the unseen arm at random, relabel one half "seen", 2000 draws →
+mean specificity gap **+0.001**, intervals centred on zero. The pipeline does not manufacture
+gaps from arm labels.
+
+**Limitation recorded:** chain length *proxies* difficulty. A severity measure (how far a
+wrong answer lands from gold) is **not recoverable** — most judged items are variants whose
+own gold answers were never retained. Only 500 of 2017 have gold in any committed file.
+
+**Also changed:** title dropped Instella (it carries the *smallest* gap in Table 1, so naming
+it as the site of degradation pointed at the one judge not showing the effect); cites
+Li et al. preference leakage (arXiv 2502.01534); abstract membership claim scoped to
+"judges built on that corpus".
+
+**Process note:** commit 82e13f0 claimed these edits landed. Only the abstract qualifier did —
+the others matched text since rewritten and were silently lost. Reapplied and verified by
+string check in 47933b8. **Verify edits landed, do not trust a script's success message.**
+
+---
+
 ## 4. Jiang Liu's four comments — status
 
 | | comment | status |
