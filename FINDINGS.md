@@ -8,8 +8,13 @@ Two manuscripts are live:
 
 | paper | venue | deadline | length | source |
 |---|---|---|---|---|
-| MATH-AI | 6th Workshop on Mathematical Reasoning and AI, NeurIPS 2026 | **25 Sep 2026** | 4 pages body | `paper/mathai/neurips_2026.tex` |
+| MATH-AI | 6th Workshop on Mathematical Reasoning and AI, NeurIPS 2026 | **6 Sep 2026 AoE** | 4 pages body | `paper/mathai/neurips_2026.tex` |
 | JUDGe | Can We Trust the Judge?, NeurIPS 2026 | **29 Aug 2026** | 6 pages body | `paper/judge/main.tex` |
+
+**The MATH-AI deadline is 6 September 2026 AoE**, verified 2026-08-31 against
+https://mathai-2026.github.io/. An earlier entry here read 25 September and was wrong; 25
+September is near neither the submission close nor the 29 September notification. Reviews are
+due 20 Sep, notification 29 Sep, camera-ready 3 Oct.
 
 Both are double-blind, non-archival, and have **no rebuttal phase**, so every objection has
 to be pre-empted in the text. JUDGe additionally uses reciprocal reviewing: one author must
@@ -54,13 +59,25 @@ Change relative to a never-injected control:
 
 | dose | verbatim | answer recall | procedure reproduction |
 |---|--:|---|---|
-| 1× | 15.3% | +0.06 [−3.06, +3.20] | +0.48 [−2.47, +3.29] |
-| 4× | 18.0% | +0.09 [−2.42, +2.70] | +0.32 [−2.33, +3.01] |
-| 16× | 49.1% | −0.22 [−3.66, +3.07] | +2.10 [−1.27, +5.33] |
-| 64× | 94.6% | +1.52 [−1.93, +5.08] | **+4.76 [+1.30, +8.23]*** |
+| 1× | 15.3% | +0.06 [−2.99, +3.17] | +0.34 [−2.86, +3.67] |
+| 4× | 18.0% | +0.09 [−2.48, +2.68] | +0.73 [−2.27, +3.90] |
+| 16× | 49.1% | −0.22 [−3.56, +3.10] | +2.78 [−0.79, +6.42] |
+| 64× | 94.6% | +1.52 [−2.12, +5.21] | **+5.44 [+1.46, +9.38]*** |
 
 Document repetition in the released corpus tops out at 4, well left of where the effect
 appears.
+
+**Superseded figures:** every row above was re-derived; the 64× row previously read
++1.52 [−1.93, +5.08] / +4.76 [+1.30, +8.23]. The old values came from the
+pre-`analyze_procedure.py` scorer; the values above are from the
+committed one at seed 6198 and are what the manuscript quotes. **Replicated 2026-08-25** on
+three further base models — the answer null holds everywhere (top dose +2.28 Qwen2.5-3B,
++0.00 Qwen2.5-1.5B, +0.28 OLMo-2-1B, all spanning zero, 10 dose points), but **procedure
+reproduction does not replicate**: −0.30 on OLMo-2-1B and +0.33 on Qwen2.5-1.5B at 64×, and
+Qwen2.5-3B was never scored for procedure at all. Those two models also memorise less at
+matched dose (verbatim 0.207 and 0.406 at 16× against Instella's 0.491), so a family
+difference and insufficient memorisation are not separated. Report the chain result as
+established on one model. Full table: `experiments/runs/replication-v1/analysis/`.
 
 ### 1.3 Models compose
 
@@ -82,6 +99,56 @@ Validated: all 1709 detected abstentions at Instruct are explicit refusals endin
 licensed token; **none** came from the "no extractable number" fallback; none truncated.
 Train vs test indistinguishable at every checkpoint (53.2 vs 54.3 at Instruct). The
 strongest checkpoint still answers **44%** of provably unanswerable problems.
+
+### 1.6 The licence wording moves the level, not the ladder (new, 2026-08-31)
+
+The §1.4/§3.7 result rests on one sentence, so it was rerun under a reworded licence carrying
+the same three instructions (work stepwise, mark the answer with `####`, decline with
+`#### unanswerable`) in different words. **The token is held fixed so the scorer is unchanged**
+and any movement is wording, not counting. All 3179 pruned items and 1779 answerable parents,
+all four checkpoints, `modal_boost.py::g3_reword`.
+
+| checkpoint | disc. original | disc. reworded | delta | bal acc orig | bal acc rw | false decline orig | rw |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| Stage 1 | +1.84 | +0.80 | −1.03 | 0.509 | 0.504 | 0.025 | 0.007 |
+| Instella 3B | +10.10 | +6.64 | −3.46 | 0.550 | 0.533 | 0.008 | 0.008 |
+| SFT | +38.08 | +33.41 | −4.66 | 0.690 | 0.667 | 0.035 | 0.008 |
+| Instruct | **+52.63** | **+43.77** | **−8.87** | 0.763 | 0.719 | 0.011 | 0.006 |
+
+**What survives:** the ladder is monotone under both licences, same order, every interval
+excludes zero, false declines under 1% throughout the reworded arm.
+
+**What does not:** the level. Declining on underdetermined items at Instruct falls 0.538 →
+0.444. **Quote 53.8% as specific to its prompt, never as a property of the checkpoint.** The
+gap widens with checkpoint quality (−1.03 → −8.87), so the checkpoints that verify best are
+the most sensitive to how they are asked — worth saying explicitly, since it cuts against
+reading the ladder as a bare capability measure.
+
+**Not truncation:** truncation is equal or *lower* under the reworded licence everywhere, and
+much lower at Stage 1 (0.133 vs 0.211 pruned). Data:
+`experiments/runs/abstain-v1/analysis/ABSTAIN_REWORD.md`.
+
+**Cross-family reworded, done 2026-08-31** (identical GSM8K items, same reworded licence):
+
+| instruct ckpt | disc. orig | disc. rw | bal acc orig | bal acc rw | false decl. orig | rw |
+|---|--:|--:|--:|--:|--:|--:|
+| Qwen2.5-3B | +58.92 | +45.33 | 0.795 | 0.727 | 0.043 | **0.188** |
+| Instella-3B | +52.63 | +43.77 | 0.763 | 0.719 | 0.011 | **0.006** |
+| Qwen2.5-1.5B | +51.88 | +39.83 | 0.759 | 0.699 | 0.090 | 0.061 |
+| OLMo-2-1B | +14.68 | +9.17 | 0.573 | 0.546 | 0.292 | 0.191 |
+
+All four still discriminate, every interval excludes zero, and **the rank order by decision
+quality is unchanged**, so the §3.9 comparison does not depend on the licence wording.
+
+**The false-decline cell is the one that moves, and not uniformly**: Qwen2.5-3B rises 0.043 →
+0.188 while OLMo-2 falls 0.292 → 0.191 and Instella stays near zero at 0.006. Models differ
+more in how they react to the wording of a licence than in how well they discriminate. Note
+this makes Instella's low false-decline rate look *stronger* under rewording, not weaker —
+0.006 against Qwen2.5-3B's 0.188 — which is an honest result and worth keeping visible.
+
+Both runs cost ~40 GPU-min total on A100-80GB. The first launch died after the four Instella
+checkpoints with `GRPCError FAILED_PRECONDITION: function is stopped`; `g3_reword` skips
+completed outputs, so the relaunch picked up only what was missing.
 
 ### 1.5 Post-training fixes surface robustness
 
@@ -312,8 +379,24 @@ MATH probe built independently: 818 parents, 1091 variants, all 7 subjects, nece
 passes 1091/1091. Same shape, lower level — expected, since harder problems the model cannot
 solve inflate the answerable-decline rate and shrink the measured gap (conservative bias).
 
-**Depth decay replicates on MATH**: −7.11 pp per extra sentence [−9.87, −4.67], control slope
-spans zero. (GSM8K: −5.11 per calculator step [−6.36, −3.82].)
+**Depth decay replicates on MATH** — **CORRECTED 2026-08-31.** The −7.11 [−9.87, −4.67]
+figure previously recorded here **does not reproduce and had no committed estimator**; no
+script in the repo computed it. A committed one now exists
+(`experiments/analyze_math_depth.py`, OLS slope of declining on `n_sentences`, cluster
+bootstrap over parents, seed 6198) and gives **−6.41 pp per sentence [−8.43, −4.49]** at
+Instruct. Five estimator variants (all rows, and caps at 9/8/7/6 sentences) all land between
+−6.1 and −6.9; none reach −7.11.
+
+The decay also **steepens across the pipeline on MATH**, which was not previously recorded:
+−0.20, −1.89, −5.56, −6.41 for Stage 1 / Instella 3B / SFT / Instruct, mirroring GSM8K's
+−2.34 / −3.64 / −5.11. That is a second-domain replication of the developmental gradient and
+is worth more than the single number it replaces.
+
+**The "control slope spans zero" claim on MATH is WITHDRAWN.** The answerable control arm
+carries `n_sentences` as **null on all 818 rows**, so no control slope is computable from the
+released generations. Rebuilding the MATH control with the field populated is the fix; until
+then the GSM8K control slope (−0.11, spanning zero) is the only control evidence for depth
+decay. (GSM8K pruned: −5.11 per calculator step [−6.36, −3.82].)
 
 **Across families**, same GSM8K items, instruct checkpoints:
 
@@ -430,7 +513,16 @@ than vLLM.
 
 ## 5. Infrastructure
 
-Modal workspace `dasashreeya`, secret `instella-hf` (HF token, write verified).
+Modal workspace `dasashreeya`, secret `instella-hf`.
+
+**BROKEN as of 2026-08-31: the HF mirror push fails with `401 RepositoryNotFoundError` on
+every write.** The token in the Modal secret is stale; the local `.env` token is fine
+(`whoami` returns GOVINDFROM, the dataset repo returns HTTP 200). Rotate the Modal secret
+before trusting any "mirrored to HF" claim made after that date. Generations are still safe
+on the `instella-boost-runs` volume and can be pulled with
+`modal volume get instella-boost-runs <path> <local>`. **`_push` failures are silent in the
+logs** — the line still prints "written and pushed" while the returned dict carries the
+error, so read `G3*_RESULT` rather than the progress lines.
 
 | app function | what it does | cost |
 |---|---|---|
@@ -461,8 +553,10 @@ Local toolchain note: repo requires Python ≥3.10 (`dataclass(slots=True)`); th
 
 ## 6. Open items, in value order
 
-1. **Injection replication on a second base model** (OLMo-2-1B, Qwen2.5-1.5B). §1.2 is
-   MATH-AI's key positive finding and rests on one model. ~5 GPU-h.
+1. ~~Injection replication on a second base model~~ — **DONE**, see §1.2. The answer null
+   replicates on all three; the procedure finding does not. Matching doses on *verbatim
+   reproduction* rather than repetition count is the remaining way to test whether that is a
+   family difference or a power problem. ~4 GPU-h.
 2. **Instella-MoE Midtrain→Base** — kills "one family, one scale". Gate on a 2-hour
    go/no-go; AMD's stack is ROCm-only. ~3 GPU-h.
 3. **The SFT anomaly.** SFT shows no insertion cost, no marker effect, and in JUDGe no

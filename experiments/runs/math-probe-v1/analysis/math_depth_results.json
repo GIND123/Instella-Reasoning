@@ -1,0 +1,53 @@
+{
+  "run": "experiments/runs/math-probe-v1",
+  "n_boot": 4000,
+  "seed": 6198,
+  "depth_variable": "n_sentences",
+  "control_slope": "not computable: n_sentences is null on every control row",
+  "checkpoints": {
+    "stage1": {
+      "slope_pp_per_sentence": -0.195,
+      "ci95": [
+        -1.609,
+        1.541
+      ],
+      "n_rows": 1091,
+      "n_parents": 818,
+      "rows_without_depth": 0,
+      "label": "Stage 1"
+    },
+    "stage2": {
+      "slope_pp_per_sentence": -1.894,
+      "ci95": [
+        -3.992,
+        0.225
+      ],
+      "n_rows": 1091,
+      "n_parents": 818,
+      "rows_without_depth": 0,
+      "label": "Instella 3B"
+    },
+    "sft": {
+      "slope_pp_per_sentence": -5.558,
+      "ci95": [
+        -7.395,
+        -3.909
+      ],
+      "n_rows": 1091,
+      "n_parents": 818,
+      "rows_without_depth": 0,
+      "label": "SFT"
+    },
+    "instruct": {
+      "slope_pp_per_sentence": -6.405,
+      "ci95": [
+        -8.428,
+        -4.486
+      ],
+      "n_rows": 1091,
+      "n_parents": 818,
+      "rows_without_depth": 0,
+      "label": "Instruct"
+    }
+  }
+}

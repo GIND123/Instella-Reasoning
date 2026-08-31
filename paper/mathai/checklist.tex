@@ -8,7 +8,7 @@
 \item {\bf Claims}
     \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The abstract and introduction state exactly the four findings reported in Section 3 and the corpus limitation reported in Section 4, with no broader claim of generalization beyond one model family and grade school arithmetic.
+    \item[] Justification: The abstract and introduction state exactly the results reported in Sections 3 and 4: the developmental ladder in premise verification, its decay with reasoning depth, the replications on a second domain and three further families, and the dissociation between procedure and answer under controlled injection. Scope is stated as one model family at one parameter scale, and the injection result as one problem generator.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the abstract and introduction do not include the claims made in the paper.
@@ -20,7 +20,7 @@
 \item {\bf Limitations}
     \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Section 5 states the scope limits explicitly: one model family, one parameter scale, one benchmark domain, the untested unused number versus sentence length confound, and the unrun licensing prompt condition.
+    \item[] Justification: The Limitations paragraph of Section 5 states the scope limits explicitly: one problem generator for the injection arm, detection measured only through an explicit abstention option, difficulty stratified by the model's own accuracy rather than an independent measure, depth on MATH measured as sentence count, chain reproduction under injection established on one model with the replication underpowered for it, and no attribution to specific training documents.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper has no limitation while the answer \answerNo{} means that the paper has limitations, but those are not discussed in the paper. 
@@ -98,7 +98,7 @@
 \item {\bf Experiment statistical significance}
     \item[] Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Every reported effect in Tables 1 through 3 and in Section 3 is accompanied by a 95 percent cluster bootstrap interval over parent problems, 4000 draws, stated in each table caption.
+    \item[] Justification: Every reported effect in the tables and in Sections 3 and 4 is accompanied by a 95 percent cluster bootstrap interval over parent problems, 4000 draws at seed 6198, with the resampling unit stated in each table caption because deletion variants descending from one problem are not independent.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.

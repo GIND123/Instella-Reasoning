@@ -21,7 +21,7 @@
 \usepackage{graphicx}
 \usepackage{placeins}
 
-\title{Instella Executes Reasoning Procedures It Does Not Verify}
+\title{Reasoning Depth Erodes the Premise Verification That Post Training Builds}
 
 \author{%
   Anonymous Author(s) \\
@@ -35,56 +35,59 @@
 \maketitle
 
 \begin{abstract}
-Whether a language model solves grade school arithmetic by reasoning or by reproducing
-training data is normally unanswerable, because the pretraining corpora of the models being
-measured are closed. Instella publishes its complete mixture, and its stage two synthetic
-component derives from the GSM8K training split rather than the test split, so exposure
-becomes a measured property fixed by exact thirteen gram containment instead of an estimated
-one. Against the full released pool of 1{,}367{,}882 rows no GSM8K test item reaches
-containment 0.50 and the maximum observed is 0.487, establishing that benchmark performance
-on that split is not recovered text. A premise deletion probe over 3179 variants across 1779
-parent problems then asks what the model does when a problem no longer determines an answer.
-Under the answer forcing prompt used for benchmark scoring it emits a number on 97.6 percent
-of provably underdetermined items. Under a prompt differing only in naming abstention as an
-option it declines on 53.8 percent of them while declining on 1.1 percent of the untouched
-answerable parents, a discrimination of $+52.63$ points on $[+50.77, +54.57]$ that grows
-monotonically across the training pipeline from $+1.84$ at stage one through $+10.10$ and
-$+38.08$ to instruct, with wrong refusals never exceeding 3.5 percent at any stage. An
-independently built probe on MATH reproduces the ladder, decision quality running 0.516,
-0.557, 0.611 and 0.675 against 0.509, 0.550, 0.690 and 0.763 on GSM8K, and three further
-instruct checkpoints spanning Qwen2.5 and OLMo-2 all discriminate.
-Discrimination is graded by reasoning depth: abstention on underdetermined problems falls
-$5.22$ points per additional calculator step while the answerable control stays flat at
-$-0.11$, a difference of $-5.11$ on $[-6.36, -3.82]$, and the decay steepens as the
-checkpoint improves. Controlled injection at a fixed 8{,}388{,}608 token budget separates
-what heavy exposure returns from what it does not: at sixty four repetitions, verbatim
-reproduction of injected documents reaches 0.946 and the memorised calculation chain returns
-at $+5.44$ points on $[+1.46, +9.38]$, while the final answer does not, at $+1.52$ on
-$[-2.12, +5.21]$. The answer result replicates on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B
-across fifteen dose points, including a model driven to verbatim 1.000. Competent procedure
-execution and verification of premise sufficiency are therefore separable capabilities, the
-second emerging later in training and decaying with the depth of the chain being tracked.
+Whether a language model can tell that a problem does not determine an answer has been
+measured on released models, which cannot say when the ability arrives in training or what
+takes it away. Instella publishes intermediate checkpoints spanning pretraining and post
+training together with its full data mixture, so both questions become measurable. A premise
+deletion probe removes exactly one premise the reference solution consumes, giving 3179
+variants over 1779 parent problems, and every abstention rate is read against an answerable
+control on the untouched parents, where declining is an error. Verification is close to absent
+before post training and is built by it: discrimination runs $+1.84$, $+10.10$, $+38.08$ and
+$+52.63$ points across stage one, stage two, supervised fine tuning and instruct, while wrong
+refusals stay below 3.5 percent throughout, and a reworded licence preserves the ladder. An
+independently built MATH probe reproduces it, and three instruct checkpoints from other
+families all discriminate. Reasoning depth
+then erodes what training builds. Abstention on underdetermined problems falls $5.22$ points
+per additional calculator step while the answerable control stays flat at $-0.11$, a
+difference of $-5.11$ on $[-6.36, -3.82]$, and the decay steepens as the checkpoint improves.
+Under the answer forcing prompt used for benchmark scoring the strongest checkpoint still
+answers 97.6 percent of provably underdetermined items. Controlled injection at a fixed token
+budget drives verbatim reproduction to 0.946 and returns the memorised calculation chain, at
+$+5.44$ on $[+1.46, +9.38]$, without returning the answer, at $+1.52$ on $[-2.12, +5.21]$, so
+what depth erodes is not recall of training text.
 \end{abstract}
 
 \section{Introduction}
 
-A model that answers grade school arithmetic correctly may be reasoning about the premises it
-is given or reproducing text it has seen. Distinguishing the two normally requires knowing
-what the model read, and the corpora of the models under test are closed, so the question is
-usually approached through proxies such as perplexity signatures or benchmark rewriting.
-Instella~\citep{instella2025} removes the obstacle. Its complete pretraining mixture is
-released, and the stage two synthetic component is generated from the GSM8K training
-split~\citep{cobbe2021gsm8k} rather than the test split, so exposure is measurable per item.
+A model that answers a grade school arithmetic problem has been given premises that determine
+an answer. Whether it checked that they do is invisible to the score, because every item on a
+benchmark is answerable. Probing that directly requires items that are not, and a growing body
+of work now supplies them. QuestBench casts underspecified reasoning tasks as constraint
+satisfaction problems with a missing variable~\citep{li2025questbench}, AbstentionBench
+assembles unanswerable questions across domains and reports that reasoning fine tuning
+degrades abstention~\citep{kirichenko2025abstentionbench}, PCBench evaluates premise critique
+across fifteen models and finds that most detect a flawed premise only when explicitly
+prompted to look~\citep{li2025premisecritique}, and ReliableMath does the same for unsolvable
+mathematics~\citep{xue2025reliablemath}. That models often fail to verify their premises, and
+do better when told they may decline, is therefore established rather than at issue here.
 
-That measurement comes first because everything after depends on it. Against the full
-released pool of 1{,}367{,}882 rows, no GSM8K test item reaches thirteen gram containment
-0.50 and the highest value observed is 0.487, so performance on that split is not recovered
-text. A premise deletion probe then removes exactly one premise the reference solution
-consumes, leaving a problem whose stated answer is no longer derivable, and asks two things
-of the same items: whether the model notices, and whether exposure to the original changes
-what it produces. The model does detect insufficiency, increasingly well across training, and
-loses that detection as the reasoning chain lengthens. Heavy exposure returns the memorised
-calculation chain without returning the answer.
+What that work cannot ask is developmental. Every model it evaluates is a finished artifact,
+so the capability can be measured but not located: nothing says whether verification arrives
+with scale, with instruction tuning, or with preference optimisation, because the intermediate
+checkpoints of the models under test are not released. Instella~\citep{instella2025} publishes
+four checkpoints spanning its pipeline along with the complete data mixture, which makes the
+question answerable on one family. This paper asks when premise verification appears, and what
+it is lost to.
+
+Both answers turn out to concern reasoning rather than compliance. Verification is close to
+absent in the pretrained checkpoints and is manufactured by post training, rising from $+1.84$
+to $+52.63$ points of discrimination against an answerable control. It then erodes with the
+depth of the chain the model is tracking, falling $5.22$ points per additional reasoning step
+while the control stays flat, and eroding faster in the checkpoints that verify best. Because
+the corpus is published, the erosion can also be separated from memorisation: continued
+pretraining that drives verbatim reproduction of injected documents to 0.946 returns the
+memorised calculation chain without returning the answer, so what fails at depth is the check,
+not the recall.
 
 \section{Setup}
 
@@ -111,11 +114,12 @@ would understate the interval.
 
 \section{Verification of premise sufficiency}
 
-\subsection{The capability exists and is not prompt compliance}
+\subsection{Post training builds the capability}
 
-Under the answer forcing prompt used for benchmark scoring, the instruct checkpoint emits a
-number on 97.6 percent of items that provably do not determine one, and the three earlier
-checkpoints on 99.5 percent or more. Naming \texttt{\#\#\#\# unanswerable} as
+Under the answer forcing prompt used for benchmark scoring, the instruct checkpoint declines
+on 2.4 percent of items that provably do not determine an answer and commits to one on the
+remaining 97.6 percent, or 99.7 percent counting any emitted number; the three earlier
+checkpoints commit on 99.5 percent or more. Naming \texttt{\#\#\#\# unanswerable} as
 an available response, and changing nothing else, raises declining to 53.8 percent at the
 instruct checkpoint. That rate alone is ambiguous, since every probe item is underdetermined
 and a model offered an escape hatch may simply take it. Running the identical prompt over the
@@ -155,9 +159,12 @@ A second control rules out the remaining reading, that a pruned problem reads od
 model responds to perturbed text. Inserting an irrelevant twenty word sentence carrying an
 unused number leaves a problem fully answerable while perturbing its surface. Declining moves
 from 0.0113 clean to 0.0170 with an off topic insertion and 0.0125 with an in domain one,
-against 0.538 when a premise is actually removed.
+against 0.538 when a premise is actually removed. Rewording the licence while holding its
+information and its token fixed preserves the ladder, at $+0.80$, $+6.64$, $+33.41$ and
+$+43.77$ points with every interval excluding zero, and moves the level: Appendix~\ref{app:reword}
+reports both.
 
-\subsection{Discrimination decays with reasoning depth}
+\subsection{Reasoning depth erodes it}
 
 The capability is not uniform over problems. Figure~\ref{fig:abstain} plots abstention
 against the length of the reference solution's calculator chain. On underdetermined problems
@@ -188,16 +195,16 @@ account for.
 
 \subsection{Both results hold on a second domain and in other families}
 
-The findings above are measured on one benchmark and one model family, which two further
-sweeps address. A premise deletion probe built independently on
-MATH~\citep{hendrycks2021math}, 818 parents and 1091 variants drawn from all seven subjects
-under the same two validity checks, reproduces the developmental ladder: decision quality
+Two further sweeps address the single benchmark and single family. A premise deletion probe
+built independently on MATH~\citep{hendrycks2021math}, 818 parents and 1091 variants drawn
+from all seven subjects under the same two validity checks, reproduces the ladder: decision quality
 runs 0.516, 0.557, 0.611 and 0.675 across the same checkpoints, against 0.509, 0.550, 0.690
 and 0.763 on GSM8K. The shape is the same and the level is lower, which is expected, since
 competition problems are harder and a model declining one it simply cannot solve inflates the
 answerable rate and shrinks the measured gap. The depth decay reproduces there too, at
-$-7.11$ points per additional sentence on $[-9.87, -4.67]$ against a control slope containing
-zero.
+$-6.41$ points per additional premise sentence on $[-8.43, -4.49]$, steepening across the
+pipeline as on GSM8K. The MATH control arm was built without a depth variable, so this
+replicates the gradient but not its control.
 
 Across families, three further instruct checkpoints graded the same GSM8K items under the
 same prompt. All four discriminate, with decision quality of 0.763 for Instella 3B Instruct,
@@ -208,17 +215,16 @@ instruction tuning recipe and training compute, and nothing in the design attrib
 points to any of those. OLMo-2 is the informative case: its discrimination of $+14.68$ points
 on $[+12.13, +17.23]$ clears zero, yet it declines 29.2 percent of answerable problems, so its
 decisions sit near chance. A difference of rates would call that a weaker version of the same
-capability; the decision metric identifies it as declining freely rather than selectively.
-Wrong refusal rates span 1.1 percent to 29.2 percent across models whose discrimination
-differs far less, so the two quantities are reported separately.
+capability; the decision metric identifies it as declining freely rather than selectively,
+which is why false refusal is reported alongside discrimination throughout.
 
 \section{What exposure returns}
 
 \subsection{Continued pretraining at controlled doses}
 
-Whether exposure supplies the answer is causal, and observation cannot settle it, so selected
-items were injected by continued pretraining at five doses under a fixed 8{,}388{,}608 token
-budget, held constant so a higher dose displaces filler rather than buying compute. Every arm
+Whether exposure supplies the answer is causal, so selected items were injected by continued
+pretraining at five doses under a fixed 8{,}388{,}608 token budget, held constant so a higher
+dose displaces filler rather than buying compute. Every arm
 carries positive controls evaluated before and after: injected document loss must fall and
 the model must continue an injected document verbatim, since a flat dose response with failed
 controls would measure a broken training run. Injection worked, verbatim reproduction
@@ -233,11 +239,11 @@ dose, while reproduction of the final answer reaches $+1.52$ on $[-2.12, +5.21]$
 containing zero. The model reproduces the source text almost exactly and still does not
 recover the deleted quantity or the answer it determines. Repeating the identical mixture,
 budget, seed and probe on OLMo-2-1B, Qwen2.5-1.5B and Qwen2.5-3B gives $+0.28$, $+0.00$ and
-$+2.28$ points at the top dose, every interval containing zero, across fifteen dose points.
+$+2.28$ points at the top dose, every interval containing zero, across ten dose points.
 Qwen2.5-3B is the sharpest case, driven to verbatim reproduction of 1.000 and still
 recovering the deleted answer no more often than a model that never saw the documents. Chain
-reproduction is established on Instella and underpowered elsewhere, as Appendix~\ref{app:dose}
-sets out.
+reproduction is scored on three of the four models, and is established on Instella and
+underpowered on the other two, as Appendix~\ref{app:dose} sets out.
 
 \section{Discussion}
 
@@ -273,19 +279,45 @@ lengthens.
 
 \section{Related work}
 
-Huang et al.~\citep{huang2025mathperturb} construct hand authored hard perturbations of
-competition mathematics and attribute accuracy loss under an unchanged solution method to
-blind application of a learned procedure, a reading broadly consistent with the procedure
-level memorization in Section 3.2, established here against a corpus verified exactly
-rather than inferred. Wu et al.~\citep{wu2025reasoning} show that reinforcement learning
-gains on mathematical reasoning depend on the pretraining exposure of the base policy and
-argue that clean synthetic problems are needed for reliable conclusions, a concern the
-checkpoint based design addresses by evaluating a policy before any relevant exposure
-occurred. Zhang et al.~\citep{zhang2024careful} rebuild GSM8K from a contamination free
-procedure and report accuracy gaps of up to 13 points that track prior exposure across
-closed models, using an estimated exposure signal in the absence of any released training
-corpus; the present work substitutes an exact containment measurement for that estimate
-on a family where the corpus is public.
+\paragraph{Premise verification and abstention.} That models answer questions which do not
+determine an answer is well documented. QuestBench formalises underspecified reasoning as a
+constraint satisfaction problem missing one variable and finds that models fail to identify
+the missing variable even where they solve the fully specified
+problem~\citep{li2025questbench}. AbstentionBench gathers unanswerable questions across
+domains and reports that reasoning fine tuning degrades abstention rather than improving
+it~\citep{kirichenko2025abstentionbench}. PCBench evaluates premise critique over fifteen
+models and finds that most detect a flawed premise only under explicit prompting, which is
+the same licensing dependence measured in Section 3.1~\citep{li2025premisecritique}, and
+ReliableMath establishes the corresponding benchmark for unsolvable
+mathematics~\citep{xue2025reliablemath}. Concurrent work sharpens two pieces of this. Gu et
+al.~\citep{gu2026bridging} name the gap between detecting insufficiency and acting on it and
+train an explicit answerability decision to close it; Wagner~\citep{wagner2026twoaxes}
+separates confidence in an answer from confidence that a question is answerable and shows
+the usual confidence signal is nearly blind to the second. The present work differs in what
+it varies. Those studies evaluate released models, so they can establish that the capability
+is uneven but not where it comes from or what removes it. Measuring four checkpoints of one
+published pipeline turns the capability into a developmental quantity, and reports two
+gradients rather than a level: it is manufactured almost entirely by post training, and it
+decays with the depth of the reasoning chain, faster in the checkpoints that verify best.
+The AbstentionBench finding that reasoning fine tuning degrades abstention and the ladder
+reported here are not in conflict on this reading, since the depth gradient is a within
+checkpoint effect that a single benchmark average over problems of mixed depth would
+partially absorb.
+
+\paragraph{Memorisation and contamination.} Huang et al.~\citep{huang2025mathperturb}
+construct hand authored hard perturbations of competition mathematics and attribute accuracy
+loss under an unchanged solution method to blind application of a learned procedure, a
+reading broadly consistent with the procedure level memorization in Section 4.2, established
+here against a corpus verified exactly rather than inferred. Wu et
+al.~\citep{wu2025reasoning} show that reinforcement learning gains on mathematical reasoning
+depend on the pretraining exposure of the base policy and argue that clean synthetic problems
+are needed for reliable conclusions, a concern the checkpoint based design addresses by
+evaluating a policy before any relevant exposure occurred. Zhang et
+al.~\citep{zhang2024careful} rebuild GSM8K from a contamination free procedure and report
+accuracy gaps of up to 13 points that track prior exposure across closed models, using an
+estimated exposure signal in the absence of any released training corpus; the present work
+substitutes an exact containment measurement for that estimate on a family where the corpus
+is public.
 
 \section{Containment method, calibration, and corpus routes}
 
@@ -377,6 +409,143 @@ leave text that no reader could solve. Filtering to items where no premise after
 carries such a dependency retains 24 percent of the set, and on that subset the effect is
 $+2.2$ points on $[-6.5, +10.9]$ over 46 problems. Manual inspection finds violations that
 survive the filter, so even that residual is a spot check rather than an estimate.
+
+Table~\ref{tab:dose} gives the dose response in full. Two outcomes are scored on the same
+generations. Answer recall is reproduction of the deleted parent's original answer;
+procedure reproduction is the fraction of the parent's intermediate calculator results
+appearing in the generation, excluding the final answer. Both are differences in
+differences, injected minus held out at a dose, minus the same quantity at dose zero, so the
+8{,}388{,}608 tokens every arm trains on cancel. The dose zero row is the reference rather
+than a result, and its positive controls fail by construction, since a model that was never
+shown the documents cannot have memorised them.
+
+\begin{table}[h]
+\centering
+\caption{Continued pretraining at five doses on four base models. Verbatim is the fraction
+of injected documents the model continues exactly after training. Answer and procedure are
+differences in differences against the dose zero arm, in percentage points, with cluster
+bootstrap intervals over parent problems, 4000 draws, seed 6198. Only one cell excludes
+zero, marked $\ast$. Qwen2.5-3B was run at two doses and is not scored for procedure
+reproduction.}
+\label{tab:dose}
+\small
+\begin{tabular}{llccc}
+\toprule
+Model & Dose & Verbatim & Answer recall & Procedure reproduction \\
+\midrule
+Instella 3B & $0\times$ & 0.133 & reference & reference \\
+            & $1\times$ & 0.153 & $+0.06$ [$-2.99$, $+3.17$] & $+0.34$ [$-2.86$, $+3.67$] \\
+            & $4\times$ & 0.180 & $+0.09$ [$-2.48$, $+2.68$] & $+0.73$ [$-2.27$, $+3.90$] \\
+            & $16\times$ & 0.491 & $-0.22$ [$-3.56$, $+3.10$] & $+2.78$ [$-0.79$, $+6.42$] \\
+            & $64\times$ & 0.946 & $+1.52$ [$-2.12$, $+5.21$] & $\mathbf{+5.44}$ [$+1.46$, $+9.38$]$^\ast$ \\
+\midrule
+Qwen2.5 3B  & $0\times$ & 0.277 & reference & not scored \\
+            & $16\times$ & 0.713 & $+1.41$ [$-1.71$, $+4.60$] & not scored \\
+            & $64\times$ & 1.000 & $+2.28$ [$-1.21$, $+5.77$] & not scored \\
+\midrule
+Qwen2.5 1.5B & $0\times$ & 0.243 & reference & reference \\
+            & $1\times$ & 0.250 & $+0.28$ [$-1.99$, $+2.60$] & $-2.17$ [$-5.05$, $+0.65$] \\
+            & $4\times$ & 0.255 & $+1.95$ [$-0.85$, $+4.84$] & $-0.70$ [$-3.69$, $+2.32$] \\
+            & $16\times$ & 0.406 & $+0.84$ [$-2.13$, $+3.71$] & $+0.83$ [$-2.65$, $+4.38$] \\
+            & $64\times$ & 0.989 & $+0.00$ [$-2.46$, $+2.52$] & $+0.33$ [$-3.49$, $+4.16$] \\
+\midrule
+OLMo 2 1B   & $0\times$ & 0.126 & reference & reference \\
+            & $1\times$ & 0.128 & $-0.32$ [$-2.38$, $+1.67$] & $-1.40$ [$-3.73$, $+0.93$] \\
+            & $4\times$ & 0.172 & $+0.00$ [$-1.90$, $+1.77$] & $-0.52$ [$-3.32$, $+2.30$] \\
+            & $16\times$ & 0.207 & $+0.62$ [$-1.56$, $+2.83$] & $+0.26$ [$-3.02$, $+3.49$] \\
+            & $64\times$ & 0.727 & $+0.28$ [$-2.34$, $+2.73$] & $-0.30$ [$-4.29$, $+3.61$] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Answer recall is flat in every model at every dose, including the two arms driven to near
+perfect verbatim reproduction, which is the result the body reports. Procedure reproduction
+rises with dose on Instella and reaches an interval excluding zero at the top dose only. On
+Qwen2.5 1.5B and OLMo 2 1B it does not, and the point estimates there are not consistently
+positive, so the chain result should be read as established on one model rather than
+replicated. The two replication models also memorise less at the same dose, reaching verbatim
+0.989 and 0.727 against Instella's 0.946 at $64\times$ but only 0.406 and 0.207 at
+$16\times$, so the doses at which the Instella effect appears are not matched in
+memorisation strength. Distinguishing a genuine family difference from insufficient
+memorisation would need doses set to match verbatim reproduction rather than repetition
+count, which is not what these runs hold fixed.
+
+\section{Robustness of the licence to its wording}
+\label{app:reword}
+
+The result in Section 3.1 is produced by one sentence, so it is worth knowing how much of it
+belongs to that sentence. The licence was reworded to carry the same three instructions,
+work stepwise, mark the final answer with the same token, and decline with
+\texttt{\#\#\#\# unanswerable} when the problem does not fix a unique answer, in different
+words. The abstention token is held fixed so the scorer is unchanged between conditions and
+any movement is attributable to wording rather than to what is counted. All 3179 pruned
+items and all 1779 answerable parents were regenerated on all four checkpoints.
+
+\begin{table}[h]
+\centering
+\caption{The developmental ladder under two wordings of the same licence. Discrimination is
+declining on underdetermined items minus declining on answerable ones, in percentage points;
+false decline is the rate on answerable parents. Cluster bootstrap over parent problems, 4000
+draws, seed 6198. Every interval excludes zero in both conditions.}
+\label{tab:reword}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+& \multicolumn{2}{c}{Discrimination} & \multicolumn{2}{c}{Decision quality}
+& \multicolumn{2}{c}{False decline} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Checkpoint & Original & Reworded & Original & Reworded & Original & Reworded \\
+\midrule
+Stage 1     & $+1.84$  & $+0.80$  & 0.509 & 0.504 & 0.025 & 0.007 \\
+Instella 3B & $+10.10$ & $+6.64$  & 0.550 & 0.533 & 0.008 & 0.008 \\
+SFT         & $+38.08$ & $+33.41$ & 0.690 & 0.667 & 0.035 & 0.008 \\
+Instruct    & $+52.63$ & $+43.77$ & 0.763 & 0.719 & 0.011 & 0.006 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two things separate. The developmental claim is robust to the wording: the ladder is monotone
+under both licences, in the same order, with every interval excluding zero, and false declines
+stay below one percent throughout the reworded condition. The level is not. Discrimination at
+instruct falls from $+52.63$ to $+43.77$ points and declining on underdetermined items falls
+from 0.538 to 0.444, so the rates quoted in Section 3.1 should be read as specific to the
+licence that produced them rather than as properties of the checkpoint. The gap between
+conditions widens as the checkpoint improves, running $-1.03$, $-3.46$, $-4.66$ and $-8.87$
+points, so the checkpoints that verify best are also the most sensitive to how they are asked.
+Truncation does not explain the shift, being equal or lower under the reworded licence at
+every checkpoint, and markedly lower at stage one, at 0.133 against 0.211 on pruned items.
+
+The same rewording was applied to the cross family sweep of Section 3.3, on the identical
+items (Table~\ref{tab:reword_fam}). All four instruct checkpoints still discriminate with
+every interval excluding zero, and the ordering by decision quality is unchanged, so the
+comparison in Section 3.3 does not depend on the licence used to obtain it. Levels fall
+under rewording here as well. The false decline rate is the cell that moves most and it does
+not move uniformly: Qwen2.5 3B rises from 0.043 to 0.188 and OLMo 2 falls from 0.292 to
+0.191, while Instella stays near zero at 0.006. The spread in how models respond to the
+wording of a licence is therefore wider than the spread in how well they discriminate, which
+is a further reason to report false refusal separately rather than folding it into a single
+rate.
+
+\begin{table}[h]
+\centering
+\caption{The cross family sweep under both wordings, identical GSM8K items. Every interval
+excludes zero in both conditions and the ordering by decision quality is preserved.}
+\label{tab:reword_fam}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+& \multicolumn{2}{c}{Discrimination} & \multicolumn{2}{c}{Decision quality}
+& \multicolumn{2}{c}{False decline} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Instruct checkpoint & Original & Reworded & Original & Reworded & Original & Reworded \\
+\midrule
+Qwen2.5 3B    & $+58.92$ & $+45.33$ & 0.795 & 0.727 & 0.043 & 0.188 \\
+Instella 3B   & $+52.63$ & $+43.77$ & 0.763 & 0.719 & 0.011 & 0.006 \\
+Qwen2.5 1.5B  & $+51.88$ & $+39.83$ & 0.759 & 0.699 & 0.090 & 0.061 \\
+OLMo 2 1B     & $+14.68$ & $+9.17$  & 0.573 & 0.546 & 0.292 & 0.191 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Reproduction}
 

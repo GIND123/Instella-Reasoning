@@ -1,3 +1,10 @@
+> **STALE — superseded 2026-08-31. Read `FINDINGS.md` instead.**
+> This file is a handoff snapshot from the phase-0-to-4 build and is kept for provenance.
+> What it gets wrong now: the paper IS written and builds (`paper/mathai/neurips_2026.tex`,
+> body 4 pages); the MATH-AI deadline is **6 Sep 2026 AoE**, not the date implied below; and
+> the three results listed under "THE THREE RESULTS THE PAPER RESTS ON" are no longer what the
+> paper rests on — it was reframed around premise verification across the checkpoint axis.
+
 GOAL: Checkpoint-axis premise-deletion study for the MATH-AI workshop paper (4 pages,
       NeurIPS dblblindworkshop template, non-archival, unlimited appendix).
 

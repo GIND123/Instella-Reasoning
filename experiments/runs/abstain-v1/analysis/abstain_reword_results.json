@@ -1,0 +1,78 @@
+{
+  "n_boot": 4000,
+  "seed": 6198,
+  "checkpoints": {
+    "stage1": {
+      "label": "Stage 1",
+      "abstain_pruned": 0.0148,
+      "n_pruned": 3179,
+      "abstain_answerable": 0.0067,
+      "n_answerable": 1779,
+      "PRIMARY_discrimination_pp": 0.804,
+      "PRIMARY_ci95": [
+        0.287,
+        1.327
+      ],
+      "excludes_zero": true,
+      "balanced_accuracy": 0.504,
+      "balanced_accuracy_ci95": [
+        0.5014,
+        0.5066
+      ]
+    },
+    "stage2": {
+      "label": "Instella 3B",
+      "abstain_pruned": 0.0749,
+      "n_pruned": 3179,
+      "abstain_answerable": 0.0084,
+      "n_answerable": 1779,
+      "PRIMARY_discrimination_pp": 6.643,
+      "PRIMARY_ci95": [
+        5.649,
+        7.697
+      ],
+      "excludes_zero": true,
+      "balanced_accuracy": 0.5332,
+      "balanced_accuracy_ci95": [
+        0.5282,
+        0.5385
+      ]
+    },
+    "sft": {
+      "label": "SFT",
+      "abstain_pruned": 0.3426,
+      "n_pruned": 3179,
+      "abstain_answerable": 0.0084,
+      "n_answerable": 1779,
+      "PRIMARY_discrimination_pp": 33.413,
+      "PRIMARY_ci95": [
+        31.663,
+        35.193
+      ],
+      "excludes_zero": true,
+      "balanced_accuracy": 0.6671,
+      "balanced_accuracy_ci95": [
+        0.6583,
+        0.676
+      ]
+    },
+    "instruct": {
+      "label": "Instruct",
+      "abstain_pruned": 0.4439,
+      "n_pruned": 3179,
+      "abstain_answerable": 0.0062,
+      "n_answerable": 1779,
+      "PRIMARY_discrimination_pp": 43.767,
+      "PRIMARY_ci95": [
+        41.976,
+        45.631
+      ],
+      "excludes_zero": true,
+      "balanced_accuracy": 0.7188,
+      "balanced_accuracy_ci95": [
+        0.7099,
+        0.7282
+      ]
+    }
+  }
+}

@@ -21,7 +21,7 @@ reason attached, because the same idea gets re-proposed otherwise.
 | Study | Question | Headline | Source |
 |---|---|---|---|
 | **Judge reliability** | Does an LLM judge grade problems from its own training corpus less reliably? | Balanced-accuracy gap of **−0.243** [−0.282, −0.202] with the reference answer withheld, **−0.074** [−0.116, −0.033] with it supplied | `paper/judge/` |
-| **Premise deletion across the checkpoint axis** | Is accuracy loss under perturbation a failure of recall or of inference? | Memorisation difference-in-differences **−0.26 pp** [−1.66, +1.14] — flat across the entire training pipeline | `paper/mathai/`, `experiments/runs/ckpt-axis-v1/` |
+| **Premise verification across the checkpoint axis** | When in training does a model learn that a problem does not determine an answer, and what takes it away? | Discrimination against an answerable control rises **+1.84 → +10.10 → +38.08 → +52.63 pp** across the pipeline, then decays **−5.11 pp** per extra reasoning step [−6.36, −3.82] | `paper/mathai/`, `experiments/runs/{ckpt-axis-v1, abstain-v1}/` |
 | **Reasoning Reliability Atlas** | Scaffold: contamination scan, perturbation, generation, scoring, attribution, statistics | `src/instella_reasoning/`, `configs/pipeline/` |
 
 Inference throughout is a cluster bootstrap over **parent problems**, 4000 draws, seed 6198. The
@@ -211,10 +211,19 @@ where arms differ in base rate.
 
 ### Premise deletion across the checkpoint axis
 
-The same deletion items run across `Stage1 → Instella-3B → SFT → Instruct` against a GSM8K-test
-control arm verified clean. Deletion-recall rises across the stage-two data intervention
-(+1.70 pp, McNemar p = 4.6e-4) — but it rises at least as much on items provably absent from the
-corpus (+1.95 pp). Difference-in-differences **−0.26 pp, 95% CI [−1.66, +1.14]**.
+3,179 items each have one premise the reference solution consumes removed, so declining is the
+only correct response. Under a prompt naming `#### unanswerable`, declining is read against an
+answerable control on the untouched parents, where declining is an error. Discrimination runs
+**+1.84 → +10.10 → +38.08 → +52.63 pp** across `Stage1 → Instella-3B → SFT → Instruct`, so the
+capability is built almost entirely by post-training, while wrong refusals stay under 3.5%. It
+then **decays with reasoning depth**: −5.22 pp per extra calculator step against a flat control,
+a difference of **−5.11 pp [−6.36, −3.82]**, steepening as the checkpoint improves. Reproduced on
+an independent MATH probe and on three instruct checkpoints from other families.
+
+The exposure question the study started from is answered in the negative and kept: deletion
+recall rises across the stage-two data intervention (+1.70 pp, McNemar p = 4.6e-4) but rises at
+least as much on items provably absent from the corpus (+1.95 pp), difference-in-differences
+**−0.26 pp, 95% CI [−1.66, +1.14]**.
 
 The null is **bounded, not bare**. Controlled injection at 0/1/4/16/64× verbatim repetition,
 under a fixed 8,388,608-token budget, shows the probe detects recall only at 64× (verbatim

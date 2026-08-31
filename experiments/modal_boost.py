@@ -1262,6 +1262,112 @@ def g3_family_all():
         print(g3_family.remote(alias))
 
 
+# --------------------------------------------------------------------------------------
+#: G3R only. Carries the same three instructions as ABSTAIN_SUFFIX -- work stepwise, mark
+#: the final answer with '####', and decline with a named token when the problem does not
+#: fix a unique answer -- in different words. The token itself is held fixed so the scorer
+#: is unchanged between conditions; any movement is therefore attributable to the wording
+#: of the licence rather than to what is being counted.
+ABSTAIN_SUFFIX_RW = (
+    "\nSolve this one step at a time, then write the final answer after '####'. "
+    "Should the question lack the information needed to fix a single answer, "
+    "reply '#### unanswerable' instead."
+)
+
+#: Every checkpoint that carries an abstention measurement, keyed exactly as the analysis
+#: tags are, so the ladder and the cross-family sweep run through one code path here.
+ABSTAIN_ALL = {
+    **{a: (MODELS[a], IS_BASE[a]) for a in ("stage1", "stage2", "sft", "instruct")},
+    **ABSTAIN_FAMILIES,
+}
+
+
+@app.function(gpu=GPU, timeout=5 * 60 * 60, volumes=VOLUMES, secrets=SECRETS)
+def g3_reword(alias: str) -> dict:
+    """G3R: is the discrimination a property of reasoning, or of one prompt's wording?
+
+    The whole premise-verification result rests on a single licence sentence. If declining
+    tracked that exact phrasing rather than whether the problem determines an answer, the
+    discrimination would collapse under a reworded licence carrying identical information.
+    Both item sets are rerun so the contrast is reconstructed inside this condition rather
+    than compared against rates measured under the other one.
+    """
+    from transformers import AutoTokenizer
+    t0 = time.time()
+    model_id, is_base = ABSTAIN_ALL[alias]
+    max_tokens = MAX_TOKENS.get(alias, 1536)
+    out_dir = pathlib.Path(RUNS_REMOTE) / "abstain-v1/generations"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    sets = {
+        "pruned": [("train", "/items/gsm8k_train_deletion.jsonl"),
+                   ("test", "/items/gsm8k_test_deletion.jsonl")],
+        "control": [("train", "/items/gsm8k_train_parents.jsonl"),
+                    ("test", "/items/gsm8k_test_parents.jsonl")],
+    }
+    todo = {"pruned": out_dir / f"abstain_rw__{alias}.jsonl",
+            "control": out_dir / f"abstain_control_rw__{alias}.jsonl"}
+    if all(q.exists() and q.stat().st_size > 0 for q in todo.values()):
+        print(f"[g3r] {alias}: already present, skipping")
+        return {"alias": alias, "skipped": True}
+
+    from vllm import LLM
+    tok = None if is_base else AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    _register_arch()
+    llm = LLM(model=model_id, trust_remote_code=True, dtype="bfloat16",
+              gpu_memory_utilization=0.90, max_model_len=max_tokens + 2048,
+              enforce_eager=False)
+
+    res = {"alias": alias, "model": model_id, "prompt_condition": "abstain_licensed_reworded"}
+    for kind, paths in sets.items():
+        dest = todo[kind]
+        if dest.exists() and dest.stat().st_size > 0:
+            continue
+        items = []
+        for arm, path in paths:
+            for line in open(path):
+                r = json.loads(line)
+                r["_arm"] = arm
+                items.append(r)
+        prompts = []
+        for it in items:
+            body = it["prompt"] + ABSTAIN_SUFFIX_RW
+            if is_base:
+                prompts.append(f"{_shots_preamble(4)}Question: {body}\nAnswer:")
+            else:
+                prompts.append(tok.apply_chat_template(
+                    [{"role": "user", "content": body}],
+                    tokenize=False, add_generation_prompt=True))
+        print(f"[g3r] {alias} {kind}: {len(items)} rows", flush=True)
+        gens = _generate(llm, prompts, max_tokens)
+        rows = [{"benchmark_id": it["id"], "parent_id": it.get("parent_id") or it["id"],
+                 "arm": it["_arm"],
+                 "parent_answer": (it.get("metadata") or {}).get("parent_answer")
+                 if kind == "pruned" else it.get("answer"),
+                 "model": model_id, "completion": g["completion"],
+                 "metadata": {"finished": g["finished"], "n_tokens": g["n_tokens"],
+                              "prompt_condition": "abstain_licensed_reworded",
+                              "items": kind, "engine": "vllm-0.8.5.post1"}}
+                for it, g in zip(items, gens)]
+        _write(dest, rows)
+        runs_vol.commit()
+        res[f"n_{kind}"] = len(rows)
+        res[f"trunc_{kind}"] = round(
+            1 - sum(r["metadata"]["finished"] for r in rows) / len(rows), 4)
+        res[f"push_{kind}"] = _push("abstain-v1")
+        print(f"[g3r] {alias} {kind}: written and pushed", flush=True)
+
+    res["minutes"] = round((time.time() - t0) / 60, 1)
+    print("G3R_RESULT:", json.dumps(res))
+    return res
+
+
+@app.local_entrypoint()
+def g3_reword_all():
+    for alias in ABSTAIN_ALL:
+        print(g3_reword.remote(alias))
+
+
 @app.function(cpu=4.0, memory=16384, timeout=40 * 60, secrets=SECRETS)
 def probe_feasibility(limit: int = 4000) -> dict:
     """How many items in candidate second domains actually admit a verified premise removal?

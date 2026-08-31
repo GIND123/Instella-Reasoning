@@ -125,6 +125,10 @@ def main() -> int:
     ap.add_argument("--pruned-pat", default="abstain__{tag}.jsonl")
     ap.add_argument("--control-pat", default="abstain_control__{tag}.jsonl")
     ap.add_argument("--title", default="Abstention, with the answerable control")
+    ap.add_argument("--stem", default=None,
+                    help="output basename under analysis/; defaults to the tagset's own, "
+                         "so a rerun under a different prompt must name its own stem "
+                         "rather than silently overwriting the primary result")
     ap.add_argument("--n-boot", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=6198)
     args = ap.parse_args()
@@ -178,7 +182,8 @@ def main() -> int:
 
     out = Path(args.run) / "analysis"
     out.mkdir(parents=True, exist_ok=True)
-    stem = "abstain_control" if args.tagset == "ladder" else f"abstain_{args.tagset}"
+    stem = args.stem or (
+        "abstain_control" if args.tagset == "ladder" else f"abstain_{args.tagset}")
     (out / f"{stem}_results.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
     (out / f"{stem.upper()}.md").write_text(md, encoding="utf-8")
     print(md)

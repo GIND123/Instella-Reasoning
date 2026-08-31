@@ -1,0 +1,41 @@
+{
+  "run": "experiments/runs/abstain-v1",
+  "tag": "instruct",
+  "n_boot": 4000,
+  "seed": 6198,
+  "conditions": {
+    "orig": {
+      "label": "Clean answerable parent",
+      "n": 1764,
+      "n_parents": 1764,
+      "decline_rate": 0.0113,
+      "ci95": [
+        0.0068,
+        0.0164
+      ],
+      "truncation": 0.0
+    },
+    "offtopic_qty": {
+      "label": "Off topic insertion, unused number",
+      "n": 1764,
+      "n_parents": 1764,
+      "decline_rate": 0.017,
+      "ci95": [
+        0.0113,
+        0.0232
+      ],
+      "truncation": 0.0
+    },
+    "domain_qty": {
+      "label": "In domain insertion, unused number",
+      "n": 1764,
+      "n_parents": 1764,
+      "decline_rate": 0.0125,
+      "ci95": [
+        0.0079,
+        0.0181
+      ],
+      "truncation": 0.0
+    }
+  }
+}
