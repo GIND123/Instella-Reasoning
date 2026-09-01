@@ -11,10 +11,16 @@ Two manuscripts are live:
 | MATH-AI | 6th Workshop on Mathematical Reasoning and AI, NeurIPS 2026 | **6 Sep 2026 AoE** | 4 pages body | `paper/mathai/neurips_2026.tex` |
 | JUDGe | Can We Trust the Judge?, NeurIPS 2026 | **29 Aug 2026** | 6 pages body | `paper/judge/main.tex` |
 
-**The MATH-AI deadline is 6 September 2026 AoE**, verified 2026-08-31 against
-https://mathai-2026.github.io/. An earlier entry here read 25 September and was wrong; 25
-September is near neither the submission close nor the 29 September notification. Reviews are
-due 20 Sep, notification 29 Sep, camera-ready 3 Oct.
+**The MATH-AI deadline is 6 September 2026 AoE**, verified against
+https://mathai-2026.github.io/. Reviews due 20 Sep, notification 29 Sep, camera-ready 3 Oct.
+
+An earlier entry here read 25 September. That was not a misreading: **prior years ran to late
+September and the organizers moved it earlier this year**, announcing on the CFP that "due to
+NeurIPS paper-import policies and related conference updates this year, we are adjusting our
+schedule and cannot extend submissions as late into September as in prior years (when we
+aimed to accommodate concurrent ICLR submissions)." A note in this file previously guessed
+the 25 Sep belief came from confusing the notification date; that guess was wrong and is
+withdrawn. The date genuinely moved.
 
 Both are double-blind, non-archival, and have **no rebuttal phase**, so every objection has
 to be pre-empted in the text. JUDGe additionally uses reciprocal reviewing: one author must
